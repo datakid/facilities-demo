@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meridian — guided care routing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..600;1,9..144,400..600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+--bg:#13111c;--bg2:#0f0d18;--panel:#1a1826;--panel2:#252238;
+--line:rgba(247,247,248,.085);--line2:rgba(247,247,248,.17);
+--tx:#f7f7f8;--mu:#a1a0ab;--fa:#7d7c8d;
+--brand:#553f83;--on-brand:#ffffff;--focus:#bf92ec;
+--pub:#7fd6a8;--con:#f0c36e;--pri:#f28fb0;--sel:#f5eedf;--acc:#9d7ad4;--ok:#6fd3a0;--warn:#f0c36e;--bad:#f0877d;
+--td:#7db4f5;--tc:#b99af2;--tt:#7fd6a8;--tl:#f3b184;--tq:#68d4e0;
+--dot:rgba(224,218,255,.085);
+color-scheme:dark}
+:root[data-theme=light]{
+--bg:#f1eff7;--bg2:#f9f8fd;--panel:#ffffff;--panel2:#efecf7;
+--line:rgba(26,23,38,.09);--line2:rgba(26,23,38,.17);
+--tx:#1a1726;--mu:#5f5a75;--fa:#8b869c;
+--brand:#553f83;--on-brand:#ffffff;--focus:#6b4fa3;
+--pub:#2b9a68;--con:#b7801c;--pri:#c94e7c;--sel:#1a1726;--acc:#6b4fa3;--ok:#2b9a68;--warn:#a9740f;--bad:#c94e4e;
+--td:#3f7fd0;--tc:#7a56c9;--tt:#2b9a68;--tl:#cf7d3f;--tq:#1f96a5;
+--dot:rgba(26,23,38,.12);
+color-scheme:light}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--tx);font:500 14px/1.5 Manrope,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+.serif{font-family:Fraunces,Georgia,'Times New Roman',serif}
+.fa{color:var(--fa)}.mu{color:var(--mu)}
+.app{position:relative;height:100vh;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:20px;padding:14px 20px 10px;flex:none}
+.brand{display:flex;align-items:center;gap:12px}
+.mark{width:40px;height:40px;border-radius:15px;background:var(--panel);border:1px solid var(--line2);display:grid;place-items:center}
+.brand b{display:block;font:500 21px/1.1 Fraunces,Georgia,serif}
+.brand small{display:block;font-size:12px;color:var(--fa);font-weight:600}
+.tabs{display:flex;gap:2px;background:var(--panel);border:1px solid var(--line);padding:4px;border-radius:999px;margin:0 auto}
+.tabs button{border:0;background:none;padding:8px 18px;border-radius:999px;color:var(--mu);font-weight:600;font-size:13px;white-space:nowrap}
+.tabs button:hover:not(.on){color:var(--tx)}
+.tabs button.on{background:var(--brand);color:var(--on-brand)}
+.tools{display:flex;align-items:center;gap:10px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;border:1px solid var(--line2);font-size:12px;font-weight:600;color:var(--mu);white-space:nowrap}
+.live{width:7px;height:7px;border-radius:50%;background:var(--pub);animation:beat 2.6s infinite}
+@keyframes beat{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--pub) 55%,transparent)}70%,100%{box-shadow:0 0 0 9px transparent}}
+.iconbtn{width:38px;height:38px;border-radius:14px;border:1px solid var(--line2);background:var(--panel);display:grid;place-items:center;color:var(--mu)}
+.iconbtn:hover{color:var(--tx)}
+main{flex:1;min-height:0;position:relative}
+.view{height:100%}
+.view[hidden]{display:none}
+.scroll{height:100%;overflow:auto;padding:6px 20px 32px}
+.wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--line2);border-radius:9px}
+.route{display:grid;grid-template-columns:308px minmax(0,1fr) 384px;grid-template-rows:minmax(0,1fr);gap:14px;padding:4px 16px 16px}
+.col{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:18px 18px 20px}
+.ch{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:14px}
+.ch h3{font:700 14px Manrope}
+.ch span{font-size:12px;color:var(--fa);font-weight:600}
+.fl{display:block;margin:16px 0 8px;font-size:12.5px;font-weight:600;color:var(--mu)}
+.fl span{color:var(--fa);font-weight:500}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;border:1px solid var(--line2);background:none;color:var(--mu);font-size:12.5px;font-weight:600}
+.chip:hover{color:var(--tx);border-color:var(--mu)}
+.chip.on{background:color-mix(in srgb,var(--acc) 17%,transparent);border-color:color-mix(in srgb,var(--acc) 60%,transparent);color:var(--tx)}
+.seg{display:flex;background:var(--panel2);border-radius:999px;padding:3px}
+.seg button{flex:1;border:0;background:none;color:var(--mu);padding:7px 8px;border-radius:999px;font-size:12.5px;font-weight:600}
+.seg button.on{background:var(--brand);color:var(--on-brand)}
+select{appearance:none;width:100%;background:var(--panel2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%23a1a0ab' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 14px center;border:1px solid var(--line);border-radius:15px;padding:10px 36px 10px 14px;font-size:13px;font-weight:600}
+select option,select optgroup{background:var(--panel);color:var(--tx)}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:20px;background:transparent;cursor:pointer;--p:50%}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:9px;background:linear-gradient(to right,var(--acc) var(--p),var(--panel2) var(--p))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-5px;border-radius:50%;background:var(--sel);border:3px solid var(--panel);box-shadow:0 0 0 1px var(--line2)}
+input[type=range]::-moz-range-track{height:6px;border-radius:9px;background:var(--panel2)}
+input[type=range]::-moz-range-progress{height:6px;border-radius:9px;background:var(--acc)}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--sel);border:3px solid var(--panel)}
+.switch{position:relative;display:flex;align-items:flex-start;gap:10px;margin-top:16px;font-size:12.5px;font-weight:600;color:var(--mu);cursor:pointer}
+.switch small{display:block;font-weight:500;color:var(--fa);font-size:11.5px;line-height:1.4;margin-top:1px}
+.switch input{position:absolute;opacity:0;pointer-events:none}
+.switch i{width:36px;height:22px;border-radius:99px;background:var(--panel2);border:1px solid var(--line2);position:relative;transition:.25s;flex:none;margin-top:1px}
+.switch i::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--mu);transition:.25s}
+.switch input:checked+i{background:color-mix(in srgb,var(--acc) 30%,transparent);border-color:var(--acc)}
+.switch input:checked+i::after{transform:translateX(14px);background:var(--sel)}
+.switch input:focus-visible+i{outline:2px solid var(--sel);outline-offset:2px}
+.dial{margin-top:14px}
+.dl{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700}
+.dl span{display:flex;align-items:center;gap:8px}
+.dl i{width:9px;height:9px;border-radius:50%}
+.dl b{font-size:12px;color:var(--mu)}
+.dh{font-size:11.5px;color:var(--fa);margin:1px 0 2px;font-weight:500}
+.presets{margin-bottom:4px}
+.canvas{position:relative;flex:1 1 auto;min-height:400px;border-radius:32px;overflow:hidden;background-color:var(--bg2);background-image:radial-gradient(var(--dot) 1.3px,transparent 1.4px);background-size:22px 22px;border:1px solid var(--line)}
+#map{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+#map text{font-family:Manrope,sans-serif}
+.ovl{position:absolute;z-index:2;display:flex;gap:14px;align-items:center;font-size:12px;font-weight:600;color:var(--mu);pointer-events:none}
+.ovl.tl{top:16px;left:18px;background:color-mix(in srgb,var(--bg2) 80%,transparent);padding:7px 14px;border-radius:999px;border:1px solid var(--line)}
+.ovl.br{bottom:16px;right:18px;background:color-mix(in srgb,var(--bg2) 80%,transparent);padding:7px 14px;border-radius:999px;border:1px solid var(--line)}
+.lg{display:inline-flex;align-items:center;gap:6px}
+.lg i,.tdot{width:9px;height:9px;border-radius:50%;background:var(--c,var(--mu));display:inline-block;flex:none}
+.river{fill:none;stroke:color-mix(in srgb,var(--acc) 9%,transparent);stroke-width:34;stroke-linecap:round}
+.road{fill:none;stroke:var(--line2);stroke-width:1.2;stroke-dasharray:1 5;stroke-linecap:round}
+.sdot{fill:var(--fa)}
+.stl{font-size:11px;font-weight:600;fill:var(--fa);text-anchor:middle}
+.wm{font-family:Fraunces,Georgia,serif;font-style:italic;font-size:34px;fill:var(--tx);opacity:.09;text-anchor:middle;pointer-events:none}
+.reach{fill:none;stroke:var(--sel);stroke-width:1;stroke-dasharray:2 8;opacity:.25}
+.edge{fill:none;stroke-linecap:round}
+.edge.glow{stroke:var(--sel);stroke-width:12;opacity:.13}
+.edge.best{stroke:var(--sel);stroke-width:2.8;stroke-dasharray:.1 8;animation:flow 1.6s linear infinite}
+.edge.req{stroke:var(--sel);stroke-width:1.6;stroke-dasharray:6 6;opacity:.75}
+@keyframes flow{to{stroke-dashoffset:-8.1}}
+.echip rect{fill:var(--panel);stroke:var(--line2)}
+.echip text{font:500 10.5px 'JetBrains Mono',monospace;fill:var(--tx);text-anchor:middle}
+.echip.best rect{fill:var(--sel);stroke:none}
+.echip.best text{fill:var(--bg)}
+.fnode{cursor:pointer}
+.fnode .hit{fill:transparent}
+.fnode .ring-bg{fill:none;stroke:var(--line2);stroke-width:2.4}
+.fnode .ring{fill:none;stroke-width:2.4;stroke-linecap:round}
+.fnode .body{fill:var(--panel);stroke-width:1.4}
+.fnode:hover .body{fill:var(--panel2)}
+.fnode.dim{opacity:.3}
+.fnode.dim:hover{opacity:.75}
+.fnode .selring{display:none;fill:none;stroke:var(--sel);stroke-width:1.4;stroke-dasharray:2 5}
+.fnode.on .selring{display:block}
+.fnode.best .body{fill:color-mix(in srgb,var(--sel) 14%,var(--panel))}
+.lbl{font-size:12.5px;font-weight:600;fill:var(--mu);text-anchor:middle;paint-order:stroke;stroke:var(--bg2);stroke-width:4px;stroke-linejoin:round}
+.fnode.best .lbl{fill:var(--tx);font-weight:700}
+.patient{cursor:grab}
+.patient:active{cursor:grabbing}
+.halo{fill:var(--sel);opacity:.4;transform-box:fill-box;transform-origin:center;animation:pulse 3.2s ease-out infinite}
+.halo.h2{animation-delay:1.6s}
+@keyframes pulse{0%{transform:scale(.7);opacity:.45}100%{transform:scale(2.7);opacity:0}}
+.pdot{fill:var(--sel)}
+.pcore{fill:var(--bg)}
+.ptag rect{fill:var(--sel)}
+.ptag text{font-size:10.5px;font-weight:700;fill:var(--bg);text-anchor:middle}
+.rec{display:grid;grid-template-columns:1.1fr 1fr;gap:22px}
+.rec h4{font:700 12.5px Manrope;color:var(--mu);margin-bottom:8px}
+.stop{padding:0 0 10px}
+.sname{font:500 22px/1.2 Fraunces,Georgia,serif}
+.smeta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:6px;font-size:12.5px;color:var(--mu)}
+.tchip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 8px;border-radius:999px;background:color-mix(in srgb,var(--c) 15%,transparent);color:var(--tx);font-size:11.5px;font-weight:700}
+.tchip i{width:7px;height:7px;border-radius:50%;background:var(--c)}
+.sv{display:inline-block;padding:2px 9px;border-radius:999px;border:1px solid var(--line2);font-size:11px;font-weight:600;color:var(--fa)}
+.sv.need{border-color:color-mix(in srgb,var(--acc) 65%,transparent);color:var(--tx);background:color-mix(in srgb,var(--acc) 14%,transparent)}
+.facts{display:flex;flex-wrap:wrap;gap:8px 22px;margin:12px 0}
+.fact b{display:block;font:500 20px/1.15 Fraunces,Georgia,serif}
+.fact span{font-size:11.5px;color:var(--fa);font-weight:600}
+.why{font-size:13px;color:var(--mu);line-height:1.55}
+.why b{color:var(--tx)}
+.vs{margin-top:10px;padding:10px 14px;border-radius:16px;background:var(--panel2);font-size:12.5px;color:var(--mu);line-height:1.5}
+.vs b{color:var(--tx)}
+.verdict{border-radius:18px;background:var(--panel2);padding:14px 16px}
+.out{display:inline-flex;align-items:center;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;margin-bottom:10px}
+.out.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.out.warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.out.bad{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
+.rule{display:grid;grid-template-columns:20px 1fr;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:12.5px}
+.rule:first-of-type{border-top:0}
+.rule .ic{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800;margin-top:1px}
+.rule .ic.p{background:color-mix(in srgb,var(--ok) 22%,transparent);color:var(--ok)}
+.rule .ic.f{background:color-mix(in srgb,var(--bad) 22%,transparent);color:var(--bad)}
+.rule .ic.i{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn)}
+.rule small{display:block;color:var(--fa);font-size:11.5px;font-weight:500}
+.emptyv{color:var(--fa);font-size:13px;line-height:1.6}
+.tl2{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11.5px;color:var(--fa);font-weight:600;margin-bottom:12px}
+.tl2 span{display:inline-flex;align-items:center;gap:6px}
+.tl2 i{width:8px;height:8px;border-radius:50%}
+.rlist{display:flex;flex-direction:column;gap:8px}
+.row{border:1px solid var(--line);border-radius:18px;padding:12px 14px;background:var(--panel2);cursor:pointer}
+.row:hover{border-color:var(--line2)}
+.row.best{border-color:color-mix(in srgb,var(--sel) 45%,transparent)}
+.row.open{border-color:var(--line2)}
+.rh{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:center}
+.rk{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:500 11px 'JetBrains Mono',monospace;background:var(--panel);color:var(--mu)}
+.row.best .rk{background:var(--sel);color:var(--bg2)}
+.rt{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13.5px;flex-wrap:wrap}
+.rs{display:flex;flex-wrap:wrap;gap:0 14px;font-size:12px;color:var(--mu);margin-top:2px}
+.rs b{color:var(--tx);font-weight:700}
+.rscore{font:500 24px/1 Fraunces,Georgia,serif;text-align:right}
+.rscore small{display:block;font:400 10px 'JetBrains Mono',monospace;color:var(--fa);margin-top:3px}
+.stack{display:flex;height:7px;border-radius:9px;background:var(--panel);overflow:hidden;margin-top:10px}
+.stack b{display:block;height:100%;transition:width .5s cubic-bezier(.2,.7,.2,1)}
+.stack.big{height:14px;border-radius:12px}
+.tag{font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:999px;border:1px solid var(--line2);color:var(--mu)}
+.tag.best{background:var(--sel);color:var(--bg);border-color:transparent}
+.tag.req{border-color:var(--sel);color:var(--sel)}
+.tag.cov{color:var(--tl);border-color:color-mix(in srgb,var(--tl) 50%,transparent)}
+.tag.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 50%,transparent)}
+.nrow{display:grid;grid-template-columns:112px minmax(0,1fr) 46px;gap:10px;align-items:center;font-size:12.5px;margin-bottom:9px}
+.nn{display:flex;align-items:center;gap:7px;font-weight:600;color:var(--mu)}
+.nn i{width:8px;height:8px;border-radius:50%;flex:none}
+.ntrack{position:relative;height:10px;border-radius:9px;background:var(--panel2)}
+.ntrack .zero{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--line2)}
+.ntrack b{position:absolute;top:0;bottom:0;border-radius:9px}
+.nval{text-align:right;font-size:12px}
+.nval.neg{color:var(--bad)}
+.brk{margin-top:12px;padding-top:10px;border-top:1px solid var(--line);display:grid;gap:7px}
+.br{display:grid;grid-template-columns:104px minmax(0,1fr) 78px 40px;gap:8px;align-items:center;font-size:12px}
+.br .bn{display:flex;align-items:center;gap:7px;font-weight:600;color:var(--mu)}
+.br .bn i{width:8px;height:8px;border-radius:50%}
+.br .bbar{height:6px;border-radius:9px;background:var(--panel);overflow:hidden}
+.br .bbar b{display:block;height:100%;border-radius:9px}
+.br .bv{color:var(--fa);font-size:11px;text-align:right}
+.br .bp{text-align:right;font-size:12px}
+.br.tot{border-top:1px solid var(--line);padding-top:8px;margin-top:2px;font-weight:700}
+details{margin-top:12px}
+summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--mu);padding:6px 2px;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:'+';display:inline-block;width:16px;color:var(--fa)}
+details[open] summary::before{content:'−'}
+.frow{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 4px;border-top:1px solid var(--line);font-size:12.5px;cursor:pointer}
+.frow span:first-child{display:flex;align-items:center;gap:8px;font-weight:600}
+.frow span:last-child{color:var(--fa);text-align:right;font-size:12px}
+.tip{position:fixed;z-index:60;pointer-events:none;background:var(--panel2);border:1px solid var(--line2);border-radius:18px;padding:12px 14px;width:270px;box-shadow:0 18px 40px -18px rgba(0,0,0,.6)}
+.tip[hidden]{display:none}
+.tip b{font-size:13.5px}
+.tt1{display:flex;align-items:center;gap:8px}
+.tt2{font-size:12px;color:var(--mu);margin:2px 0 8px}
+.svs{display:flex;flex-wrap:wrap;gap:4px}
+.tt3{display:flex;flex-wrap:wrap;gap:2px 14px;margin-top:9px;font-size:11.5px;color:var(--mu)}
+.tt4{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12px;font-weight:700}
+.grid2{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
+.hero{padding:30px 32px 28px;border-radius:32px}
+.hero .lead{font-size:13px;color:var(--mu);font-weight:600}
+.eq{font-size:clamp(24px,3.4vw,40px);line-height:1.5;margin:14px 0 6px;display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;font-style:italic;font-weight:400}
+.eq .op{font-style:normal;color:var(--fa)}
+.eq .brk2{font-style:normal;font-size:1.5em;font-weight:300;color:var(--fa);line-height:1}
+.eq .tm{padding:0 12px;border-radius:14px;background:color-mix(in srgb,var(--c) 15%,transparent);border-bottom:2px solid var(--c)}
+.eq .gt{padding:0 12px;border-radius:14px;background:color-mix(in srgb,var(--sel) 12%,transparent);border-bottom:2px solid var(--sel)}
+.eq2{font-size:clamp(16px,1.9vw,21px);color:var(--mu);font-style:italic;margin:6px 0 18px;line-height:1.9}
+.eq2 .ind{font-style:normal;display:inline-block;padding:0 10px;border-radius:12px;background:var(--panel2);margin:0 2px;color:var(--tx);font-family:Fraunces,Georgia,serif;font-size:.92em}
+.notes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.note{padding:14px 16px;border-radius:18px;background:var(--panel2);font-size:13px;color:var(--mu);line-height:1.55}
+.note b{display:block;color:var(--tx);margin-bottom:3px;font-size:13.5px}
+.sub{font-size:15px;line-height:2.1;margin:6px 0 14px;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
+.sub .op{color:var(--fa)}
+.sb{display:inline-flex;gap:5px;padding:2px 10px;border-radius:12px;background:color-mix(in srgb,var(--c) 15%,transparent);border-bottom:2px solid var(--c);font-size:13px}
+.sb em{font-style:normal}
+.bigscore{display:flex;align-items:baseline;gap:8px;margin:2px 0 12px}
+.bigscore b{font:500 56px/1 Fraunces,Georgia,serif}
+.bigscore span{color:var(--fa);font-weight:600}
+.stackl{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:12px;color:var(--mu)}
+.stackl span{display:inline-flex;align-items:center;gap:6px}
+.stackl i{width:8px;height:8px;border-radius:50%}
+.selrow{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+.selrow label{font-size:12.5px;font-weight:600;color:var(--mu);white-space:nowrap}
+.gchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.gc{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;background:var(--panel2)}
+.gc i{width:16px;height:16px;border-radius:50%;display:grid;place-items:center;font-size:10px;font-style:normal;font-weight:800}
+.gc.p i{background:color-mix(in srgb,var(--ok) 25%,transparent);color:var(--ok)}
+.gc.f i{background:color-mix(in srgb,var(--bad) 25%,transparent);color:var(--bad)}
+.tcard{border-radius:24px}
+.th{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center}
+.tsym{width:44px;height:44px;border-radius:15px;display:grid;place-items:center;font-size:24px;font-style:italic;background:color-mix(in srgb,var(--c) 16%,transparent);color:var(--c)}
+.th b{display:block;font-size:14px}
+.th span{font-size:12px;color:var(--fa);font-weight:500}
+.tw{font-size:12px;color:var(--c);font-weight:500}
+.tf{font-size:19px;font-style:italic;margin:14px 0 6px;color:var(--tx)}
+.tchart{height:104px;margin:4px 0}
+.tchart svg{width:100%;height:100%;display:block}
+.tlv{font-size:12px;color:var(--mu);margin-top:4px}
+.tn{font-size:12.5px;color:var(--fa);margin-top:6px;line-height:1.55}
+.tbars{display:flex;align-items:flex-end;gap:10px;height:100%;padding:6px 8px 0}
+.tbars div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px;height:100%;font-size:11px;color:var(--fa);font-weight:600}
+.tbars b{display:block;width:100%;border-radius:10px 10px 4px 4px;background:color-mix(in srgb,var(--c) 30%,transparent)}
+.tbars div.on b{background:var(--c)}
+.tbars div.on{color:var(--tx)}
+.utable{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:2px}
+.utable td,.utable th{padding:7px 4px;border-top:1px solid var(--line);text-align:left}
+.utable th{font-weight:600;color:var(--fa);border-top:0}
+.rules p{font-size:12.5px;color:var(--mu);margin:0 0 4px;line-height:1.55}
+.strip{position:relative;display:flex;gap:2px;height:38px;margin:8px 0 4px}
+.run{flex:1 1 0;min-width:0;border-radius:11px;background:color-mix(in srgb,var(--c) 22%,transparent);border:1px solid color-mix(in srgb,var(--c) 55%,transparent);font-size:11px;font-weight:700;display:flex;align-items:center;padding:0 9px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--tx)}
+.mk{position:absolute;top:-6px;bottom:-6px;width:2px;background:var(--sel);border-radius:2px;transform:translateX(-1px);pointer-events:none}
+.sens{display:grid;gap:14px;margin-top:6px}
+.sens .sl{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;font-weight:700}
+.sens .sl span{display:flex;align-items:center;gap:8px}
+.sens .sl i{width:9px;height:9px;border-radius:50%}
+.sens .sl em{font-style:normal;font-size:12px;color:var(--fa);font-weight:600}
+.axis{display:flex;justify-content:space-between;font-size:10.5px;color:var(--fa)}
+.simh{font:500 clamp(22px,2.6vw,30px)/1.3 Fraunces,Georgia,serif;margin:6px 0 16px}
+.simc{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.simc label{font-size:12.5px;font-weight:600;color:var(--mu)}
+.simc input[type=range]{width:180px}
+.btn{border:1px solid var(--line2);background:var(--panel2);color:var(--tx);border-radius:999px;padding:8px 16px;font-size:12.5px;font-weight:700}
+.btn:hover{border-color:var(--mu)}
+.fine{font-size:12px;color:var(--fa);line-height:1.55;margin-top:12px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.kpi{border-radius:24px;padding:18px 18px 16px}
+.kpi h5{font:700 13px Manrope;color:var(--mu)}
+.kv{display:grid;gap:8px;margin-top:12px}
+.kr{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:10px;align-items:center;font-size:12px;color:var(--fa);font-weight:600}
+.kr .kb{height:8px;border-radius:9px;background:var(--panel2);overflow:hidden}
+.kr .kb b{display:block;height:100%;border-radius:9px;transition:width .5s cubic-bezier(.2,.7,.2,1)}
+.kr.m .kb b{background:var(--fa)}
+.kr.e .kb b{background:var(--acc)}
+.kr.e{color:var(--tx)}
+.kr .n{font-size:13px;font-weight:500;text-align:right;min-width:64px}
+.dlt{display:inline-block;margin-top:12px;padding:3px 11px;border-radius:999px;font-size:12px;font-weight:700}
+.dlt.good{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.dlt.bad{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
+.dlt.flat{background:var(--panel2);color:var(--mu)}
+.split{display:grid;gap:16px}
+.tiers{display:grid;gap:12px}
+.tr{display:grid;grid-template-columns:70px minmax(0,1fr);gap:12px;align-items:center;font-size:12.5px;font-weight:600;color:var(--mu)}
+.tr .stack{margin:0;height:22px;border-radius:12px}
+.tr .stack b{display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:var(--bg)}
+.ugrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 26px}
+.urow{display:grid;grid-template-columns:minmax(0,1fr) 130px;gap:10px;align-items:center;padding:5px 0;font-size:12px;border-top:1px solid var(--line)}
+.urow .un{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--mu);min-width:0}
+.urow .un span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.urow .ut{display:grid;gap:3px}
+.tk{position:relative;height:6px;border-radius:9px;background:var(--panel2)}
+.tk b{position:absolute;left:0;top:0;height:100%;border-radius:9px;transition:width .5s cubic-bezier(.2,.7,.2,1)}
+.tk.m b{background:var(--fa)}
+.tk.e b{background:var(--acc)}
+.tk s{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--sel);opacity:.7;border-radius:2px}
+.ulg{display:flex;gap:16px;font-size:12px;color:var(--mu);font-weight:600;margin-bottom:8px}
+.ulg span{display:inline-flex;align-items:center;gap:6px}
+.ulg i{width:14px;height:6px;border-radius:9px}
+.ntable{width:100%;border-collapse:collapse;font-size:13px}
+.ntable th{text-align:left;font-size:12px;color:var(--fa);font-weight:600;padding:0 8px 10px}
+.ntable td{padding:11px 8px;border-top:1px solid var(--line);vertical-align:middle}
+.ntable .nm{font-weight:700;display:flex;align-items:center;gap:8px}
+.ntable .pl{color:var(--fa);font-size:12px;margin-left:17px}
+.nsv{display:flex;flex-wrap:wrap;gap:4px;max-width:340px}
+.seat{display:grid;gap:4px;min-width:110px;font-size:12px;color:var(--mu)}
+.code{font:400 12px/1.7 'JetBrains Mono',ui-monospace,monospace;color:var(--mu);background:var(--panel2);border-radius:18px;padding:14px 16px;overflow:auto;white-space:pre}
+.code b{color:var(--sel);font-weight:500}
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-bottom:20px}
+.stp{display:flex;align-items:center;gap:9px;border:1px solid var(--line);background:none;border-radius:16px;padding:9px 11px;color:var(--mu);text-align:left;font-size:12px;font-weight:700;line-height:1.3}
+.stp:hover{border-color:var(--line2);color:var(--tx)}
+.stp i{width:22px;height:22px;flex:none;border-radius:50%;display:grid;place-items:center;font:500 11px 'JetBrains Mono',monospace;font-style:normal;background:var(--panel2)}
+.stp.on{border-color:var(--acc);color:var(--tx);background:color-mix(in srgb,var(--acc) 12%,transparent)}
+.stp.on i{background:var(--brand);color:var(--on-brand)}
+.stp.done i{background:color-mix(in srgb,var(--ok) 25%,transparent);color:var(--ok)}
+.sthead{font:500 clamp(20px,2.1vw,26px)/1.3 Fraunces,Georgia,serif;margin:2px 0 6px}
+.stsub{font-size:13px;color:var(--mu);line-height:1.65;margin:0 0 16px;max-width:64ch}
+.stnote{font-size:12.5px;color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent);border-radius:14px;padding:9px 14px;margin:0 0 12px;line-height:1.55}
+.stepfoot{display:flex;justify-content:space-between;margin-top:22px}
+.btn.primary{background:var(--brand);border-color:transparent;color:var(--on-brand)}
+.fun{display:grid;grid-template-columns:minmax(0,190px) minmax(0,1fr) 34px;gap:12px;align-items:center;margin-bottom:9px;font-size:13px}
+.fl2{color:var(--mu);font-weight:600}
+.ftrack{height:14px;border-radius:9px;background:var(--panel2);overflow:hidden}
+.ftrack b{display:block;height:100%;border-radius:9px;background:var(--acc)}
+.fun.last .ftrack b{background:var(--pub)}
+.fn{text-align:right;font-weight:500}
+.drops{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+.dropc{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;background:var(--panel2);font-size:12px;font-weight:600}
+.dropc em{font-style:normal;color:var(--fa);font-weight:500}
+.mrow{display:grid;grid-template-columns:10px minmax(0,1fr) minmax(70px,140px) 60px;gap:14px;align-items:center;padding:11px 0;border-top:1px solid var(--line)}
+.mkd{width:10px;height:10px;border-radius:50%;flex:none}
+.mkt b{font-size:13.5px}
+.mkt span{display:block;font-size:12px;color:var(--mu)}
+.mkt small{display:block;font-size:11.5px;color:var(--fa);margin-top:2px;line-height:1.45}
+.mkn{font-size:28px;text-align:right;line-height:1}
+.ntrack.big{height:12px}
+.stack.lab b{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--bg2)}
+.stack.big.lab{height:32px;border-radius:14px}
+.irow{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:14px;align-items:center;padding:10px 0;border-top:1px solid var(--line);font-size:13px}
+.irow small{display:block;color:var(--fa);font-size:11.5px}
+.irow .ip{font-size:24px;text-align:right}
+.irow .ip small{display:inline;font:500 11.5px Manrope,sans-serif;margin-left:6px}
+.two{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:26px}
+.rc{display:grid;grid-template-columns:minmax(0,1fr) 54px 22px 44px;gap:6px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+.rc.hd{border-top:0;font-size:11px;color:var(--fa);font-weight:600;padding-top:0}
+.rc.sub{border-top:2px solid var(--line2)}
+.rc.tot{border-top:2px solid var(--line2);font-weight:700;font-size:14px}
+.rc .op{color:var(--fa);text-align:center}
+.rc b,.rc .mono{text-align:right}
+.rcn{display:flex;align-items:center;gap:8px;font-weight:600}
+.rcn i{width:8px;height:8px;border-radius:50%;flex:none}
+.lbh{font-size:12px;font-weight:700;color:var(--mu);margin-bottom:10px}
+.lbr{display:grid;grid-template-columns:24px minmax(0,1fr) 70px 44px;gap:10px;align-items:center;padding:7px 8px;border-radius:14px;font-size:12.5px}
+.lbr.me{background:var(--panel2)}
+.lbn{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lbr .mono{text-align:right;font-size:12px}
+.wq{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px 10px;margin:8px 0 16px}
+.wc{padding:10px 14px;border-radius:18px;background:color-mix(in srgb,var(--c,var(--sel)) 13%,transparent);border-bottom:2px solid var(--c,var(--sel))}
+.wc b{display:block;font-size:14px;line-height:1.3}
+.wc small{display:block;font-size:11.5px;color:var(--mu);margin-top:2px}
+.wc.sc,.wc.gt2{--c:var(--sel)}
+.wq .op{align-self:center;font:400 22px Fraunces,Georgia,serif;color:var(--fa)}
+.wq .op.pr{font-size:46px;font-weight:300;line-height:1}
+.read{font-size:13.5px;color:var(--mu);line-height:1.7;max-width:72ch}
+.mlegend{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px 26px;margin-top:8px}
+.mlegend div{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;font-size:12.5px;color:var(--mu);line-height:1.5}
+.mlegend k{font:italic 500 18px Fraunces,Georgia,serif;color:var(--c)}
+.seg.mini{width:auto}
+.seg.mini button{flex:none;padding:6px 14px}
+.linkbtn{background:none;border:0;color:var(--acc);font-size:12px;font-weight:700;padding:0;text-decoration:underline;text-underline-offset:3px}
+.sect{padding:10px 4px 0}
+.sect h2{font:500 26px/1.2 Fraunces,Georgia,serif;margin-bottom:4px}
+.sect p{font-size:13.5px;color:var(--mu);line-height:1.6}
+.tr1{font-size:13px;color:var(--mu);margin:14px 0 4px;line-height:1.55}
+.tryl{display:block;font-size:11.5px;font-weight:700;color:var(--fa);margin:10px 0 0}
+.tmath{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:11.5px;color:var(--fa)}
+.tlv b{color:var(--tx)}
+dfn{font-style:normal;border-bottom:1px dotted var(--fa);cursor:help}
+.tsym{font-style:normal;font-size:20px}
+.brief{display:grid;place-items:center;padding:0 32px 28px}
+.bgrid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:56px;align-items:center;max-width:1160px;width:100%}
+.bleft h1{font:500 clamp(34px,4.2vw,54px)/1.08 Fraunces,Georgia,serif;margin-bottom:18px}
+.b1{font-size:16px;color:var(--mu);line-height:1.65;max-width:46ch}
+.brule,.lad1{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-style:italic}
+.brule{margin:28px 0 14px;font-size:clamp(28px,3.4vw,42px)}
+.brule span,.lad1 span{padding:2px 18px;border-radius:18px;background:color-mix(in srgb,var(--c,var(--sel)) 14%,transparent);border-bottom:3px solid var(--c,var(--sel))}
+.brule i,.lad1 i{font-style:normal;color:var(--fa)}
+.b2{font-size:15px;color:var(--mu);line-height:1.65;max-width:50ch}
+.b3{margin-top:14px;font-size:15px;font-weight:700;line-height:1.6;max-width:50ch}
+.bd{border-radius:22px;padding:18px 24px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--acc);font-size:17px;line-height:1.5;margin-bottom:12px}
+.bd b{font:500 1.2em Fraunces,Georgia,serif}
+.b4{font-size:13px;color:var(--fa);margin:6px 0 14px}
+.b5{font-size:13.5px;color:var(--mu);line-height:1.6;margin:0 0 24px;max-width:48ch}
+.btn.big{padding:12px 28px;font-size:14px}
+.ladder{padding:22px 26px}
+.lad1{font-size:clamp(26px,3vw,38px);margin-bottom:14px}
+.lad1 .lsc{--c:var(--pub)}
+.lad2{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.lad2 p{font-size:13.5px;color:var(--mu);line-height:1.55;padding:12px 16px;border-radius:16px;background:var(--panel2);margin:0}
+.lad2 b{color:var(--tx)}
+.btn.ghost{background:none}
+.explbtn{margin-top:14px}
+.explain{margin-top:12px;padding:14px 16px;border-radius:18px;background:var(--panel2)}
+.explain p{font-size:13.5px;line-height:1.7;margin:0 0 12px}
+.whereb{margin:2px 0 12px}
+.whereb span{display:block;font-size:12px;font-weight:600;color:var(--fa);margin-bottom:6px}
+.rchip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--panel2);color:var(--mu)}
+.rchip.k-service{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.rchip.k-seat{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.rchip.k-reach{background:color-mix(in srgb,var(--td) 16%,transparent);color:var(--td)}
+.rchip.k-lock{background:color-mix(in srgb,var(--acc) 18%,transparent);color:var(--acc)}
+.fname{display:flex;align-items:center;gap:8px}
+.fname em{font-style:normal;color:var(--fa);font-weight:500;margin-left:2px}
+.tworked{font-size:13.5px;line-height:1.6;margin:14px 0 4px}
+.tworked b{font-weight:600}
+.tmaths{margin-top:10px}
+.tmaths summary{font-size:12px;color:var(--fa)}
+.tmaths .tmath{margin-top:6px;padding-top:0;border-top:0}
+.mkn em{display:block;font:500 11px Manrope,sans-serif;color:var(--fa);font-style:normal;margin-top:3px}
+.tour{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:70;width:min(460px,calc(100vw - 32px));background:var(--panel2);border:1px solid var(--line2);border-radius:22px;padding:14px 18px 16px;box-shadow:0 22px 50px -22px rgba(0,0,0,.65)}
+.tour[hidden]{display:none}
+.tourtop{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;color:var(--fa)}
+.tour p{font-size:15px;line-height:1.5;margin:8px 0 12px}
+.touract{display:flex;justify-content:flex-end;gap:8px}
+.tour-hl{outline:2px solid var(--sel);outline-offset:4px;border-radius:26px;animation:hl 1.8s ease-in-out infinite}
+@keyframes hl{50%{outline-color:transparent}}
+.btn:disabled{opacity:.4;cursor:default}
+@media(max-width:1320px){.pill{display:none}}
+@media(max-width:1300px){.rec{grid-template-columns:1fr}}
+@media(max-width:1180px){
+body{overflow:auto}
+.app{height:auto;min-height:100vh}
+.route{grid-template-columns:1fr;grid-template-rows:none;padding-bottom:28px}
+.col{overflow:visible}
+.canvas{min-height:460px}
+.grid2,.notes,.two,.bgrid,.lad2{grid-template-columns:1fr}
+.steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+.top{flex-wrap:wrap}
+.tabs{order:3;width:100%;overflow:auto;margin:0}
+main{min-height:60vh}
+.ugrid{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="top">
+<div class="brand">
+<div class="mark"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="var(--fa)" stroke-width="1.2" stroke-dasharray="1.5 3"/><g transform="rotate(32 12 12)"><path d="M12 3.8L15.2 12H8.8z" fill="var(--sel)"/><path d="M12 20.2L15.2 12H8.8z" fill="var(--acc)"/></g><circle cx="12" cy="12" r="1.5" fill="var(--bg)"/></svg></div>
+<div><b>Meridian</b><small>Guided care routing</small></div>
+</div>
+<nav class="tabs" id="tabs">
+<button data-tab="brief" class="on">Brief</button>
+<button data-tab="route">Route a patient</button>
+<button data-tab="equation">The equation</button>
+<button data-tab="simulate">100 patients, 2 ways</button>
+<button data-tab="network">The network</button>
+</nav>
+<div class="tools">
+<button class="btn" id="tourBtn">Walk me through it</button>
+<span class="pill"><i class="live"></i>Demo with dummy data</span>
+<button class="iconbtn" id="theme" aria-label="Switch theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 14.5A8.5 8.5 0 019.5 4a8.5 8.5 0 1010.5 10.5z"/></svg></button>
+</div>
+</header>
+<main>
+<section id="v-brief" class="view brief">
+<div class="bgrid">
+<div class="bleft">
+<h1 class="serif">Who goes where, and why</h1>
+<p class="b1">Patients are often sent to the nearest or best-known facility. Seats, prices and travel time are rarely weighed together.</p>
+<div class="brule serif"><span style="--c:var(--sel)">Allowed?</span><i>×</i><span style="--c:var(--acc)">How good?</span></div>
+<p class="b2">Multiply the two to get the score. Five questions share 100 points: distance, cost, public status, spare seats and quality.</p>
+<p class="b3">Two coordinators, same patient, same answer. Every refusal has a written reason.</p>
+</div>
+<div class="bright">
+<div id="bDeltas"></div>
+<p class="b4">Baseline: the nearest facility that offers every service and has a seat.</p>
+<p class="b5">Synthetic region. Eighteen invented facilities. The numbers show how the rule behaves, not what the region would save.</p>
+<button class="btn primary big" data-show>Show me</button>
+</div>
+</div>
+</section>
+
+<section id="v-route" class="view route" hidden>
+<div class="col">
+<div class="card" id="patientCard">
+<div class="ch"><h3>Patient</h3><span>who needs care</span></div>
+<div class="chips" id="cases"></div>
+<label class="fl" for="home">Lives in <span>or drag the glowing patient on the map</span></label>
+<select id="home"></select>
+<label class="fl">Needs <span>tap to add or remove</span></label>
+<div class="chips" id="svcChips"></div>
+<label class="fl">Urgency</label>
+<div class="seg" id="urg"><button data-u="0">Routine</button><button data-u="1">Soon</button><button data-u="2">Urgent</button></div>
+<label class="fl" for="req">Patient asks for a specific place</label>
+<select id="req"></select>
+<label class="switch"><input type="checkbox" id="tok"><i></i><span>Override already used this quarter</span></label>
+</div>
+<div class="card" data-dials></div>
+</div>
+<div class="col">
+<div class="canvas" id="canvas">
+<div class="ovl tl"><span class="lg" style="--c:var(--pub)"><i></i>Public</span><span class="lg" style="--c:var(--con)"><i></i>Contracted</span><span class="lg" style="--c:var(--pri)"><i></i>Private</span><span>Ring shows seats taken</span></div>
+<div class="ovl br">Drag the patient to move them</div>
+<svg id="map" viewBox="40 46 820 540" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of facilities and the patient"></svg>
+</div>
+<div class="card rec" id="rec"></div>
+</div>
+<div class="col"><div class="card" id="needleCard"></div><div class="card" id="rank"></div><div class="card" id="ruled"></div></div>
+</section>
+
+<section id="v-equation" class="view" hidden>
+<div class="scroll"><div class="wrap">
+<div class="card ladder">
+<div class="lad1 serif"><span style="--c:var(--sel)">Allowed?</span><i>×</i><span style="--c:var(--acc)">How good?</span><i>=</i><span class="lsc">Score</span></div>
+<div class="lad2">
+<p><b>Allowed?</b> A yes or no. One no scores zero.</p>
+<p><b>How good?</b> Five questions share 100 points.</p>
+<p><b>Score.</b> The highest score wins the patient.</p>
+</div>
+</div>
+<div class="grid2">
+<div class="card walk" id="walk"></div>
+<div class="card" data-dials></div>
+</div>
+<div class="card" id="oneLine"></div>
+<div class="card" id="needleEq"></div>
+<div class="sect"><h2>The five questions, one by one</h2><p>Each question turns one fact into points. Drag a slider to see how the points respond. <span id="termFor"></span></p></div>
+<div class="grid3" id="termCards"></div>
+<div class="grid2">
+<div class="card" id="gates"></div>
+<div class="card rules" id="rules"></div>
+</div>
+<div class="card" id="sens"></div>
+</div></div>
+</section>
+
+<section id="v-simulate" class="view" hidden>
+<div class="scroll"><div class="wrap">
+<div class="grid2">
+<div class="card hero" style="padding:26px 28px">
+<div class="lead">Same patients, same seats, two ways of routing</div>
+<div class="simh" id="simHead"></div>
+<div class="simc">
+<label for="simN">Patients <b class="mono" id="simNv">100</b></label>
+<input type="range" id="simN" min="40" max="240" step="10" value="100">
+<button class="btn" id="simShuffle">Draw a new cohort</button>
+</div>
+<p class="fine">Manual means the nearest facility that offers every service and has a seat. Everything here is dummy data. Drag any dial and the numbers move.</p>
+</div>
+<div class="card" data-dials></div>
+</div>
+<div class="kpis" id="kpis"></div>
+<div class="card" id="tierCard"></div>
+<div class="card" id="utilCard"></div>
+</div></div>
+</section>
+
+<section id="v-network" class="view" hidden>
+<div class="scroll"><div class="wrap">
+<div class="card">
+<div class="ch"><h3>Facilities in the demo region</h3><span id="netCount"></span></div>
+<div style="overflow:auto"><table class="ntable" id="ntable"></table></div>
+</div>
+<div class="grid2">
+<div class="card">
+<div class="ch"><h3>What the engine needs to know</h3><span>the whole data model</span></div>
+<div class="code" id="schema"></div>
+</div>
+<div class="card" id="svcCard"></div>
+</div>
+</div></div>
+</section>
+</main>
+</div>
+<div class="tip" id="tip" hidden></div>
+<div class="tour" id="tour" hidden role="dialog" aria-label="Guided tour"><div class="tourtop"><span id="tourStep"></span><button class="linkbtn" data-tour="skip">Skip the tour</button></div><p id="tourText"></p><div class="touract"><button class="btn" data-tour="back">Back</button><button class="btn primary" data-tour="next">Next</button></div></div>
+<script>
+const SERVICES=[
+{id:'lab',name:'Lab work',short:'Lab',base:12,wf:.3},
+{id:'xray',name:'X-ray and ultrasound',short:'X-ray',base:25,wf:.4},
+{id:'mri',name:'MRI and CT',short:'MRI/CT',base:140,wf:1.6},
+{id:'cardio',name:'Cardiology',short:'Cardio',base:60,wf:1.1},
+{id:'dialysis',name:'Dialysis',short:'Dialysis',base:90,wf:.5},
+{id:'physio',name:'Physiotherapy',short:'Physio',base:22,wf:.9},
+{id:'ortho',name:'Orthopedics',short:'Ortho',base:55,wf:1.2},
+{id:'onco',name:'Oncology',short:'Oncology',base:180,wf:1.5},
+{id:'mater',name:'Maternity',short:'Maternity',base:120,wf:.7},
+{id:'peds',name:'Pediatrics',short:'Pediatrics',base:30,wf:.5}
+];
+const SETTLEMENTS=[
+{id:'sarema',name:'Sarema',x:34,y:30,pop:9,city:true},
+{id:'oud',name:'Oud Harbor',x:92,y:22,pop:8,city:true},
+{id:'kestrel',name:'Kestrel',x:70,y:60,pop:7,city:true},
+{id:'almond',name:'Almond Row',x:12,y:16,pop:2},
+{id:'marigold',name:'Marigold',x:14,y:38,pop:2},
+{id:'fenwick',name:'Fenwick',x:22,y:56,pop:2},
+{id:'thistle',name:'Thistledown',x:52,y:10,pop:2},
+{id:'willow',name:'Willow Bend',x:64,y:30,pop:2},
+{id:'bramble',name:'Bramble Ford',x:52,y:42,pop:3},
+{id:'saffron',name:'Saffron Hill',x:82,y:44,pop:2},
+{id:'linden',name:'Linden',x:108,y:46,pop:2},
+{id:'quill',name:'Quill',x:110,y:8,pop:1},
+{id:'pebble',name:'Pebble Creek',x:102,y:70,pop:2},
+{id:'cedar',name:'Cedar Nook',x:32,y:70,pop:2},
+{id:'tamarind',name:'Tamarind',x:48,y:62,pop:2}
+];
+const ROADS=[['almond','marigold'],['almond','sarema'],['marigold','sarema'],['marigold','fenwick'],['fenwick','sarema'],['sarema','thistle'],['sarema','bramble'],['thistle','willow'],['willow','oud'],['willow','bramble'],['bramble','saffron'],['bramble','tamarind'],['saffron','kestrel'],['saffron','linden'],['saffron','oud'],['oud','quill'],['linden','pebble'],['kestrel','pebble'],['kestrel','tamarind'],['fenwick','cedar'],['cedar','tamarind']];
+const FACILITIES=[
+{id:'sag',name:'Sarema General Hospital',short:'Sarema General',type:'public',kind:'hospital',place:'Sarema',x:29,y:27,services:['lab','xray','mri','cardio','dialysis','ortho','mater','peds','physio'],cap:60,load:51,m:.95,q:.78},
+{id:'ntg',name:'Northgate Teaching Hospital',short:'Northgate Teaching',type:'public',kind:'hospital',place:'Oud Harbor',x:88,y:18,services:['lab','xray','mri','cardio','ortho','mater','peds','physio','onco'],cap:70,load:44,m:1,q:.86},
+{id:'krh',name:'Kestrel Regional Hospital',short:'Kestrel Regional',type:'public',kind:'hospital',place:'Kestrel',x:66,y:58,services:['lab','xray','mri','cardio','dialysis','ortho','mater','peds'],cap:50,load:21,m:.95,q:.74},
+{id:'bfh',name:'Bramble Ford Health Center',short:'Bramble Ford HC',type:'public',kind:'clinic',place:'Bramble Ford',x:52,y:42,services:['lab','xray','peds','mater','physio'],cap:24,load:9,m:.9,q:.66},
+{id:'aru',name:'Almond Row Rural Unit',short:'Almond Row Unit',type:'public',kind:'clinic',place:'Almond Row',x:12,y:16,services:['lab','peds','mater'],cap:14,load:6,m:.9,q:.6},
+{id:'fcc',name:'Fenwick Community Clinic',short:'Fenwick Clinic',type:'public',kind:'clinic',place:'Fenwick',x:22,y:56,services:['lab','xray','physio','peds'],cap:18,load:15,m:.9,q:.63},
+{id:'lcu',name:'Linden Kidney and Care Unit',short:'Linden Care Unit',type:'public',kind:'clinic',place:'Linden',x:108,y:46,services:['dialysis','lab','cardio'],cap:16,load:7,m:1,q:.7},
+{id:'pcu',name:'Pebble Creek Health Unit',short:'Pebble Creek Unit',type:'public',kind:'clinic',place:'Pebble Creek',x:102,y:70,services:['lab','xray','peds','mater','physio'],cap:16,load:5,m:.9,q:.62},
+{id:'tdu',name:'Thistledown Dispensary',short:'Thistledown Unit',type:'public',kind:'clinic',place:'Thistledown',x:52,y:10,services:['lab','peds'],cap:10,load:3,m:.9,q:.58},
+{id:'hhv',name:'Harbor Heart and Vascular',short:'Harbor Heart',type:'contracted',kind:'hospital',place:'Oud Harbor',x:97,y:27,services:['cardio','lab','xray','mri'],cap:30,load:14,m:1.5,q:.9},
+{id:'shl',name:'Saffron Hill Diagnostics',short:'Saffron Labs',type:'contracted',kind:'lab',place:'Saffron Hill',x:82,y:44,services:['lab','xray','mri'],cap:40,load:22,m:1.35,q:.84},
+{id:'wbr',name:'Willow Bend Rehab',short:'Willow Rehab',type:'contracted',kind:'clinic',place:'Willow Bend',x:64,y:29,services:['physio','ortho','xray'],cap:26,load:10,m:1.4,q:.82},
+{id:'srp',name:'Sarema Renal Partners',short:'Sarema Renal',type:'contracted',kind:'clinic',place:'Sarema',x:38,y:34,services:['dialysis','lab'],cap:20,load:9,m:1.55,q:.83},
+{id:'tom',name:'Tamarind Oncology Center',short:'Tamarind Onco',type:'contracted',kind:'hospital',place:'Tamarind',x:46,y:63,services:['onco','mri','lab','xray'],cap:24,load:11,m:1.65,q:.88},
+{id:'sgc',name:'Sarema Grand Clinic',short:'Sarema Grand',type:'private',kind:'hospital',place:'Sarema',x:39,y:23,services:['lab','xray','mri','cardio','ortho','mater','peds','physio','dialysis'],cap:36,load:15,m:2.4,q:.94},
+{id:'mwc',name:'Marigold Women and Child',short:'Marigold Care',type:'private',kind:'clinic',place:'Marigold',x:14,y:38,services:['mater','peds','lab','xray'],cap:14,load:5,m:2.2,q:.92},
+{id:'kbh',name:'Kestrel Bayview Hospital',short:'Kestrel Bayview',type:'private',kind:'hospital',place:'Kestrel',x:76,y:64,services:['cardio','mri','ortho','onco','lab','xray','mater'],cap:30,load:12,m:2.7,q:.95},
+{id:'hiu',name:'Harbor Imaging',short:'Harbor Imaging',type:'private',kind:'lab',place:'Oud Harbor',x:106,y:15,services:['mri','xray','lab'],cap:22,load:8,m:2.3,q:.9}
+];
+const BUNDLES=[
+{s:['lab'],w:22},{s:['lab','xray'],w:12},{s:['cardio','lab'],w:9},{s:['dialysis'],w:6},
+{s:['physio','ortho'],w:8},{s:['mater','lab'],w:9},{s:['peds','lab'],w:10},{s:['peds','xray'],w:5},
+{s:['mri'],w:6},{s:['mri','lab'],w:4},{s:['onco','lab'],w:3},{s:['onco','mri','lab'],w:2},{s:['xray'],w:6}
+];
+const CASES=[
+{id:'ada',name:'Ada',blurb:'Cardiac follow-up',place:'almond',services:['cardio','lab'],urgency:0},
+{id:'priya',name:'Priya',blurb:'Maternity check-up',place:'marigold',services:['mater','lab'],urgency:0},
+{id:'mateo',name:'Mateo',blurb:'Dialysis session',place:'saffron',services:['dialysis'],urgency:1},
+{id:'jonas',name:'Jonas',blurb:'Child with a wheeze',place:'thistle',services:['peds','xray'],urgency:2},
+{id:'noor',name:'Noor',blurb:'Oncology work-up',place:'linden',services:['onco','mri','lab'],urgency:1},
+{id:'sam',name:'Sam',blurb:'Two rare needs',place:'fenwick',services:['onco','dialysis'],urgency:1}
+];
+const TERMS=[
+{k:'d',sym:'D',name:'Distance',ask:'How close is it?',hint:'Closer scores higher',color:'var(--td)'},
+{k:'c',sym:'C',name:'Cost',ask:'How cheap is it?',hint:'Cheaper for the payer',color:'var(--tc)'},
+{k:'t',sym:'T',name:'Public-first',ask:'Is it public?',hint:'Public beats private',color:'var(--tt)'},
+{k:'l',sym:'L',name:'Spare seats',ask:'How many seats are free?',hint:'Emptier beats crowded',color:'var(--tl)'},
+{k:'q',sym:'Q',name:'Quality',ask:'How good are the results?',hint:'Outcome and satisfaction rating',color:'var(--tq)'}
+];
+const POLICIES={
+balanced:{label:'Balanced',w:{d:26,c:16,t:22,l:20,q:16},lock:false},
+public:{label:'Public-first',w:{d:16,c:12,t:44,l:18,q:10},lock:true},
+nearest:{label:'Nearest-first',w:{d:58,c:6,t:8,l:16,q:12},lock:false},
+saver:{label:'Cost saver',w:{d:18,c:40,t:22,l:12,q:8},lock:false}
+};
+const TIER={
+public:{label:'Public',color:'var(--pub)'},
+contracted:{label:'Contracted',color:'var(--con)'},
+private:{label:'Private',color:'var(--pri)'}
+};
+const CFG={lambda:40,road:1.3,loadExp:3,mMin:.9,mMax:2.8,tier:{public:1,contracted:.55,private:.25},boost:.8,reachCut:.15,reserve:.1,overrideReach:1.5,tolerance:15,baseWait:{public:2,contracted:1.3,private:1}};
+const GLYPH={
+hospital:'M-2.4 -7.5h4.8v5.1h5.1v4.8h-5.1v5.1h-4.8v-5.1h-5.1v-4.8h5.1z',
+lab:'M-2 -7.5h4M-1.3 -7.5v5.2l-4.6 7.8c-.6 1 .1 2.2 1.2 2.2h9.4c1.1 0 1.8-1.2 1.2-2.2l-4.6-7.8v-5.2',
+clinic:'M0 6.8C-8 1.4-6.8 -5.4-2.4 -4.8-1.2 -4.6-.4 -3.9 0 -3 .4 -3.9 1.2 -4.6 2.4 -4.8 6.8 -5.4 8 1.4 0 6.8z'
+};
+const KM=7,OX=30,OY=30;
+const sx=x=>OX+x*KM;
+const sy=y=>OY+y*KM;
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+const sum=a=>a.reduce((x,y)=>x+y,0);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const usd=n=>'$'+Math.round(n).toLocaleString('en-US');
+const pts=n=>(n*100).toFixed(1);
+const SVC=Object.fromEntries(SERVICES.map(s=>[s.id,s]));
+const PLACE=Object.fromEntries(SETTLEMENTS.map(s=>[s.id,s]));
+const FBY=Object.fromEntries(FACILITIES.map(f=>[f.id,f]));
+
+const state={
+tab:'brief',
+patient:{name:'',x:0,y:0,services:[],urgency:0,request:'',tokenUsed:false,case:null},
+policy:{weights:{...POLICIES.balanced.w},reach:60,lock:false},
+selected:null,
+step:0,
+eqMode:'math',
+explain:false,
+sim:{n:100,seed:11,cohort:null}
+};
+let model=null;
+
+function effWeights(raw,urgency){
+const w={...raw};
+w.d=raw.d*(1+CFG.boost*urgency);
+const s=sum(TERMS.map(t=>w[t.k]))||1;
+const o={};
+TERMS.forEach(t=>{o[t.k]=w[t.k]/s});
+return o;
+}
+function effReach(policy,urgency){return policy.reach*(1-CFG.reachCut*urgency)}
+function needCost(services,m){return sum(services.map(s=>SVC[s].base))*m}
+function waitDays(f,services,u){const wf=Math.max(...services.map(s=>SVC[s].wf));return Math.max(1,Math.round(CFG.baseWait[f.type]*wf*(.6+u)))}
+
+function scoreOne(p,f,w,reach){
+const d=Math.hypot(p.x-f.x,p.y-f.y)*CFG.road;
+const covers=p.services.filter(s=>f.services.includes(s));
+const missing=p.services.filter(s=>!f.services.includes(s));
+const free=f.cap-f.load;
+const u=f.load/f.cap;
+const terms={
+d:Math.exp(-d/CFG.lambda),
+c:clamp((CFG.mMax-f.m)/(CFG.mMax-CFG.mMin),0,1),
+t:CFG.tier[f.type],
+l:1-Math.pow(u,CFG.loadExp),
+q:f.q
+};
+const contrib={};
+let base=0;
+TERMS.forEach(t=>{contrib[t.k]=w[t.k]*terms[t.k];base+=contrib[t.k]});
+return{f,d,covers,missing,free,u,terms,contrib,base,shown:0,reason:'',locked:false,
+seatOk:free>=1,reachOk:d<=reach,full:missing.length===0,cov:covers.length/p.services.length,
+cost:needCost(covers,f.m),wait:waitDays(f,covers.length?covers:p.services,u)};
+}
+
+function evaluate(p,policy,facs){
+const w=effWeights(policy.weights,p.urgency);
+const reach=effReach(policy,p.urgency);
+const all=facs.map(f=>scoreOne(p,f,w,reach));
+const feasible=all.filter(c=>c.full&&c.seatOk&&c.reachOk);
+let mode='single',plan=[],ranked=[],remaining=[];
+if(feasible.length){
+let pool=feasible;
+if(policy.lock){
+const pub=feasible.filter(c=>c.f.type==='public');
+if(pub.length){pool=pub;feasible.forEach(c=>{if(c.f.type!=='public')c.locked=true})}
+}
+ranked=pool.slice().sort((a,b)=>b.base-a.base);
+ranked.forEach(c=>{c.shown=c.base});
+plan=[{c:ranked[0],services:p.services.slice()}];
+}else{
+mode='split';
+const usable=all.filter(c=>c.covers.length&&c.seatOk&&c.reachOk);
+usable.forEach(c=>{c.shown=c.base*c.cov});
+ranked=usable.slice().sort((a,b)=>b.shown-a.shown);
+remaining=p.services.slice();
+const used=new Set();
+const greedy=pool=>{
+while(remaining.length){
+let best=null,bv=-1;
+for(const c of pool){
+if(used.has(c.f.id))continue;
+const got=c.covers.filter(s=>remaining.includes(s)).length;
+if(!got)continue;
+const v=c.base*got/remaining.length;
+if(v>bv){bv=v;best=c}
+}
+if(!best)break;
+const got=best.covers.filter(s=>remaining.includes(s));
+used.add(best.f.id);
+plan.push({c:best,services:got});
+remaining=remaining.filter(s=>!got.includes(s));
+}
+};
+if(policy.lock)greedy(usable.filter(c=>c.f.type==='public'));
+greedy(usable);
+}
+const inRank=new Set(ranked);
+all.forEach(c=>{
+if(inRank.has(c))return;
+if(mode==='single'&&c.locked)c.reason='Held back by the public-first lock';
+else if(!c.covers.length)c.reason='Offers none of the needed services';
+else if(mode==='single'&&c.missing.length)c.reason='Missing '+c.missing.map(s=>SVC[s].short).join(', ');
+else if(!c.seatOk)c.reason='No free seat';
+else if(!c.reachOk)c.reason='Beyond reach at '+Math.round(c.d)+' km';
+else c.reason='Not needed';
+});
+const planCost=sum(plan.map(s=>needCost(s.services,s.c.f.m)));
+const planDist=sum(plan.map(s=>s.c.d));
+const planWait=plan.length?Math.max(...plan.map(s=>waitDays(s.c.f,s.services,s.c.u))):0;
+const nearest=mode==='single'?feasible.slice().sort((a,b)=>a.d-b.d)[0]:null;
+const margin=ranked.length>1?ranked[0].shown-ranked[1].shown:null;
+return{p,w,reach,all,ranked,plan,mode,uncovered:remaining,planCost,planDist,planWait,nearest,margin,feasible:feasible.length};
+}
+
+function decisive(m){
+if(m.mode!=='single'||m.ranked.length<2)return null;
+const a=m.ranked[0],b=m.ranked[1];
+let best=null,bv=-1e9;
+TERMS.forEach(t=>{const dv=a.contrib[t.k]-b.contrib[t.k];if(dv>bv){bv=dv;best=t}});
+return{term:best,pts:bv*100,over:b};
+}
+
+function judgeOverride(m,p){
+const c=m.all.find(x=>x.f.id===p.request);
+if(!c)return null;
+const rec=m.plan[0]&&m.plan[0].c;
+const same=m.plan.length===1&&rec&&rec.f.id===c.f.id;
+const reserve=Math.max(1,Math.ceil(c.f.cap*CFG.reserve));
+const overReach=Math.round(m.reach*CFG.overrideReach);
+const copay=Math.max(0,needCost(p.services,c.f.m)-m.planCost);
+const loss=rec&&!same?Math.max(0,(rec.base-c.base)*100):0;
+const rules=[
+{label:'Offers every requested service',pass:c.missing.length===0,detail:c.missing.length?'Missing '+c.missing.map(s=>SVC[s].short).join(', '):'All '+p.services.length+' covered'},
+{label:'Seat left after the guided-routing reserve',pass:c.free-reserve>=1,detail:c.free+' free, '+reserve+' held back'},
+{label:'Within override reach',pass:c.d<=overReach,detail:Math.round(c.d)+' km of '+overReach+' km allowed'},
+{label:'Override token available this quarter',pass:!p.tokenUsed,detail:p.tokenUsed?'Already used':'One per patient per quarter'},
+{label:'Efficiency loss within tolerance',pass:loss<=CFG.tolerance,soft:true,detail:same?'Same as the engine pick':loss.toFixed(1)+' points below the engine pick, '+CFG.tolerance+' allowed'},
+{label:'Cost gap paid by the patient',pass:true,info:true,detail:copay>.5?'Patient pays '+usd(copay)+' more':'No extra cost'}
+];
+let outcome;
+if(same)outcome='same';
+else if(!rules[0].pass||!rules[2].pass||!rules[3].pass)outcome='denied';
+else if(!rules[1].pass)outcome='waitlist';
+else if(!rules[4].pass)outcome='signoff';
+else if(copay>.5)outcome='copay';
+else outcome='approved';
+return{c,rules,outcome,copay,same,loss};
+}
+const OUTCOME={
+approved:['Override approved','ok'],
+copay:['Approved with a co-pay','warn'],
+waitlist:['Waitlisted, no seat to spare','warn'],
+signoff:['Needs medical director sign-off','warn'],
+denied:['Override not allowed','bad'],
+same:['Matches the engine pick','ok']
+};
+
+function reweight(raw,k,t){
+const o={};
+const others=TERMS.map(x=>x.k).filter(x=>x!==k);
+const s=sum(others.map(x=>raw[x]));
+others.forEach(x=>{o[x]=s>0?raw[x]/s*(100-t):(100-t)/others.length});
+o[k]=t;
+return o;
+}
+
+function rng(seed){
+let a=seed>>>0;
+return()=>{
+a=(a+0x6D2B79F5)|0;
+let t=Math.imul(a^(a>>>15),1|a);
+t=(t+Math.imul(t^(t>>>7),61|t))^t;
+return((t^(t>>>14))>>>0)/4294967296;
+};
+}
+function pick(r,items,wf){
+const tot=sum(items.map(wf));
+let x=r()*tot;
+for(const it of items){x-=wf(it);if(x<=0)return it}
+return items[items.length-1];
+}
+function makeCohort(n,seed){
+const r=rng(seed);
+const out=[];
+for(let i=0;i<n;i++){
+const s=pick(r,SETTLEMENTS,x=>x.pop);
+const b=pick(r,BUNDLES,x=>x.w);
+const u=r();
+out.push({name:'P'+(i+1),x:clamp(s.x+(r()-.5)*4,0,120),y:clamp(s.y+(r()-.5)*4,0,80),services:b.s,urgency:u<.7?0:u<.93?1:2,request:'',tokenUsed:false});
+}
+return out;
+}
+function simulate(kind,cohort,policy){
+const fac=FACILITIES.map(f=>({...f}));
+let placed=0,unplaced=0,spend=0,stops=0,dist=0;
+const byTier={public:0,contracted:0,private:0};
+for(const p of cohort){
+let picks=null;
+if(kind==='engine'){
+const m=evaluate(p,policy,fac);
+if(m.plan.length&&!m.uncovered.length)picks=m.plan.map(s=>({f:s.c.f,d:s.c.d,services:s.services}));
+}else{
+const reach=effReach(policy,p.urgency);
+let best=null;
+for(const f of fac){
+if(f.cap-f.load<1)continue;
+if(!p.services.every(s=>f.services.includes(s)))continue;
+const d=Math.hypot(p.x-f.x,p.y-f.y)*CFG.road;
+if(d>reach)continue;
+if(!best||d<best.d)best={f,d};
+}
+if(best)picks=[{f:best.f,d:best.d,services:p.services}];
+}
+if(!picks){unplaced++;continue}
+placed++;
+for(const s of picks){
+s.f.load++;
+spend+=needCost(s.services,s.f.m);
+dist+=s.d;
+stops++;
+byTier[s.f.type]++;
+}
+}
+const util=fac.map(f=>f.load/f.cap);
+const mean=sum(util)/util.length;
+const publicFac=fac.filter(f=>f.type==='public');
+const pubUsed=sum(publicFac.map(f=>f.load-FBY[f.id].load));
+const pubSeats=sum(publicFac.map(f=>f.cap-FBY[f.id].load));
+return{
+placed,unplaced,spend,stops,byTier,util,
+avgcost:placed?spend/placed:0,
+pub:stops?byTier.public/stops:0,
+dist:placed?dist/placed:0,
+hot:fac.filter(f=>f.load/f.cap>=.9).length,
+spread:Math.sqrt(sum(util.map(v=>(v-mean)**2))/util.length),
+pubfill:pubSeats?pubUsed/pubSeats:0
+};
+}
+
+function applyCase(id){
+const c=CASES.find(x=>x.id===id);
+const pl=PLACE[c.place];
+Object.assign(state.patient,{name:c.name,x:pl.x,y:pl.y,services:c.services.slice(),urgency:c.urgency,request:'',tokenUsed:false,case:id});
+state.selected=null;
+}
+function nearestPlace(x,y){
+let b=null,bd=1e9;
+SETTLEMENTS.forEach(s=>{const d=Math.hypot(s.x-x,s.y-y);if(d<bd){bd=d;b=s}});
+return{s:b,d:bd};
+}
+function matchPreset(){
+const w=state.policy.weights;
+for(const id in POLICIES){
+const p=POLICIES[id];
+if(p.lock===state.policy.lock&&TERMS.every(t=>p.w[t.k]===w[t.k]))return id;
+}
+return'custom';
+}
+const tierChip=t=>`<span class="tchip" style="--c:${TIER[t].color}"><i></i>${TIER[t].label}</span>`;
+const svcChips=(f,need)=>f.services.map(s=>`<span class="sv ${need.includes(s)?'need':''}">${SVC[s].short}</span>`).join('');
+
+function dialsHTML(){
+return`<div class="ch"><h3>Weights, 100 points to share</h3><span>admin sets these</span></div>
+<div class="chips presets">${Object.keys(POLICIES).map(id=>`<button class="chip" data-preset="${id}">${POLICIES[id].label}</button>`).join('')}</div>
+${TERMS.map(t=>`<div class="dial"><div class="dl"><span><i style="background:${t.color}"></i>${t.name}</span><b class="mono" data-share="${t.k}">0 pts</b></div><div class="dh">${t.hint}</div><input type="range" min="0" max="100" step="1" data-dial="${t.k}" aria-label="${t.name} weight"></div>`).join('')}
+<div class="dial"><div class="dl"><span>Furthest we will send anyone</span><b class="mono" data-reachv>60 km</b></div><div class="dh">Urgent cases get less.</div><input type="range" min="10" max="120" step="1" data-reach aria-label="Furthest we will send anyone"></div>
+<label class="switch"><input type="checkbox" data-lock><i></i><span>Strict public-first lock<small>Contracted and private facilities only when no public one can serve</small></span></label>`;
+}
+function syncDials(){
+const w=state.policy.weights,tot=sum(TERMS.map(t=>w[t.k]))||1;
+$$('[data-dial]').forEach(i=>{const k=i.dataset.dial;i.value=w[k];i.style.setProperty('--p',w[k]+'%')});
+$$('[data-share]').forEach(s=>{s.textContent=Math.round(w[s.dataset.share]/tot*100)+' pts'});
+$$('[data-reach]').forEach(i=>{i.value=state.policy.reach;i.style.setProperty('--p',((state.policy.reach-10)/110*100)+'%')});
+$$('[data-reachv]').forEach(s=>{s.textContent=state.policy.reach+' km'});
+$$('[data-lock]').forEach(i=>{i.checked=state.policy.lock});
+const cur=matchPreset();
+$$('[data-preset]').forEach(b=>b.classList.toggle('on',b.dataset.preset===cur));
+}
+
+function buildStatic(){
+const roads=ROADS.map(([a,b],i)=>{
+const A=PLACE[a],B=PLACE[b];
+const g=edgeGeom({x:sx(A.x),y:sy(A.y)},{x:sx(B.x),y:sy(B.y)},(i%2?1:-1)*.07);
+return`<path class="road" d="${g.d}"/>`;
+}).join('');
+const towns=SETTLEMENTS.map(s=>{
+if(s.city)return`<text class="wm" x="${sx(s.x)}" y="${sy(s.y)+10}">${s.name}</text><circle class="sdot" cx="${sx(s.x)}" cy="${sy(s.y)}" r="4.5"/>`;
+const t=TP[s.id];
+return`<circle class="sdot" cx="${sx(s.x)}" cy="${sy(s.y)}" r="2.6"/><text class="stl" x="${sx(s.x)+t.x}" y="${sy(s.y)+t.y}" style="text-anchor:${t.a}">${s.name}</text>`;
+}).join('');
+return`<defs><radialGradient id="gA"><stop offset="0" style="stop-color:var(--acc)" stop-opacity=".13"/><stop offset="1" style="stop-color:var(--acc)" stop-opacity="0"/></radialGradient><radialGradient id="gB"><stop offset="0" style="stop-color:var(--con)" stop-opacity=".07"/><stop offset="1" style="stop-color:var(--con)" stop-opacity="0"/></radialGradient></defs>
+<circle cx="${sx(34)}" cy="${sy(30)}" r="190" fill="url(#gA)"/><circle cx="${sx(92)}" cy="${sy(22)}" r="170" fill="url(#gB)"/><circle cx="${sx(70)}" cy="${sy(60)}" r="160" fill="url(#gA)"/>
+<path class="river" d="M-30 170C150 100 250 270 430 240S650 390 720 340 860 440 940 400"/>${roads}${towns}`;
+}
+function edgeGeom(a,b,bend){
+const mx=(a.x+b.x)/2,my=(a.y+b.y)/2,dx=b.x-a.x,dy=b.y-a.y;
+const cx=mx-dy*bend,cy=my+dx*bend;
+return{d:`M${a.x.toFixed(1)} ${a.y.toFixed(1)}Q${cx.toFixed(1)} ${cy.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`,mid:{x:.25*a.x+.5*cx+.25*b.x,y:.25*a.y+.5*cy+.25*b.y}};
+}
+let STATIC_SVG='';
+const LP={},TP={};
+function computeLabels(){
+const boxes=[];
+const nodes=FACILITIES.map(f=>({id:f.id,x0:sx(f.x)-28,x1:sx(f.x)+28,y0:sy(f.y)-28,y1:sy(f.y)+28}));
+const hit=(a,b)=>a.x0<b.x1&&a.x1>b.x0&&a.y0<b.y1&&a.y1>b.y0;
+const free=(b,own)=>!nodes.some(n=>n.id!==own&&hit(b,n))&&!boxes.some(o=>hit(b,o))&&b.x0>6&&b.x1<894&&b.y0>6&&b.y1<614;
+const box=(x,y,w,a)=>({x0:a==='start'?x:a==='end'?x-w:x-w/2,x1:a==='start'?x+w:a==='end'?x:x+w/2,y0:y-11,y1:y+4});
+const place=(store,id,x,y,w,cands,own)=>{
+let chosen=cands[0];
+for(const c of cands){if(free(box(x+c[0],y+c[1],w,c[2]),own)){chosen=c;break}}
+boxes.push(box(x+chosen[0],y+chosen[1],w,chosen[2]));
+store[id]={x:chosen[0],y:chosen[1],a:chosen[2]};
+};
+FACILITIES.forEach(f=>place(LP,f.id,sx(f.x),sy(f.y),f.short.length*6.4,[[0,41,'middle'],[0,-33,'middle'],[34,4,'start'],[-34,4,'end'],[30,34,'start'],[-30,34,'end'],[30,-24,'start'],[-30,-24,'end']],f.id));
+SETTLEMENTS.filter(s=>!s.city).forEach(s=>place(TP,s.id,sx(s.x),sy(s.y),s.name.length*(s.city?7:5.6),[[0,-12,'middle'],[0,20,'middle'],[10,4,'start'],[-10,4,'end'],[0,-36,'middle'],[0,44,'middle'],[36,4,'start'],[-36,4,'end']],null));
+}
+
+function nodeSVG(c,cls){
+const f=c.f,x=sx(f.x),y=sy(f.y),col=TIER[f.type].color,u=f.load/f.cap,R=24,C=2*Math.PI*R;
+const glyph=f.kind==='lab'?`<path d="${GLYPH.lab}" fill="none" stroke="${col}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>`:`<path d="${GLYPH[f.kind]}" fill="${col}"/>`;
+const lp=LP[f.id];
+return`<g class="fnode ${cls}" data-id="${f.id}" transform="translate(${x} ${y})"><circle class="hit" r="30"/><circle class="ring-bg" r="${R}"/><circle class="ring" r="${R}" stroke="${col}" stroke-dasharray="${(u*C).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90)"/><circle class="selring" r="31"/><rect class="body" x="-15" y="-15" width="30" height="30" rx="11" style="stroke:${col}"/>${glyph}<text class="lbl" x="${lp.x}" y="${lp.y}" style="text-anchor:${lp.a}">${f.short}</text></g>`;
+}
+
+function paintCanvas(){
+const m=model,p=state.patient,pxv=sx(p.x),pyv=sy(p.y);
+const bestIds=new Set(m.plan.map(s=>s.c.f.id));
+const rankedIds=new Set(m.ranked.map(c=>c.f.id));
+const from={x:pxv,y:pyv};
+let glow='',edges='',chips='';
+const drawn=new Set();
+const addEdge=(c,kind,i)=>{
+const g=edgeGeom(from,{x:sx(c.f.x),y:sy(c.f.y)},(i%2?1:-1)*.14);
+if(kind==='best'){
+glow+=`<path class="edge glow" d="${g.d}"/>`;
+edges+=`<path class="edge best" d="${g.d}"/>`;
+chips+=`<g class="echip best" transform="translate(${g.mid.x.toFixed(1)} ${g.mid.y.toFixed(1)})"><rect x="-19" y="-10" width="38" height="20" rx="10"/><text y="3.6">${Math.round(c.shown*100)}</text></g>`;
+}else if(kind==='req'){
+edges+=`<path class="edge req" d="${g.d}"/>`;
+}else{
+const s=c.shown;
+edges+=`<path class="edge" d="${g.d}" style="stroke:${TIER[c.f.type].color};stroke-width:${(1+s*2.6).toFixed(2)};opacity:${(.18+s*.5).toFixed(2)}"/>`;
+if(i<3)chips+=`<g class="echip" transform="translate(${g.mid.x.toFixed(1)} ${g.mid.y.toFixed(1)})"><rect x="-19" y="-10" width="38" height="20" rx="10"/><text y="3.6">${Math.round(s*100)}</text></g>`;
+}
+};
+m.plan.forEach((s,i)=>{addEdge(s.c,'best',i);drawn.add(s.c.f.id)});
+m.ranked.slice(0,5).forEach((c,i)=>{if(!drawn.has(c.f.id)){addEdge(c,'rank',i+1);drawn.add(c.f.id)}});
+if(p.request){const t=m.all.find(c=>c.f.id===p.request);if(t&&!bestIds.has(t.f.id)){addEdge(t,'req',1)}else if(t){const g=edgeGeom(from,{x:sx(t.f.x),y:sy(t.f.y)},-.22);edges+=`<path class="edge req" d="${g.d}"/>`}}
+const nodes=m.all.map(c=>{
+const cls=[bestIds.has(c.f.id)?'best':rankedIds.has(c.f.id)?'elig':'dim',state.selected===c.f.id?'on':''].join(' ');
+return nodeSVG(c,cls);
+}).join('');
+const tagW=16+p.name.length*6.6;
+const patient=`<g class="patient" transform="translate(${pxv} ${pyv})"><circle class="halo" r="12"/><circle class="halo h2" r="12"/><circle class="pdot" r="9"/><circle class="pcore" r="3.4"/><g class="ptag" transform="translate(0 -24)"><rect x="${-tagW/2}" y="-11" width="${tagW}" height="20" rx="10"/><text y="3.5">${p.name}</text></g></g>`;
+const reachR=m.reach/CFG.road*KM;
+$('#map').innerHTML=STATIC_SVG+`<circle class="reach" cx="${pxv}" cy="${pyv}" r="${reachR.toFixed(1)}"/>`+glow+edges+nodes+chips+patient;
+}
+
+const REASON_ORDER=['service','seat','reach','lock','other'];
+function reasonKind(r){
+if(/^Missing|^Offers none/.test(r))return'service';
+if(/^No free seat/.test(r))return'seat';
+if(/^Beyond reach/.test(r))return'reach';
+if(/^Held back/.test(r))return'lock';
+return'other';
+}
+const dayText=n=>n+' day'+(n===1?'':'s');
+const possible=t=>Math.round(model.w[t.k]*100);
+const termReason=(t,c)=>({
+d:'it is '+Math.round(c.d)+' km away',
+c:'it charges ×'+c.f.m.toFixed(2)+' the reference tariff',
+t:'it is a '+TIER[c.f.type].label.toLowerCase()+' facility',
+l:'it is '+Math.round(c.u*100)+'% full',
+q:'its quality rating is '+c.f.q.toFixed(2)
+})[t.k];
+const termTitle=(t,c)=>`${t.name} contributed ${pts(c.contrib[t.k])} of a possible ${possible(t)} points, because ${termReason(t,c)}.`;
+const stackHTML=(c,w,big)=>`<div class="stack ${big?'big':''}">${TERMS.map(t=>`<b title="${termTitle(t,c)}" style="width:${(c.contrib[t.k]*100).toFixed(2)}%;background:${t.color}"></b>`).join('')}</div>`;
+
+function whyText(){
+const m=model,p=state.patient;
+if(!m.plan.length)return'No facility passes the gates. Raise the reach. Or free seats at the nearest match.';
+if(m.mode==='split'){
+return`No single facility covers all ${p.services.length} services. So the engine plans <b>${m.plan.length} stops</b>. It scores each stop the same way.`+(m.uncovered.length?` Nobody can place <b>${m.uncovered.map(s=>SVC[s].short).join(', ')}</b> right now.`:'');
+}
+const c=m.plan[0].c;
+const dec=decisive(m);
+let t=`<b>${TIER[c.f.type].label}</b> facility. It offers ${p.services.length>1?'all '+p.services.length+' services':'the service'}. It is ${Math.round(c.d)} km away and ${Math.round(c.u*100)}% full.`;
+if(dec)t+=` The biggest gap against ${dec.over.f.short} is <b>${dec.term.name.toLowerCase()}</b>, worth ${dec.pts.toFixed(1)} points.`;
+else t+=' It is the only facility that passes every gate.';
+if(m.margin!==null)t+=` It leads the runner-up by ${(m.margin*100).toFixed(1)} points.`;
+if(c.u>=.85)t+=' <b>Capacity alert:</b> 85% full or more.';
+return t;
+}
+
+function nearestNote(){
+const m=model,p=state.patient;
+if(m.mode!=='single'||!m.nearest)return'';
+const n=m.nearest,top=m.plan[0].c;
+if(n===top)return`<div class="vs">The nearest option is also the best one. The engine agrees with common sense here.</div>`;
+const nc=needCost(p.services,n.f.m),dc=nc-m.planCost,dd=top.d-n.d;
+const money=dc>.5?`The engine saves <b>${usd(dc)}</b>.`:dc<-.5?`The engine spends <b>${usd(-dc)}</b> more.`:'The engine costs the same.';
+const trip=Math.abs(dd)<.5?'The trip is the same length.':dd>0?`The trip is ${Math.round(dd)} km longer.`:`The trip is ${Math.round(-dd)} km shorter.`;
+return`<div class="vs">A person would pick the nearest: <b>${n.f.short}</b>, ${TIER[n.f.type].label.toLowerCase()} at ${Math.round(n.d)} km for ${usd(nc)}. ${money} ${trip}</div>`;
+}
+
+function patientNote(){
+const m=model,p=state.patient;
+if(!m.plan.length)return`${p.name}, we cannot place you today. No suitable facility has a free seat in reach. A coordinator will follow up.`;
+if(m.mode==='split'){
+const parts=m.plan.map((x,i)=>`${i===0?'First, go to':'Then go to'} ${x.c.f.name} for ${x.services.map(z=>SVC[z].name.toLowerCase()).join(' and ')}.`).join(' ');
+const miss=m.uncovered.length?` We cannot place ${m.uncovered.map(z=>SVC[z].name.toLowerCase()).join(' or ')} today.`:'';
+return`${p.name}, you need ${m.plan.length} visits. ${parts}${miss} The trips total ${Math.round(m.planDist)} km, with waits of up to ${dayText(m.planWait)}. This plan costs you nothing extra.`;
+}
+const c=m.plan[0].c;
+const others=m.ranked.length>1?`Of ${m.ranked.length} places that can treat you, it scored best.`:'It is the only place that can treat you today.';
+return`${p.name}, please go to ${c.f.name}. It offers what you need and has a free seat. ${others} It is ${Math.round(c.d)} km away, with a wait of about ${dayText(m.planWait)}. This referral costs you nothing extra. You may choose another place, but you pay any extra cost.`;
+}
+
+function paintRec(){
+const m=model,p=state.patient;
+let left;
+if(m.plan.length){
+const stops=m.plan.map(s=>{
+const c=s.c;
+return`<div class="stop"><div class="sname">${c.f.name}</div><div class="smeta">${tierChip(c.f.type)}<span>${c.f.place}</span>${m.mode==='split'?svcChips({services:s.services},p.services):''}</div></div>`;
+}).join('');
+const facts=[
+`<div class="fact"><b>${m.planDist.toFixed(0)} km</b><span>Travel</span></div>`,
+`<div class="fact"><b>${usd(m.planCost)}</b><span>Cost to the payer</span></div>`,
+`<div class="fact"><b>${dayText(m.planWait)}</b><span>Wait</span></div>`,
+`<div class="fact"><b>${m.mode==='single'?m.plan[0].c.free-1:m.plan.length}</b><span>${m.mode==='single'?'Seats left after booking':'Stops'}</span></div>`
+];
+if(m.mode==='single')facts.push(`<div class="fact"><b>${pts(m.plan[0].c.shown)}</b><span>Score of 100</span></div>`);
+left=`<h4>Recommended route${m.mode==='split'?', split across '+m.plan.length+' stops':''}</h4>${stops}<div class="facts">${facts.join('')}</div>`+(m.mode==='single'?`<div class="whereb"><span>Where the score came from</span>${stackHTML(m.plan[0].c,m.w,true)}</div>`:'')+`<div class="why">${whyText()}</div>${nearestNote()}`;
+}else left=`<h4>Recommended route</h4><div class="why">${whyText()}</div>`;
+left+=`<div class="explbtn"><button class="btn ghost" data-explain>${state.explain?'Hide the patient note':'Explain this to the patient'}</button></div>`+(state.explain?`<div class="explain"><p id="noteText">${patientNote()}</p><button class="btn" data-copy>Copy</button></div>`:'');
+const j=judgeOverride(m,p);
+let right;
+if(!j){
+right=`<h4>Override</h4><div class="verdict"><div class="emptyv">No override requested. The patient follows the engine. Pick a place under "Patient asks for a specific place". Six rules will judge it.</div></div>`;
+}else{
+const o=OUTCOME[j.outcome];
+right=`<h4>Override request: ${j.c.f.short}</h4><div class="verdict"><span class="out ${o[1]}">${o[0]}${(j.outcome==='copay'||j.outcome==='signoff')&&j.copay>.5?', patient pays '+usd(j.copay):''}</span>${j.rules.map(r=>`<div class="rule"><span class="ic ${r.info?'i':r.pass?'p':r.soft?'i':'f'}">${r.info?'i':r.pass?'✓':r.soft?'!':'✕'}</span><div>${r.label}<small>${r.detail}</small></div></div>`).join('')}</div>`;
+}
+$('#rec').innerHTML=`<div>${left}</div><div>${right}</div>`;
+}
+
+function breakdownHTML(c){
+return`<div class="brk"><div class="br hd"><span></span><span></span><span class="bv">possible</span><span class="bp">earned</span></div>${TERMS.map(t=>`<div class="br" title="${termTitle(t,c)}"><span class="bn"><i style="background:${t.color}"></i>${t.name}</span><span class="bbar"><b style="width:${(c.terms[t.k]*100).toFixed(0)}%;background:${t.color}"></b></span><span class="bv mono">of ${possible(t)}</span><span class="bp mono">${pts(c.contrib[t.k])}</span></div>`).join('')}<div class="br tot"><span>Score</span><span></span><span class="bv mono">${model.mode==='split'?'× coverage '+c.cov.toFixed(2):'of 100'}</span><span class="bp mono">${pts(c.shown)}</span></div></div>`;
+}
+
+function paintRank(){
+const m=model,p=state.patient;
+const bestId=m.plan[0]&&m.plan[0].c.f.id;
+const open=state.selected||bestId;
+const planIds=new Set(m.plan.map(s=>s.c.f.id));
+const rows=m.ranked.map((c,i)=>{
+const isBest=planIds.has(c.f.id);
+const tags=[isBest?'<span class="tag best">'+(m.mode==='split'?'Stop':'Best')+'</span>':'',p.request===c.f.id?'<span class="tag req">Requested</span>':'',m.mode==='split'?`<span class="tag cov">covers ${c.covers.length} of ${p.services.length}</span>`:'',c.u>=.85?'<span class="tag warn">Capacity alert</span>':''].join('');
+return`<div class="row ${isBest?'best':''} ${open===c.f.id?'open':''}" data-id="${c.f.id}"><div class="rh"><div class="rk">${i+1}</div><div><div class="rt"><span class="tdot" style="--c:${TIER[c.f.type].color}"></span>${c.f.short}${tags}</div><div class="rs"><span><b>${Math.round(c.d)}</b> km</span><span><b>${c.free}</b> seats free</span><span>wait <b>${c.wait}</b> ${c.wait===1?'day':'days'}</span><span><b>${usd(c.cost)}</b></span></div></div><div class="rscore">${Math.round(c.shown*100)}<small>of 100</small></div></div>${stackHTML(c,m.w,false)}${open===c.f.id?breakdownHTML(c):''}</div>`;
+}).join('');
+$('#rank').innerHTML=`<div class="ch"><h3>Ranking</h3><span>${m.ranked.length} allowed, ${m.all.length-m.ranked.length} ruled out</span></div><div class="tl2">${TERMS.map(t=>`<span><i style="background:${t.color}"></i>${t.name}</span>`).join('')}</div><div class="rlist">${rows||'<div class="emptyv">Nothing passes the gates.</div>'}</div>`;
+paintRuled();
+}
+
+function paintRuled(){
+const m=model;
+const out=m.all.filter(c=>!m.ranked.includes(c)).sort((a,b)=>REASON_ORDER.indexOf(reasonKind(a.reason))-REASON_ORDER.indexOf(reasonKind(b.reason))||a.d-b.d);
+$('#ruled').innerHTML=`<div class="ch"><h3>Ruled out, and why</h3><span>${out.length} of ${m.all.length}</span></div>${out.map(c=>`<div class="frow ${state.selected===c.f.id?'sel':''}" data-id="${c.f.id}"><span class="fname"><i class="tdot" style="--c:${TIER[c.f.type].color}"></i>${c.f.short}<em>${Math.round(c.d)} km</em></span><span class="rchip k-${reasonKind(c.reason)}">${c.reason}</span></div>`).join('')||'<div class="emptyv">Nothing is ruled out.</div>'}<p class="fine">A person at a referral desk also says no. They just do not write it down.</p>`;
+}
+
+function needleHTML(){
+const m=model;
+if(m.mode!=='single'||m.ranked.length<2)return`<div class="emptyv">${m.mode==='split'?'A split plan chains several stops. So there is no single runner-up.':'Two allowed facilities are needed to compare.'}</div>`;
+const a=m.ranked[0],b=m.ranked[1];
+const rows=TERMS.map(t=>({t,v:a.contrib[t.k]-b.contrib[t.k]})).sort((x,y)=>Math.abs(y.v)-Math.abs(x.v));
+const mx=Math.max(...rows.map(r=>Math.abs(r.v)),.0001);
+return`<p class="fine" style="margin:0 0 14px"><b>${a.f.short}</b> leads <b>${b.f.short}</b> by <b>${pts(a.base-b.base)}</b> points. The bars add up to that gap.</p>`+rows.map(r=>{
+const wd=Math.abs(r.v)/mx*48;
+const left=r.v>=0?50:50-wd;
+const ttl=r.v>=0?`${r.t.name} helps ${a.f.short}. It is worth ${Math.abs(r.v*100).toFixed(1)} points more here than at ${b.f.short}.`:`${r.t.name} helps ${b.f.short}. It is worth ${Math.abs(r.v*100).toFixed(1)} points more there than at ${a.f.short}.`;
+return`<div class="nrow" title="${ttl}"><span class="nn"><i style="background:${r.t.color}"></i>${r.t.name}</span><div class="ntrack"><i class="zero"></i><b style="left:${left.toFixed(1)}%;width:${wd.toFixed(1)}%;background:${r.v>=0?r.t.color:'var(--bad)'}"></b></div><span class="nval mono ${r.v>=0?'':'neg'}">${r.v>=0?'+':'−'}${Math.abs(r.v*100).toFixed(1)}</span></div>`;
+}).join('')+`<div class="axis"><span>favours ${b.f.short}</span><span>favours ${a.f.short}</span></div>`;
+}
+function paintNeedle(){
+$('#needleCard').innerHTML=`<div class="ch"><h3>Why this one and not that one</h3><button class="linkbtn" data-go="equation">How is this scored?</button></div>`+needleHTML();
+}
+function paintRoute(){
+paintCanvas();
+paintRec();
+paintNeedle();
+paintRank();
+}
+
+const CURVE={W:300,H:104,pl:8,pr:8,pt:10,pb:20};
+const TRY={
+d:{fn:x=>Math.exp(-x/CFG.lambda),x0:0,x1:120,step:1,fmt:x=>Math.round(x)+' km away'},
+c:{fn:x=>clamp((CFG.mMax-x)/(CFG.mMax-CFG.mMin),0,1),x0:CFG.mMin,x1:CFG.mMax,step:.05,fmt:x=>'A tariff of ×'+x.toFixed(2)},
+l:{fn:x=>1-Math.pow(x,CFG.loadExp),x0:0,x1:1,step:.01,fmt:x=>Math.round(x*100)+'% full'},
+q:{fn:x=>x,x0:0,x1:1,step:.01,fmt:x=>'A rating of '+x.toFixed(2)}
+};
+function curveXY(key,x){
+const T=TRY[key],{W,H,pl,pr,pt,pb}=CURVE;
+return{x:pl+(x-T.x0)/(T.x1-T.x0)*(W-pl-pr),y:pt+(1-T.fn(x))*(H-pt-pb)};
+}
+function curve(key,mx,colorVar,labels){
+const T=TRY[key],{W,H,pl,pr,pt,pb}=CURVE;
+let d='';
+for(let i=0;i<=48;i++){const q=curveXY(key,T.x0+(T.x1-T.x0)*i/48);d+=(i?'L':'M')+q.x.toFixed(1)+' '+q.y.toFixed(1)}
+const yb=H-pb;
+const m0=curveXY(key,clamp(mx,T.x0,T.x1));
+return`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><path d="${d}L${W-pr} ${yb}L${pl} ${yb}Z" fill="${colorVar}" opacity=".12"/><line x1="${pl}" x2="${W-pr}" y1="${yb}" y2="${yb}" stroke="var(--line2)"/><path d="${d}" fill="none" stroke="${colorVar}" stroke-width="2.2" stroke-linecap="round"/><line class="mkl" x1="${m0.x}" x2="${m0.x}" y1="${m0.y}" y2="${yb}" stroke="var(--sel)" stroke-dasharray="3 4" opacity=".7"/><circle class="mkc" cx="${m0.x}" cy="${m0.y}" r="5" fill="var(--sel)" stroke="var(--panel)" stroke-width="2.5"/><text x="${pl}" y="${H-4}" font-size="10" fill="var(--fa)">${labels[0]}</text><text x="${W-pr}" y="${H-4}" font-size="10" fill="var(--fa)" text-anchor="end">${labels[1]}</text></svg>`;
+}
+function tryIt(inp){
+const key=inp.dataset.try,T=TRY[key],x=+inp.value,card=inp.closest('.tcard'),cap=+inp.dataset.poss;
+const q=curveXY(key,x);
+const svg=card.querySelector('svg');
+const c=svg.querySelector('.mkc'),l=svg.querySelector('.mkl');
+c.setAttribute('cx',q.x);
+c.setAttribute('cy',q.y);
+l.setAttribute('x1',q.x);
+l.setAttribute('x2',q.x);
+l.setAttribute('y1',q.y);
+inp.style.setProperty('--p',((x-T.x0)/(T.x1-T.x0)*100)+'%');
+card.querySelector('[data-tryout]').innerHTML=`<b>${T.fmt(x)}</b> earns <b>${(T.fn(x)*cap).toFixed(1)}</b> of a possible <b>${cap}</b> points.`;
+}
+
+function eqTarget(){
+const m=model;
+const id=state.selected||(m.plan[0]&&m.plan[0].c.f.id)||FACILITIES[0].id;
+return m.all.find(c=>c.f.id===id);
+}
+
+const STEPS=['Who is allowed','100 points to share','Points earned','Add up and pick'];
+function gateValue(c){
+return model.mode==='split'?(c.seatOk&&c.reachOk?c.cov:0):(c.full&&c.seatOk&&c.reachOk&&!c.locked?1:0);
+}
+function termFact(t,c){
+if(t.k==='d')return`${c.f.short} is ${Math.round(c.d)} km away.`;
+if(t.k==='c')return`${c.f.short} charges ×${c.f.m.toFixed(2)} the reference tariff.`;
+if(t.k==='t')return`${c.f.short} is a ${TIER[c.f.type].label.toLowerCase()} facility.`;
+if(t.k==='l')return`${c.f.short} is ${Math.round(c.u*100)}% full.`;
+return`${c.f.short} has a quality rating of ${c.f.q.toFixed(2)}.`;
+}
+const earnedText=(t,c)=>`That earns ${pts(c.contrib[t.k])} of a possible ${possible(t)} points.`;
+function followSel(c){
+return`<div class="selrow"><label for="eqSel">Score any facility yourself</label><select id="eqSel">${['public','contracted','private'].map(t=>`<optgroup label="${TIER[t].label}">${FACILITIES.filter(f=>f.type===t).map(f=>`<option value="${f.id}" ${f.id===c.f.id?'selected':''}>${f.short}</option>`).join('')}</optgroup>`).join('')}</select></div>`;
+}
+
+function stepGate(c){
+const m=model,p=state.patient,total=m.all.length;
+const stages=[{t:'Facilities in the region',n:total}];
+let cur=m.all;
+const push=(label,fn)=>{cur=cur.filter(fn);stages.push({t:label,n:cur.length})};
+if(m.mode==='single'){
+push('Offer every service needed',x=>x.full);
+push('Have a free seat',x=>x.seatOk);
+push('Within '+Math.round(m.reach)+' km',x=>x.reachOk);
+if(state.policy.lock)push('Clear the public-first lock',x=>!x.locked);
+}else{
+push('Offer part of the bundle',x=>x.covers.length>0);
+push('Have a free seat',x=>x.seatOk);
+push('Within '+Math.round(m.reach)+' km',x=>x.reachOk);
+}
+const rows=stages.map((s,i)=>`<div class="fun ${i===stages.length-1?'last':''}"><span class="fl2">${s.t}</span><div class="ftrack"><b style="width:${(s.n/total*100).toFixed(1)}%"></b></div><span class="fn mono">${s.n}</span></div>`).join('');
+const out=m.all.filter(x=>!m.ranked.includes(x)).sort((a,b)=>a.d-b.d);
+const chips=out.slice(0,6).map(x=>`<span class="dropc"><i class="tdot" style="--c:${TIER[x.f.type].color}"></i>${x.f.short}<em>${x.reason}</em></span>`).join('')+(out.length>6?`<span class="dropc"><em>and ${out.length-6} more</em></span>`:'');
+const gc=(ok,label)=>`<span class="gc ${ok?'p':'f'}"><i>${ok?'✓':'✕'}</i>${label}</span>`;
+const q1=m.mode==='single'?`Does ${c.f.short} offer what ${p.name} needs?`:`Does ${c.f.short} offer part of what ${p.name} needs?`;
+const three=`<div class="gchips" style="margin:0 0 18px">${gc(m.mode==='single'?c.full:c.covers.length>0,q1)}${gc(c.seatOk,'Is there a seat?')}${gc(c.reachOk,'Is it close enough?')}</div>`;
+const head=m.mode==='single'?`${m.ranked.length} of ${total} facilities may treat ${p.name}.`:'No single facility passes every gate.';
+const sub=m.mode==='single'?'Every facility faces three gates. One no scores zero. No weight can rescue it.':'So the first gate relaxes. Sites offering part of the bundle stay in. The engine chains stops.';
+return`${followSel(c)}<h4 class="sthead">${head}</h4><p class="stsub">${sub}</p>${three}${rows}${out.length?`<div class="drops">${chips}</div>`:''}`;
+}
+
+function stepWeights(){
+const m=model,p=state.patient,raw=state.policy.weights,tot=sum(TERMS.map(t=>raw[t.k]))||1;
+const seg=TERMS.map(t=>`<b title="${t.name}: ${possible(t)} points" style="width:${(m.w[t.k]*100).toFixed(2)}%;background:${t.color}">${m.w[t.k]>=.06?possible(t):''}</b>`).join('');
+const rows=TERMS.map(t=>{
+const was=Math.round(raw[t.k]/tot*100),now=possible(t);
+return`<div class="irow"><span class="mkd" style="background:${t.color}"></span><div><b>${t.name}</b><small>${t.ask}</small></div><div class="ip serif">${now} points${now!==was?`<small>was ${was}</small>`:''}</div></div>`;
+}).join('');
+const urg=p.urgency>0?`<p class="stnote">${['','This is a soon case.','This is an urgent case.'][p.urgency]} Distance gets more points. Reach shrinks to ${Math.round(m.reach)} km.</p>`:'';
+return`<h4 class="sthead">You have 100 points to share.</h4><p class="stsub">Five questions split the points. The admin sets the split with the dials. The total is always 100.</p><div class="stack big lab">${seg}</div>${urg}<div style="margin-top:12px">${rows}</div>`;
+}
+
+function stepPoints(c){
+const m=model;
+const rows=TERMS.map(t=>`<div class="mrow"><span class="mkd" style="background:${t.color}"></span><div class="mkt"><b>${t.name}</b><span>${t.ask}</span><small>${termFact(t,c)} ${earnedText(t,c)}</small></div><div class="ntrack big"><b style="left:0;width:${(c.terms[t.k]*100).toFixed(1)}%;background:${t.color}"></b></div><span class="mkn serif">${pts(c.contrib[t.k])}<em>of ${possible(t)}</em></span></div>`).join('');
+const note=m.ranked.includes(c)?'':`<p class="stnote">${c.f.short} is ruled out at step 1: ${c.reason.toLowerCase()}. These points are for comparison only.</p>`;
+return`${followSel(c)}<h4 class="sthead">${c.f.short} earns points on each question.</h4><p class="stsub">It earns part of each question's points. A fixed rule sets the part. Nothing is judged by feel.</p>${note}${rows}`;
+}
+
+function stepTotal(c){
+const m=model;
+const G=gateValue(c),S=G*c.base;
+const rows=TERMS.map(t=>`<div class="rc"><span class="rcn"><i style="background:${t.color}"></i>${t.name}</span><b class="mono">${pts(c.contrib[t.k])}</b><span class="op">of</span><span class="mono">${possible(t)}</span></div>`).join('');
+const gateTxt=m.mode==='split'?'Share of the bundle offered':'Gate: is it allowed?';
+const lb=m.ranked.slice(0,4).map((x,i)=>`<div class="lbr ${x===c?'me':''}"><span class="rk">${i+1}</span><span class="lbn">${x.f.short}</span><div class="ntrack"><b style="left:0;width:${(x.shown*100).toFixed(1)}%;background:var(--acc)"></b></div><span class="mono">${pts(x.shown)}</span></div>`).join('');
+const a=m.ranked[0],b=m.ranked[1];
+const win=!a?'Nobody is allowed right now.':m.mode==='split'?'Split plan: '+m.plan.map(s=>s.c.f.short).join(', then ')+'.'+(m.uncovered.length?' Not placeable today: '+m.uncovered.map(x=>SVC[x].short).join(', ')+'.':''):`${a.f.short} wins with ${pts(a.base)} of 100.`+(b?` It leads ${b.f.short} by ${pts(a.base-b.base)} points.`:'');
+const mine=m.ranked.includes(c)?'':`<p class="stnote">${c.f.short} scores ${pts(S)}. Its points alone add up to ${pts(c.base)}. The gate multiplies that by zero.</p>`;
+return`${followSel(c)}<h4 class="sthead">${win}</h4><p class="stsub">Add the five results. Multiply by the gate. The highest total wins.</p>${mine}<div class="two"><div><div class="rc hd"><span></span><span>Earned</span><span></span><span>Possible</span></div>${rows}<div class="rc sub"><span>Sum of the five</span><b class="mono">${pts(c.base)}</b><span class="op">of</span><span class="mono">100</span></div><div class="rc"><span>${gateTxt}</span><b class="mono">×${G.toFixed(G%1?2:0)}</b><span></span><span></span></div><div class="rc tot"><span>Score</span><b class="mono">${pts(S)}</b><span class="op">of</span><span class="mono">100</span></div></div><div><div class="lbh">Top of the ranking</div>${lb||'<div class="emptyv">Nothing to rank.</div>'}</div></div>`;
+}
+
+function paintWalk(){
+const c=eqTarget(),p=state.patient,st=state.step;
+const body=[()=>stepGate(c),stepWeights,()=>stepPoints(c),()=>stepTotal(c)][st]();
+$('#walk').innerHTML=`<div class="ch"><h3>How a referral is decided</h3><span>${p.name} needs ${p.services.map(s=>SVC[s].short).join(' + ')}</span></div>
+<div class="steps">${STEPS.map((s,i)=>`<button class="stp ${i===st?'on':''} ${i<st?'done':''}" data-step="${i}"><i>${i+1}</i><span>${s}</span></button>`).join('')}</div>${body}
+<div class="stepfoot">${st>0?'<button class="btn" data-stepgo="-1">Back</button>':'<span></span>'}${st<3?'<button class="btn primary" data-stepgo="1">Next step</button>':'<button class="btn" data-stepgo="-3">Start again</button>'}</div>`;
+}
+
+function paintOneLine(){
+const w=model.w,mode=state.eqMode;
+const head=`<div class="ch"><h3>The same rule, written formally</h3><div class="seg mini"><button data-eqmode="math" class="${mode==='math'?'on':''}">In math</button><button data-eqmode="words" class="${mode==='words'?'on':''}">In words</button></div></div>`;
+let body;
+if(mode==='words'){
+body=`<div class="wq"><div class="wc sc"><b>Score</b><small>out of 100 points</small></div><span class="op">=</span><div class="wc gt2"><b>Gate</b><small>allowed is 1, refused is 0</small></div><span class="op">×</span><span class="op pr">(</span>${TERMS.map(t=>`<div class="wc" style="--c:${t.color}"><b>${t.name}</b><small>up to ${possible(t)} points</small></div>`).join('<span class="op">+</span>')}<span class="op pr">)</span></div>
+<p class="read">Read it left to right. First comes a yes or no. Is this facility allowed to treat the patient? Then five questions share 100 points. Add up the points earned. The highest score wins.</p>`;
+}else{
+body=`<div class="eq serif" aria-label="Score equation"><span>S(p, f)</span><span class="op">=</span><span class="gt">G(p, f)</span><span class="op">×</span><span class="brk2">[</span>${TERMS.map(t=>`<span class="tm" style="--c:${t.color}">w<sub>${t.k}</sub>·${t.sym}</span>`).join('<span class="op">+</span>')}<span class="brk2">]</span></div>
+<div class="eq2 serif">where <span class="ind">G = [ S<sub>p</sub> ⊆ S<sub>f</sub> ] · [ seats<sub>f</sub> ≥ 1 ] · [ d ≤ R′ ]</span></div>
+<div class="mlegend">
+<div style="--c:var(--td)"><k>D</k><span>e<sup>−d / 40 km</sup>, the distance decay</span></div>
+<div style="--c:var(--tc)"><k>C</k><span>(m<sub>max</sub> − m<sub>f</sub>) ÷ (m<sub>max</sub> − m<sub>min</sub>), the price factor scaled</span></div>
+<div style="--c:var(--tt)"><k>T</k><span>1, 0.55 or 0.25 for public, contracted, private</span></div>
+<div style="--c:var(--tl)"><k>L</k><span>1 − u<sup>3</sup>, where u is seats taken ÷ capacity</span></div>
+<div style="--c:var(--tq)"><k>Q</k><span>the quality rating, from 0 to 1</span></div>
+<div style="--c:var(--sel)"><k>w</k><span>the weights. They add up to 1. Urgent cases boost w<sub>d</sub> by (1 + 0.8u).</span></div>
+<div style="--c:var(--sel)"><k>R′</k><span>reach × (1 − 0.15u) for urgent cases</span></div>
+</div>
+<p class="read" style="margin-top:12px">S runs from 0 to 1. The app shows it out of 100.</p>`;
+}
+$('#oneLine').innerHTML=head+body;
+}
+
+function paintEquation(){
+const m=model,p=state.patient,c=eqTarget();
+paintWalk();
+paintOneLine();
+$('#termFor').innerHTML=`Showing values for <b>${c.f.short}</b>. Change the facility in the walkthrough above.`;
+const T=Object.fromEntries(TERMS.map(t=>[t.k,t]));
+const card=(t,chart,extra,note,math)=>`<div class="card tcard" style="--c:${t.color}"><div class="th"><span class="tsym serif">${possible(t)}</span><div><b>${t.name}</b><span>${t.ask}</span></div><span class="tw mono">${pts(c.contrib[t.k])} of ${possible(t)}</span></div><p class="tworked"><b>${termFact(t,c)}</b> ${earnedText(t,c)}</p><div class="tchart">${chart}</div>${extra}<p class="tn">${note}</p><details class="tmaths"><summary>Show the maths</summary><div class="tmath mono">${math}</div></details></div>`;
+const tryBlock=(key,cur)=>{
+const X=TRY[key],v=clamp(cur,X.x0,X.x1),cap=possible(T[key]);
+return`<div class="tlv" data-tryout="${key}"><b>${X.fmt(v)}</b> earns <b>${(X.fn(v)*cap).toFixed(1)}</b> of a possible <b>${cap}</b> points.</div><label class="tryl" for="try-${key}">Try another value</label><input type="range" id="try-${key}" data-try="${key}" data-poss="${cap}" min="${X.x0}" max="${X.x1}" step="${X.step}" value="${v}" style="--p:${((v-X.x0)/(X.x1-X.x0)*100).toFixed(1)}%" aria-label="Try another ${T[key].name.toLowerCase()} value">`;
+};
+const tierBars=['public','contracted','private'].map(k=>`<div class="${c.f.type===k?'on':''}"><b style="height:${CFG.tier[k]*100}%"></b>${TIER[k].label} ${Math.round(CFG.tier[k]*100)}%</div>`).join('');
+const up=[0,1,2].map(u=>`<tr><td>${['Routine','Soon','Urgent'][u]}</td><td class="mono">×${(1+CFG.boost*u).toFixed(1)}</td><td class="mono">${Math.round(effReach(state.policy,u))} km</td></tr>`).join('');
+$('#termCards').innerHTML=
+card(T.d,curve('d',c.d,'var(--td)',['0 km','120 km']),tryBlock('d',c.d),'Every 28 km roughly halves the points. Road distance is 1.3 times the straight line.','D = e^(−d / '+CFG.lambda+' km)')+
+card(T.c,curve('c',c.f.m,'var(--tc)',['×'+CFG.mMin,'×'+CFG.mMax]),tryBlock('c',c.f.m),'The cheapest tariff earns full points. The dearest earns none. This visit costs the payer '+usd(c.cost)+' here.','C = (m_max − m) ÷ (m_max − m_min)')+
+card(T.t,`<div class="tbars" style="--c:var(--tt)">${tierBars}</div>`,`<div class="tlv"><b>${TIER[c.f.type].label}</b> earns <b>${Math.round(c.terms.t*100)}%</b> of the points.</div>`,'The admin owns this table. Raise the weight, or use the strict lock, to keep patients in public facilities.','T = tier value')+
+card(T.l,curve('l',c.u,'var(--tl)',['empty','full']),tryBlock('l',c.u),'A half-empty clinic scores almost full points. Past 60% full the points fall fast. The next patient goes elsewhere. Nobody phones anyone.','L = 1 − u³, u = seats taken ÷ capacity')+
+card(T.q,curve('q',c.f.q,'var(--tq)',['0','1']),tryBlock('q',c.f.q),'Quality mixes outcomes and patient satisfaction. The quality team refreshes it.','Q = rating')+
+`<div class="card tcard" style="--c:var(--sel)"><div class="th"><span class="tsym serif">!</span><div><b>Urgency</b><span>What if it cannot wait?</span></div><span class="tw mono">${['Routine','Soon','Urgent'][p.urgency]}</span></div><p class="tworked"><b>${p.name} is a ${['routine','soon','urgent'][p.urgency]} case.</b> Reach is ${Math.round(m.reach)} km.</p><div class="tchart" style="height:auto"><table class="utable"><tr><th>Case</th><th>Distance points</th><th>Reach</th></tr>${up}</table></div><p class="tn">Urgent patients care more about distance. They are never sent far. The five weights still add up to 100.</p><details class="tmaths"><summary>Show the maths</summary><div class="tmath mono">w_d′ = w_d × (1 + 0.8u), R′ = R × (1 − 0.15u)</div></details></div>`;
+const gate=(ok,label,detail)=>`<div class="rule"><span class="ic ${ok?'p':'f'}">${ok?'✓':'✕'}</span><div>${label}<small>${detail}</small></div></div>`;
+const G=gateValue(c);
+$('#gates').innerHTML=`<div class="ch"><h3>Gates for ${c.f.short}</h3><span>${G>0?'allowed':'score forced to zero'}</span></div>
+${gate(c.full,'Offers every requested service',c.full?'All '+p.services.length+' covered':'Missing '+c.missing.map(s=>SVC[s].name).join(', '))}
+${gate(c.seatOk,'Has a free seat',c.free+' free of '+c.f.cap+' seats')}
+${gate(c.reachOk,'Within reach',c.d.toFixed(1)+' km against a limit of '+m.reach.toFixed(1)+' km')}
+${gate(!c.locked,'Clear of the public-first lock',state.policy.lock?(c.locked?'A public facility can serve. So this one waits.':'The lock is on. This facility passes.'):'The lock is off.')}
+<p class="fine">Sometimes no single facility passes every gate. Then the first gate relaxes. It counts the share of services offered. The engine chains stops. That is how a patient needing oncology and dialysis still gets a plan.</p>`;
+$('#rules').innerHTML=`<div class="ch"><h3>When a patient overrides the engine</h3><span>six written rules</span></div>
+<p><b>1. Clinical fit.</b> The requested place must offer every service. Never waived.</p>
+<p><b>2. Seat reserve.</b> Overrides cannot take the last 10% of a facility's seats. Those stay for guided routing.</p>
+<p><b>3. Reach.</b> Up to 1.5 times the normal reach.</p>
+<p><b>4. Quarterly token.</b> One override per patient per quarter.</p>
+<p><b>5. Efficiency tolerance.</b> Up to 15 points below the engine pick is approved and logged. Beyond that, a medical director signs off first.</p>
+<p><b>6. Cost gap.</b> The patient pays any extra cost over the engine pick. Public choices cost nothing extra.</p>
+<p class="fine">Try it on the Route tab. Choose a place under "Patient asks for a specific place".</p>`;
+$('#needleEq').innerHTML=`<div class="ch"><h3>Why this one and not that one</h3><span>winner against runner-up</span></div>`+needleHTML();
+paintSens();
+}
+
+function paintSens(){
+const raw=state.policy.weights,tot=sum(TERMS.map(t=>raw[t.k]))||1;
+const steps=40;
+const info=TERMS.map(t=>{
+const ids=[];
+for(let i=0;i<=steps;i++){
+const r=evaluate(state.patient,{...state.policy,weights:reweight(raw,t.k,i/steps*100)},FACILITIES);
+ids.push(r.plan.length?r.plan[0].c.f.id:'none');
+}
+const runs=[];
+ids.forEach(id=>{const l=runs[runs.length-1];if(l&&l.id===id)l.n++;else runs.push({id,n:1})});
+return{t,runs,changes:runs.length-1};
+});
+const order=info.slice().sort((a,b)=>b.changes-a.changes);
+const sensitive=order[0].changes>0?`${order[0].t.name} moves the needle most. Sweeping it changes the winner ${order[0].changes} time${order[0].changes>1?'s':''}.`:'The winner never changes. This patient has one clearly best option.';
+const stable=order[order.length-1];
+$('#sens').innerHTML=`<div class="ch"><h3>Which dial flips the decision</h3><span>${sensitive}${order[0].changes>0&&stable.changes<order[0].changes?' '+stable.t.name+' matters least.':''}</span></div>
+<p class="fine" style="margin:0 0 6px">Each bar sweeps one dial from 0 to 100 points. The other dials rescale in proportion. Blocks show who wins at each setting for ${state.patient.name}. The white line shows where the dial sits now. One long block means a stable choice.</p>
+<div class="sens">${info.map(x=>`<div><div class="sl"><span><i style="background:${x.t.color}"></i>${x.t.name}</span><em>${x.changes?'winner changes '+x.changes+' time'+(x.changes>1?'s':''):'winner never changes'}</em></div><div class="strip">${x.runs.map(r=>{const f=FBY[r.id];return`<div class="run" style="flex:${r.n};--c:${f?TIER[f.type].color:'var(--fa)'}" title="${f?f.name:'No route available'}">${f?f.short:'No route'}</div>`}).join('')}<div class="mk" style="left:${(raw[x.t.k]/tot*100).toFixed(1)}%"></div></div><div class="axis"><span>0 points</span><span>50</span><span>100 points</span></div></div>`).join('')}</div>`;
+}
+
+const KPIS=[
+{id:'spend',label:'Total payer spend',fmt:v=>usd(v),better:'lower',mode:'rel'},
+{id:'avgcost',label:'Average cost per patient',fmt:v=>usd(v),better:'lower',mode:'rel'},
+{id:'pub',label:'Care delivered in public facilities',fmt:v=>Math.round(v*100)+'%',better:'higher',mode:'pp'},
+{id:'pubfill',label:'Free public seats put to use',fmt:v=>Math.round(v*100)+'%',better:'higher',mode:'pp'},
+{id:'dist',label:'Average travel',fmt:v=>v.toFixed(1)+' km',better:'lower',mode:'rel'},
+{id:'unplaced',label:'Patients left without a place',fmt:v=>String(v),better:'lower',mode:'abs'}
+];
+function deltaOf(k,a,b){
+if(k.mode==='rel'){if(!a)return{txt:'no change',cls:'flat'};const r=(b-a)/a;const good=k.better==='lower'?r<0:r>0;return{txt:(r>0?'+':'−')+Math.abs(r*100).toFixed(0)+'% vs manual',cls:Math.abs(r)<.005?'flat':good?'good':'bad'}}
+if(k.mode==='pp'){const r=(b-a)*100;const good=k.better==='lower'?r<0:r>0;return{txt:(r>0?'+':'−')+Math.abs(r).toFixed(0)+' points vs manual',cls:Math.abs(r)<.5?'flat':good?'good':'bad'}}
+const r=b-a;const good=k.better==='lower'?r<0:r>0;return{txt:r===0?'no change':(r>0?'+':'−')+Math.abs(r)+' vs manual',cls:r===0?'flat':good?'good':'bad'};
+}
+function buildSim(){
+$('#kpis').innerHTML=KPIS.map(k=>`<div class="card kpi" data-kpi="${k.id}"><h5>${k.label}</h5><div class="kv"><div class="kr m"><span>Manual</span><span class="kb"><b></b></span><span class="n mono"></span></div><div class="kr e"><span>Engine</span><span class="kb"><b></b></span><span class="n mono"></span></div></div><span class="dlt flat"></span></div>`).join('');
+$('#tierCard').innerHTML=`<div class="ch"><h3>Where the patients went</h3><span>share of placements by tier</span></div><div class="tiers"><div class="tr"><span>Manual</span><div class="stack" data-tier="manual"></div></div><div class="tr"><span>Engine</span><div class="stack" data-tier="engine"></div></div></div><div class="stackl" style="margin-top:14px">${['public','contracted','private'].map(t=>`<span><i style="background:${TIER[t].color}"></i>${TIER[t].label}</span>`).join('')}</div><p class="fine">Public seats fill first because they cost the payer least. The spare-seats question stops one site taking the whole rush.</p>`;
+$('#utilCard').innerHTML=`<div class="ch"><h3>How full each facility ends up</h3><span>tick marks the starting load</span></div><div class="ulg"><span><i style="background:var(--fa)"></i>Manual</span><span><i style="background:var(--acc)"></i>Engine</span></div><div class="ugrid" id="ugrid">${FACILITIES.map(f=>`<div class="urow" data-f="${f.id}"><span class="un"><i class="tdot" style="--c:${TIER[f.type].color}"></i><span>${f.short}</span></span><div class="ut"><div class="tk m"><b></b><s></s></div><div class="tk e"><b></b><s></s></div></div></div>`).join('')}</div>`;
+}
+function paintSim(){
+if(!state.sim.cohort||state.sim.cohort.length!==state.sim.n)state.sim.cohort=makeCohort(state.sim.n,state.sim.seed);
+const man=simulate('manual',state.sim.cohort,state.policy);
+const eng=simulate('engine',state.sim.cohort,state.policy);
+$('#simNv').textContent=state.sim.n;
+KPIS.forEach(k=>{
+const el=$(`[data-kpi="${k.id}"]`);
+const a=man[k.id],b=eng[k.id];
+const mx=Math.max(a,b)||1;
+const rows=$$('.kr',el);
+[[rows[0],a],[rows[1],b]].forEach(([r,v])=>{$('.kb b',r).style.width=(v/mx*100)+'%';$('.n',r).textContent=k.fmt(v)});
+const d=deltaOf(k,a,b);
+const chip=$('.dlt',el);
+chip.textContent=d.txt;
+chip.className='dlt '+d.cls;
+});
+['manual','engine'].forEach(kind=>{
+const r=kind==='manual'?man:eng;
+const tot=(r.byTier.public+r.byTier.contracted+r.byTier.private)||1;
+$(`[data-tier="${kind}"]`).innerHTML=['public','contracted','private'].map(t=>{const v=r.byTier[t]/tot;return`<b style="width:${(v*100).toFixed(1)}%;background:${TIER[t].color}">${v>=.08?Math.round(v*100)+'%':''}</b>`}).join('');
+});
+FACILITIES.forEach((f,i)=>{
+const row=$(`.urow[data-f="${f.id}"]`);
+const st=f.load/f.cap*100;
+[['m',man],['e',eng]].forEach(([k,r])=>{
+const tk=$('.tk.'+k,row);
+$('b',tk).style.width=(r.util[i]*100)+'%';
+$('s',tk).style.left=st+'%';
+});
+});
+const dCost=(eng.avgcost-man.avgcost)/man.avgcost;
+const l1=Math.abs(dCost)<.005?'The engine keeps average cost per patient the same.':`The engine ${dCost<0?'cuts':'raises'} average cost per patient by ${Math.round(Math.abs(dCost)*100)}%.`;
+const dPub=Math.round((eng.pub-man.pub)*100);
+const l2=dPub===0?'Public facilities deliver the same share of care.':`Public facilities deliver ${Math.abs(dPub)} points ${dPub>0?'more':'less'} of the care.`;
+const dDist=eng.dist-man.dist;
+const l3=Math.abs(dDist)<.05?'Travel per patient stays the same.':`Each patient travels ${Math.abs(dDist).toFixed(1)} km ${dDist>0?'further':'less'}.`;
+const dPlaced=eng.placed-man.placed;
+const l4=dPlaced===0?'':dPlaced>0?` It places ${dPlaced} more patient${dPlaced===1?'':'s'}.`:` It leaves ${-dPlaced} more patient${dPlaced===-1?'':'s'} unplaced.`;
+$('#simHead').innerHTML=`${l1} ${l2} ${l3}${l4}`;
+}
+
+function buildNetwork(){
+const tot=sum(FACILITIES.map(f=>f.cap));
+$('#netCount').textContent=`${FACILITIES.length} facilities, ${tot} seats a day`;
+$('#ntable').innerHTML=`<tr><th>Facility</th><th>Tier</th><th>Services</th><th>Seats in use</th><th>Price factor</th><th>Quality</th></tr>`+FACILITIES.map(f=>`<tr><td><div class="nm"><i class="tdot" style="--c:${TIER[f.type].color}"></i>${f.name}</div><div class="pl">${f.place}</div></td><td>${tierChip(f.type)}</td><td><div class="nsv">${svcChips(f,[])}</div></td><td><div class="seat"><span class="mono">${f.load} of ${f.cap}</span><div class="tk e"><b style="width:${f.load/f.cap*100}%"></b></div></div></td><td class="mono">×${f.m.toFixed(2)}</td><td class="mono">${f.q.toFixed(2)}</td></tr>`).join('');
+$('#schema').innerHTML=`<b>patient</b> {
+  location:   { x, y }            where they live
+  services:   [ "cardio", "lab" ]   what they need
+  urgency:    0 | 1 | 2           routine, soon, urgent
+  request:    facilityId | null   optional override
+}
+
+<b>facility</b> {
+  location:   { x, y }            village or city
+  services:   [ ... ]             what it offers
+  capacity:   seats per day
+  load:       seats already taken
+  tier:       public | contracted | private
+  priceFactor, quality
+}
+
+<b>policy</b> {
+  weights:    { d, c, t, l, q }   the five dials
+  reach:      km
+  publicLock: true | false
+}`;
+$('#svcCard').innerHTML=`<div class="ch"><h3>Reference tariff</h3><span>base price per service</span></div><table class="utable"><tr><th>Service</th><th>Base price</th><th>Offered at</th></tr>${SERVICES.map(s=>`<tr><td>${s.name}</td><td class="mono">${usd(s.base)}</td><td class="mono">${FACILITIES.filter(f=>f.services.includes(s.id)).length} sites</td></tr>`).join('')}</table><p class="fine">Price is the base price times the facility's factor. Public is about ×0.9. Contracted is ×1.35 to ×1.65. Private is ×2.2 to ×2.7.</p>`;
+}
+
+function paintBrief(){
+if(!state.sim.cohort||state.sim.cohort.length!==state.sim.n)state.sim.cohort=makeCohort(state.sim.n,state.sim.seed);
+const man=simulate('manual',state.sim.cohort,state.policy),eng=simulate('engine',state.sim.cohort,state.policy);
+const move=(label,a,b,f)=>f(a)===f(b)?`${label} stays at <b>${f(a)}</b>.`:`${label} <b>${b<a?'falls':'rises'}</b> from <b>${f(a)}</b> to <b>${f(b)}</b>.`;
+$('#bDeltas').innerHTML=[
+move('Average cost per patient',man.avgcost,eng.avgcost,usd),
+move('Care in public facilities',man.pub,eng.pub,v=>Math.round(v*100)+'%'),
+move('Travel per patient',man.dist,eng.dist,v=>v.toFixed(1)+' km')
+].map(t=>`<div class="bd">${t}</div>`).join('');
+}
+
+function copyText(text,btn){
+const done=()=>{const o=btn.textContent;btn.textContent='Copied';setTimeout(()=>{btn.textContent=o},1400)};
+const fallback=()=>{
+const ta=document.createElement('textarea');
+ta.value=text;
+ta.style.position='fixed';
+ta.style.opacity='0';
+document.body.appendChild(ta);
+ta.select();
+try{document.execCommand('copy');done()}catch(e){btn.textContent='Select and copy'}
+ta.remove();
+};
+if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(done,fallback);
+else fallback();
+}
+
+const GLOSSARY={
+seat:()=>`One appointment slot per day. ${FBY.sag.short} has ${FBY.sag.cap}, and ${FBY.sag.load} are taken.`,
+reach:()=>'The furthest we will send a patient. The default is 60 km. Urgent cases get less.',
+tier:()=>'Public, contracted or private. Public facilities earn the most points under public-first.',
+load:()=>`The share of seats already taken. ${FBY.sag.short} is at ${Math.round(FBY.sag.load/FBY.sag.cap*100)}%.`,
+'price factor':()=>`A facility's price against the reference tariff. ${FBY.sgc.short} charges ×${FBY.sgc.m.toFixed(2)}.`,
+token:()=>'One override per patient per quarter. After that, the next request is refused.',
+'split route':()=>'Two or more stops for one patient. It is used when no single site covers every need.',
+gate:()=>'A hard yes or no. One no scores zero.',
+dial:()=>'A weight the admin can move. It sets how many of the 100 points a question gets.'
+};
+const GLOSS_RE=/\b(price factor|split route|split plan|seats?|reach|tier|load|token|gates?|dials?)\b/gi;
+function glossKey(w){
+w=w.toLowerCase();
+if(w==='split plan')return'split route';
+if(w==='price factor')return w;
+return w.replace(/s$/,'');
+}
+const GLOSS_SKIP='dfn,button,select,option,textarea,input,svg,script,style,h1,h2,h3,h4,summary,label,.stp,.tag,.tchip,.chip,.rchip,.gc,.seg,.tip,.code';
+function applyGlossary(root){
+if(!root)return;
+$$('dfn',root).forEach(d=>d.replaceWith(document.createTextNode(d.textContent)));
+root.normalize();
+const seen=new Set();
+const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:n=>n.nodeValue.trim()&&n.parentElement&&!n.parentElement.closest(GLOSS_SKIP)?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT});
+const nodes=[];
+while(walker.nextNode())nodes.push(walker.currentNode);
+for(const n of nodes){
+const txt=n.nodeValue;
+let last=0,frag=null,m;
+GLOSS_RE.lastIndex=0;
+while((m=GLOSS_RE.exec(txt))){
+const k=glossKey(m[0]);
+if(seen.has(k)||!GLOSSARY[k])continue;
+seen.add(k);
+frag=frag||document.createDocumentFragment();
+frag.append(txt.slice(last,m.index));
+const d=document.createElement('dfn');
+d.textContent=m[0];
+d.dataset.def=GLOSSARY[k]();
+frag.append(d);
+last=m.index+m[0].length;
+}
+if(frag){frag.append(txt.slice(last));n.replaceWith(frag)}
+}
+}
+
+const tour={i:0,open:false};
+function setPolicy(id){
+const p=POLICIES[id];
+state.policy.weights={...p.w};
+state.policy.lock=p.lock;
+state.policy.reach=60;
+}
+const TOUR=[
+{hl:'#rec',run(){applyCase('ada');setPolicy('balanced');show('route')},text:()=>`Ada needs cardiology and a lab test. The engine picks ${model.plan[0].c.f.short}.`},
+{hl:'#walk',run(){applyCase('ada');setPolicy('balanced');state.step=0;show('equation')},text:()=>`Only ${model.ranked.length} of ${model.all.length} facilities may treat her. The rest fail a gate.`},
+{hl:'#rec',run(){applyCase('ada');setPolicy('balanced');state.patient.request='sgc';show('route')},text:()=>{const j=judgeOverride(model,state.patient);return`Ada asks for ${j.c.f.short}, a private clinic. ${OUTCOME[j.outcome][0]}.`}},
+{hl:'#rec',run(){applyCase('sam');setPolicy('balanced');show('route')},text:()=>`Sam needs two services no single site offers. The engine plans ${model.plan.length} stops.`},
+{hl:'#rec',run(){applyCase('priya');setPolicy('nearest');show('route')},text:()=>`Set the policy to nearest-first. Priya goes to ${model.plan[0].c.f.short}, a ${TIER[model.plan[0].c.f.type].label.toLowerCase()} clinic.`},
+{hl:'#rec',run(){applyCase('priya');setPolicy('public');show('route')},text:()=>`Switch to public-first. Priya now goes to ${model.plan[0].c.f.short}, a public unit.`},
+{hl:'#v-brief',run(){show('brief')},text:()=>'Every referral gets a written reason. That is the whole idea.'}
+];
+function tourLabel(){
+$('#tourBtn').textContent=tour.i>0&&!tour.open?'Resume the tour':'Walk me through it';
+}
+function tourMark(){
+$$('.tour-hl').forEach(e=>e.classList.remove('tour-hl'));
+const t=$(TOUR[tour.i].hl);
+if(t)t.classList.add('tour-hl');
+}
+function tourGo(i){
+tour.i=clamp(i,0,TOUR.length-1);
+tour.open=true;
+TOUR[tour.i].run();
+$('#tour').hidden=false;
+$('#tourStep').textContent='Step '+(tour.i+1)+' of '+TOUR.length;
+$('#tourText').textContent=TOUR[tour.i].text();
+$('[data-tour="back"]').disabled=tour.i===0;
+$('[data-tour="next"]').textContent=tour.i===TOUR.length-1?'Finish':'Next';
+tourMark();
+tourLabel();
+}
+function tourStart(){tourGo(tour.i)}
+function tourAct(a){
+if(a==='next'){
+if(tour.i===TOUR.length-1)tourClose(true);
+else tourGo(tour.i+1);
+}else if(a==='back')tourGo(tour.i-1);
+else tourClose(false);
+}
+function tourClose(finished){
+tour.open=false;
+if(finished)tour.i=0;
+$('#tour').hidden=true;
+$$('.tour-hl').forEach(e=>e.classList.remove('tour-hl'));
+tourLabel();
+}
+
+function buildRoute(){
+$('#cases').innerHTML=CASES.map(c=>`<button class="chip" data-case="${c.id}" title="${c.blurb}">${c.name}, ${c.blurb.toLowerCase()}</button>`).join('');
+$('#home').innerHTML=SETTLEMENTS.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')+'<option value="custom" hidden>Custom spot</option>';
+$('#svcChips').innerHTML=SERVICES.map(s=>`<button class="chip" data-svc="${s.id}">${s.short}</button>`).join('');
+$('#req').innerHTML='<option value="">None, follow the engine</option>'+['public','contracted','private'].map(t=>`<optgroup label="${TIER[t].label}">${FACILITIES.filter(f=>f.type===t).map(f=>`<option value="${f.id}">${f.short}</option>`).join('')}</optgroup>`).join('');
+}
+function syncControls(){
+const p=state.patient;
+$$('[data-case]').forEach(b=>b.classList.toggle('on',b.dataset.case===p.case));
+const n=nearestPlace(p.x,p.y);
+const home=$('#home');
+const cust=$('option[value=custom]',home);
+cust.textContent='Custom spot near '+n.s.name;
+cust.hidden=n.d<1.2;
+home.value=n.d<1.2?n.s.id:'custom';
+$$('[data-svc]').forEach(b=>b.classList.toggle('on',p.services.includes(b.dataset.svc)));
+$$('#urg button').forEach(b=>b.classList.toggle('on',+b.dataset.u===p.urgency));
+$('#req').value=p.request;
+$('#tok').checked=p.tokenUsed;
+syncDials();
+}
+
+let raf=0;
+function schedule(){
+if(raf)return;
+raf=requestAnimationFrame(()=>{raf=0;update()});
+}
+function update(){
+model=evaluate(state.patient,state.policy,FACILITIES);
+syncControls();
+$('[data-tab="simulate"]').textContent=state.sim.n+' patients, 2 ways';
+if(state.tab==='route')paintRoute();
+else if(state.tab==='equation')paintEquation();
+else if(state.tab==='simulate')paintSim();
+else if(state.tab==='brief')paintBrief();
+if(state.tab!=='brief')applyGlossary($('#v-'+state.tab));
+if(tour.open)tourMark();
+}
+function show(tab){
+state.tab=tab;
+$$('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+$$('.view').forEach(v=>{v.hidden=v.id!=='v-'+tab});
+update();
+}
+
+const tip=$('#tip');
+function tipHTML(c){
+const f=c.f,p=state.patient;
+return`<div class="tt1"><i class="tdot" style="--c:${TIER[f.type].color}"></i><b>${f.name}</b></div><div class="tt2">${TIER[f.type].label} in ${f.place}, ${Math.round(c.d)} km away</div><div class="svs">${svcChips(f,p.services)}</div><div class="tt3"><span>${c.free} of ${f.cap} seats free</span><span>price ×${f.m.toFixed(2)}</span><span>quality ${f.q.toFixed(2)}</span><span>wait about ${dayText(c.wait)}</span></div><div class="tt4">${c.reason?'Ruled out: '+c.reason:'Score '+pts(c.shown)+' of 100'}</div>`;
+}
+function placeTip(e){
+const w=tip.offsetWidth||270,h=tip.offsetHeight||150;
+let x=e.clientX+18,y=e.clientY+18;
+if(x+w>innerWidth-10)x=e.clientX-w-18;
+if(y+h>innerHeight-10)y=e.clientY-h-18;
+tip.style.left=Math.max(8,x)+'px';
+tip.style.top=Math.max(8,y)+'px';
+}
+
+let dragging=false;
+function dragTo(e){
+const svg=$('#map');
+const pt=svg.createSVGPoint();
+pt.x=e.clientX;pt.y=e.clientY;
+const q=pt.matrixTransform(svg.getScreenCTM().inverse());
+state.patient.x=clamp((q.x-OX)/KM,0,120);
+state.patient.y=clamp((q.y-OY)/KM,0,80);
+state.patient.case=null;
+schedule();
+}
+
+function bind(){
+$('#tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)show(b.dataset.tab)});
+$('#theme').addEventListener('click',()=>{const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark';update()});
+document.addEventListener('input',e=>{
+const t=e.target;
+if(t.matches('[data-dial]')){state.policy.weights[t.dataset.dial]=+t.value;schedule()}
+else if(t.matches('[data-reach]')){state.policy.reach=+t.value;schedule()}
+else if(t.id==='simN'){state.sim.n=+t.value;state.sim.cohort=null;schedule()}
+else if(t.matches('[data-try]')){tryIt(t)}
+});
+document.addEventListener('change',e=>{
+const t=e.target;
+if(t.matches('[data-lock]')){state.policy.lock=t.checked;update()}
+else if(t.id==='home'){
+if(t.value!=='custom'){const s=PLACE[t.value];state.patient.x=s.x;state.patient.y=s.y;state.patient.case=null;update()}
+}
+else if(t.id==='req'){state.patient.request=t.value;update()}
+else if(t.id==='tok'){state.patient.tokenUsed=t.checked;update()}
+else if(t.id==='eqSel'){state.selected=t.value;update()}
+});
+document.addEventListener('click',e=>{
+const t=e.target;
+let b;
+if((b=t.closest('[data-preset]'))){const p=POLICIES[b.dataset.preset];state.policy.weights={...p.w};state.policy.lock=p.lock;update()}
+else if((b=t.closest('[data-explain]'))){state.explain=!state.explain;update()}
+else if((b=t.closest('[data-copy]'))){copyText($('#noteText').textContent,b)}
+else if((b=t.closest('[data-show]'))){applyCase('priya');state.step=0;show('route')}
+else if((b=t.closest('#tourBtn'))){tourStart()}
+else if((b=t.closest('[data-tour]'))){tourAct(b.dataset.tour)}
+else if((b=t.closest('[data-case]'))){applyCase(b.dataset.case);update()}
+else if((b=t.closest('[data-svc]'))){
+const id=b.dataset.svc,s=state.patient.services;
+if(s.includes(id)){if(s.length>1)state.patient.services=s.filter(x=>x!==id)}else state.patient.services=SERVICES.map(x=>x.id).filter(x=>s.includes(x)||x===id);
+state.patient.case=null;update();
+}
+else if((b=t.closest('#urg [data-u]'))){state.patient.urgency=+b.dataset.u;state.patient.case=null;update()}
+else if((b=t.closest('#simShuffle'))){state.sim.seed=Math.floor(Math.random()*1e6);state.sim.cohort=null;update()}
+else if((b=t.closest('[data-step]'))){state.step=+b.dataset.step;update()}
+else if((b=t.closest('[data-stepgo]'))){state.step=clamp(state.step+ +b.dataset.stepgo,0,3);update()}
+else if((b=t.closest('[data-eqmode]'))){state.eqMode=b.dataset.eqmode;update()}
+else if((b=t.closest('[data-go]'))){show(b.dataset.go)}
+else if((b=t.closest('.row[data-id],.frow[data-id]'))){state.selected=b.dataset.id;update()}
+else if((b=t.closest('.fnode'))){state.selected=b.dataset.id;update()}
+});
+const canvas=$('#canvas');
+canvas.addEventListener('pointerdown',e=>{
+if(e.target.closest('.patient')){dragging=true;e.preventDefault()}
+});
+window.addEventListener('pointermove',e=>{if(dragging)dragTo(e)});
+window.addEventListener('pointerup',()=>{dragging=false});
+canvas.addEventListener('pointermove',e=>{
+if(dragging){tip.hidden=true;return}
+const n=e.target.closest('.fnode');
+if(!n){tip.hidden=true;return}
+const c=model.all.find(x=>x.f.id===n.dataset.id);
+tip.dataset.for='node';
+tip.innerHTML=tipHTML(c);
+tip.hidden=false;
+placeTip(e);
+});
+document.addEventListener('pointermove',e=>{
+const d=e.target.closest&&e.target.closest('dfn[data-def]');
+if(d){tip.dataset.for='dfn';tip.innerHTML=`<b>${d.textContent}</b><div class="tt2" style="margin:4px 0 0">${d.dataset.def}</div>`;tip.hidden=false;placeTip(e)}
+else if(tip.dataset.for==='dfn'){tip.hidden=true;tip.dataset.for=''}
+});
+canvas.addEventListener('pointerleave',()=>{tip.hidden=true});
+}
+
+function init(){
+computeLabels();
+STATIC_SVG=buildStatic();
+$$('[data-dials]').forEach(el=>{el.innerHTML=dialsHTML()});
+buildRoute();
+buildSim();
+buildNetwork();
+applyCase('ada');
+bind();
+update();
+tourLabel();
+}
+init();
+</script>
+</body>
+</html>
