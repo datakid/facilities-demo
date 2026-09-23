@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Meridian — guided care routing</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23553f83'/%3E%3Cpath d='M16 4.5l5.2 11.5H10.8z' fill='%23ffffff'/%3E%3Cpath d='M16 27.5l5.2-11.5H10.8z' fill='%23b9a3e0'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#553f83">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..600;1,9..144,400..600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -142,6 +144,9 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 .ptag rect{fill:var(--sel)}
 .ptag text{font-size:10.5px;font-weight:700;fill:var(--bg);text-anchor:middle}
 .rec{display:grid;grid-template-columns:1.1fr 1fr;gap:22px}
+.rech{grid-column:1/-1;display:flex;justify-content:flex-end;margin:-4px 0 2px}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:80;background:var(--panel2);border:1px solid var(--line2);border-radius:999px;padding:10px 20px;font-size:12.5px;font-weight:700;color:var(--tx);box-shadow:0 18px 40px -18px rgba(0,0,0,.6);transition:opacity .18s}
+.toast[hidden]{display:none}
 .rec h4{font:700 12.5px Manrope;color:var(--mu);margin-bottom:8px}
 .stop{padding:0 0 10px}
 .sname{font:500 22px/1.2 Fraunces,Georgia,serif}
@@ -482,14 +487,14 @@ main{min-height:60vh}
 </div>
 <nav class="tabs" id="tabs">
 <button data-tab="brief" class="on">Brief</button>
-<button data-tab="route">Route a patient</button>
-<button data-tab="equation">The equation</button>
-<button data-tab="simulate">100 patients, 2 ways</button>
-<button data-tab="network">The network</button>
+<button data-tab="route">Route</button>
+<button data-tab="equation">Scoring model</button>
+<button data-tab="simulate">Cohort comparison: baseline and weighted routing</button>
+<button data-tab="network">Facilities</button>
 </nav>
 <div class="tools">
-<button class="btn" id="tourBtn">Walk me through it</button>
-<span class="pill"><i class="live"></i>Demo with dummy data</span>
+<button class="btn" id="tourBtn">Step through a decision</button>
+<span class="pill"><i class="live"></i>Synthetic data — 18 invented facilities</span>
 <button class="iconbtn" id="theme" aria-label="Switch theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 14.5A8.5 8.5 0 019.5 4a8.5 8.5 0 1010.5 10.5z"/></svg></button>
 </div>
 </header>
@@ -497,17 +502,17 @@ main{min-height:60vh}
 <section id="v-brief" class="view brief">
 <div class="bgrid">
 <div class="bleft">
-<h1 class="serif">Who goes where, and why</h1>
+<h1 class="serif">Referrals scored on five stated criteria</h1>
 <p class="b1">Patients are often sent to the nearest or best-known facility. Seats, prices and travel time are rarely weighed together.</p>
-<div class="brule serif"><span style="--c:var(--sel)">Allowed?</span><i>×</i><span style="--c:var(--acc)">How good?</span></div>
-<p class="b2">Multiply the two to get the score. Five questions share 100 points: distance, cost, public status, spare seats and quality.</p>
-<p class="b3">Two coordinators, same patient, same answer. Every refusal has a written reason.</p>
+<div class="brule serif"><span style="--c:var(--sel)">Eligibility</span><i>×</i><span style="--c:var(--acc)">Score</span></div>
+<p class="b2">Multiply the two to get the score. Five criteria share 100 points: distance, cost, public status, spare seats and quality.</p>
+<p class="b3">Identical inputs produce an identical ranking. Every excluded facility carries the rule it failed.</p>
 </div>
 <div class="bright">
 <div id="bDeltas"></div>
 <p class="b4">Baseline: the nearest facility that offers every service and has a seat.</p>
 <p class="b5">Synthetic region. Eighteen invented facilities. The numbers show how the rule behaves, not what the region would save.</p>
-<button class="btn primary big" data-show>Show me</button>
+<button class="btn primary big" data-show>Open the router</button>
 </div>
 </div>
 </section>
@@ -532,7 +537,7 @@ main{min-height:60vh}
 <div class="col">
 <div class="canvas" id="canvas">
 <div class="ovl tl"><span class="lg" style="--c:var(--pub)"><i></i>Public</span><span class="lg" style="--c:var(--con)"><i></i>Contracted</span><span class="lg" style="--c:var(--pri)"><i></i>Private</span><span>Ring shows seats taken</span></div>
-<div class="ovl br">Drag the patient to move them</div>
+<div class="ovl br">Drag the patient marker to change the origin</div>
 <svg id="map" viewBox="40 46 820 540" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of facilities and the patient"></svg>
 </div>
 <div class="card rec" id="rec"></div>
@@ -543,10 +548,10 @@ main{min-height:60vh}
 <section id="v-equation" class="view" hidden>
 <div class="scroll"><div class="wrap">
 <div class="card ladder">
-<div class="lad1 serif"><span style="--c:var(--sel)">Allowed?</span><i>×</i><span style="--c:var(--acc)">How good?</span><i>=</i><span class="lsc">Score</span></div>
+<div class="lad1 serif"><span style="--c:var(--sel)">Eligibility</span><i>×</i><span style="--c:var(--acc)">Score</span><i>=</i><span class="lsc">Score</span></div>
 <div class="lad2">
 <p><b>Allowed?</b> A yes or no. One no scores zero.</p>
-<p><b>How good?</b> Five questions share 100 points.</p>
+<p><b>How good?</b> Five criteria share 100 points.</p>
 <p><b>Score.</b> The highest score wins the patient.</p>
 </div>
 </div>
@@ -556,7 +561,7 @@ main{min-height:60vh}
 </div>
 <div class="card" id="oneLine"></div>
 <div class="card" id="needleEq"></div>
-<div class="sect"><h2>The five questions, one by one</h2><p>Each question turns one fact into points. Drag a slider to see how the points respond. <span id="termFor"></span></p></div>
+<div class="sect"><h2>The five criteria, one by one</h2><p>Each criterion maps one fact to points. Drag a slider to see the point response. <span id="termFor"></span></p></div>
 <div class="grid3" id="termCards"></div>
 <div class="grid2">
 <div class="card" id="gates"></div>
@@ -605,6 +610,7 @@ main{min-height:60vh}
 </main>
 </div>
 <div class="tip" id="tip" hidden></div>
+<div class="toast" id="toast" hidden></div>
 <div class="tour" id="tour" hidden role="dialog" aria-label="Guided tour"><div class="tourtop"><span id="tourStep"></span><button class="linkbtn" data-tour="skip">Skip the tour</button></div><p id="tourText"></p><div class="touract"><button class="btn" data-tour="back">Back</button><button class="btn primary" data-tour="next">Next</button></div></div>
 <script>
 const SERVICES=[
@@ -1080,7 +1086,7 @@ function whyText(){
 const m=model,p=state.patient;
 if(!m.plan.length)return'No facility passes the gates. Raise the reach. Or free seats at the nearest match.';
 if(m.mode==='split'){
-return`No single facility covers all ${p.services.length} services. So the engine plans <b>${m.plan.length} stops</b>. It scores each stop the same way.`+(m.uncovered.length?` Nobody can place <b>${m.uncovered.map(s=>SVC[s].short).join(', ')}</b> right now.`:'');
+return`No single facility covers all ${p.services.length} services. So the engine plans <b>${m.plan.length} stops</b>. It scores each stop the same way.`+(m.uncovered.length?` No facility can place <b>${m.uncovered.map(s=>SVC[s].short).join(', ')}</b> today.`:'');
 }
 const c=m.plan[0].c;
 const dec=decisive(m);
@@ -1142,7 +1148,7 @@ right=`<h4>Override</h4><div class="verdict"><div class="emptyv">No override req
 const o=OUTCOME[j.outcome];
 right=`<h4>Override request: ${j.c.f.short}</h4><div class="verdict"><span class="out ${o[1]}">${o[0]}${(j.outcome==='copay'||j.outcome==='signoff')&&j.copay>.5?', patient pays '+usd(j.copay):''}</span>${j.rules.map(r=>`<div class="rule"><span class="ic ${r.info?'i':r.pass?'p':r.soft?'i':'f'}">${r.info?'i':r.pass?'✓':r.soft?'!':'✕'}</span><div>${r.label}<small>${r.detail}</small></div></div>`).join('')}</div>`;
 }
-$('#rec').innerHTML=`<div>${left}</div><div>${right}</div>`;
+$('#rec').innerHTML=`<div class="rech"><button class="btn ghost" data-copyrecord>Copy decision record</button></div><div>${left}</div><div>${right}</div>`;
 }
 
 function breakdownHTML(c){
@@ -1166,7 +1172,7 @@ paintRuled();
 function paintRuled(){
 const m=model;
 const out=m.all.filter(c=>!m.ranked.includes(c)).sort((a,b)=>REASON_ORDER.indexOf(reasonKind(a.reason))-REASON_ORDER.indexOf(reasonKind(b.reason))||a.d-b.d);
-$('#ruled').innerHTML=`<div class="ch"><h3>Ruled out, and why</h3><span>${out.length} of ${m.all.length}</span></div>${out.map(c=>`<div class="frow ${state.selected===c.f.id?'sel':''}" data-id="${c.f.id}"><span class="fname"><i class="tdot" style="--c:${TIER[c.f.type].color}"></i>${c.f.short}<em>${Math.round(c.d)} km</em></span><span class="rchip k-${reasonKind(c.reason)}">${c.reason}</span></div>`).join('')||'<div class="emptyv">Nothing is ruled out.</div>'}<p class="fine">A person at a referral desk also says no. They just do not write it down.</p>`;
+$('#ruled').innerHTML=`<div class="ch"><h3>Ruled out, and why</h3><span>${out.length} of ${m.all.length}</span></div>${out.map(c=>`<div class="frow ${state.selected===c.f.id?'sel':''}" data-id="${c.f.id}"><span class="fname"><i class="tdot" style="--c:${TIER[c.f.type].color}"></i>${c.f.short}<em>${Math.round(c.d)} km</em></span><span class="rchip k-${reasonKind(c.reason)}">${c.reason}</span></div>`).join('')||'<div class="emptyv">Nothing is ruled out.</div>'}<p class="fine">A person at a referral desk also says no, without a written reason.</p>`;
 }
 
 function needleHTML(){
@@ -1183,7 +1189,7 @@ return`<div class="nrow" title="${ttl}"><span class="nn"><i style="background:${
 }).join('')+`<div class="axis"><span>favours ${b.f.short}</span><span>favours ${a.f.short}</span></div>`;
 }
 function paintNeedle(){
-$('#needleCard').innerHTML=`<div class="ch"><h3>Why this one and not that one</h3><button class="linkbtn" data-go="equation">How is this scored?</button></div>`+needleHTML();
+$('#needleCard').innerHTML=`<div class="ch"><h3>Why this one and not that one</h3><button class="linkbtn" data-go="equation">See the scoring model</button></div>`+needleHTML();
 }
 function paintRoute(){
 paintCanvas();
@@ -1266,8 +1272,8 @@ const rows=stages.map((s,i)=>`<div class="fun ${i===stages.length-1?'last':''}">
 const out=m.all.filter(x=>!m.ranked.includes(x)).sort((a,b)=>a.d-b.d);
 const chips=out.slice(0,6).map(x=>`<span class="dropc"><i class="tdot" style="--c:${TIER[x.f.type].color}"></i>${x.f.short}<em>${x.reason}</em></span>`).join('')+(out.length>6?`<span class="dropc"><em>and ${out.length-6} more</em></span>`:'');
 const gc=(ok,label)=>`<span class="gc ${ok?'p':'f'}"><i>${ok?'✓':'✕'}</i>${label}</span>`;
-const q1=m.mode==='single'?`Does ${c.f.short} offer what ${p.name} needs?`:`Does ${c.f.short} offer part of what ${p.name} needs?`;
-const three=`<div class="gchips" style="margin:0 0 18px">${gc(m.mode==='single'?c.full:c.covers.length>0,q1)}${gc(c.seatOk,'Is there a seat?')}${gc(c.reachOk,'Is it close enough?')}</div>`;
+const q1=m.mode==='single'?`${c.f.short} offers what ${p.name} needs`:`${c.f.short} offers part of what ${p.name} needs`;
+const three=`<div class="gchips" style="margin:0 0 18px">${gc(m.mode==='single'?c.full:c.covers.length>0,q1)}${gc(c.seatOk,'Has a free seat')}${gc(c.reachOk,'Within reach')}</div>`;
 const head=m.mode==='single'?`${m.ranked.length} of ${total} facilities may treat ${p.name}.`:'No single facility passes every gate.';
 const sub=m.mode==='single'?'Every facility faces three gates. One no scores zero. No weight can rescue it.':'So the first gate relaxes. Sites offering part of the bundle stay in. The engine chains stops.';
 return`${followSel(c)}<h4 class="sthead">${head}</h4><p class="stsub">${sub}</p>${three}${rows}${out.length?`<div class="drops">${chips}</div>`:''}`;
@@ -1281,24 +1287,24 @@ const was=Math.round(raw[t.k]/tot*100),now=possible(t);
 return`<div class="irow"><span class="mkd" style="background:${t.color}"></span><div><b>${t.name}</b><small>${t.ask}</small></div><div class="ip serif">${now} points${now!==was?`<small>was ${was}</small>`:''}</div></div>`;
 }).join('');
 const urg=p.urgency>0?`<p class="stnote">${['','This is a soon case.','This is an urgent case.'][p.urgency]} Distance gets more points. Reach shrinks to ${Math.round(m.reach)} km.</p>`:'';
-return`<h4 class="sthead">You have 100 points to share.</h4><p class="stsub">Five questions split the points. The admin sets the split with the dials. The total is always 100.</p><div class="stack big lab">${seg}</div>${urg}<div style="margin-top:12px">${rows}</div>`;
+return`<h4 class="sthead">100 points to share.</h4><p class="stsub">Five criteria split the points. The admin sets the split with the dials. The total is always 100.</p><div class="stack big lab">${seg}</div>${urg}<div style="margin-top:12px">${rows}</div>`;
 }
 
 function stepPoints(c){
 const m=model;
 const rows=TERMS.map(t=>`<div class="mrow"><span class="mkd" style="background:${t.color}"></span><div class="mkt"><b>${t.name}</b><span>${t.ask}</span><small>${termFact(t,c)} ${earnedText(t,c)}</small></div><div class="ntrack big"><b style="left:0;width:${(c.terms[t.k]*100).toFixed(1)}%;background:${t.color}"></b></div><span class="mkn serif">${pts(c.contrib[t.k])}<em>of ${possible(t)}</em></span></div>`).join('');
 const note=m.ranked.includes(c)?'':`<p class="stnote">${c.f.short} is ruled out at step 1: ${c.reason.toLowerCase()}. These points are for comparison only.</p>`;
-return`${followSel(c)}<h4 class="sthead">${c.f.short} earns points on each question.</h4><p class="stsub">It earns part of each question's points. A fixed rule sets the part. Nothing is judged by feel.</p>${note}${rows}`;
+return`${followSel(c)}<h4 class="sthead">${c.f.short} earns points on each criterion.</h4><p class="stsub">Each criterion maps a fact to a fraction of its weight by a fixed function. No step is discretionary.</p>${note}${rows}`;
 }
 
 function stepTotal(c){
 const m=model;
 const G=gateValue(c),S=G*c.base;
 const rows=TERMS.map(t=>`<div class="rc"><span class="rcn"><i style="background:${t.color}"></i>${t.name}</span><b class="mono">${pts(c.contrib[t.k])}</b><span class="op">of</span><span class="mono">${possible(t)}</span></div>`).join('');
-const gateTxt=m.mode==='split'?'Share of the bundle offered':'Gate: is it allowed?';
+const gateTxt=m.mode==='split'?'Share of the bundle offered':'Eligibility gate';
 const lb=m.ranked.slice(0,4).map((x,i)=>`<div class="lbr ${x===c?'me':''}"><span class="rk">${i+1}</span><span class="lbn">${x.f.short}</span><div class="ntrack"><b style="left:0;width:${(x.shown*100).toFixed(1)}%;background:var(--acc)"></b></div><span class="mono">${pts(x.shown)}</span></div>`).join('');
 const a=m.ranked[0],b=m.ranked[1];
-const win=!a?'Nobody is allowed right now.':m.mode==='split'?'Split plan: '+m.plan.map(s=>s.c.f.short).join(', then ')+'.'+(m.uncovered.length?' Not placeable today: '+m.uncovered.map(x=>SVC[x].short).join(', ')+'.':''):`${a.f.short} wins with ${pts(a.base)} of 100.`+(b?` It leads ${b.f.short} by ${pts(a.base-b.base)} points.`:'');
+const win=!a?'No facility passes all gates.':m.mode==='split'?'Split plan: '+m.plan.map(s=>s.c.f.short).join(', then ')+'.'+(m.uncovered.length?' Not placeable today: '+m.uncovered.map(x=>SVC[x].short).join(', ')+'.':''):`${a.f.short} wins with ${pts(a.base)} of 100.`+(b?` It leads ${b.f.short} by ${pts(a.base-b.base)} points.`:'');
 const mine=m.ranked.includes(c)?'':`<p class="stnote">${c.f.short} scores ${pts(S)}. Its points alone add up to ${pts(c.base)}. The gate multiplies that by zero.</p>`;
 return`${followSel(c)}<h4 class="sthead">${win}</h4><p class="stsub">Add the five results. Multiply by the gate. The highest total wins.</p>${mine}<div class="two"><div><div class="rc hd"><span></span><span>Earned</span><span></span><span>Possible</span></div>${rows}<div class="rc sub"><span>Sum of the five</span><b class="mono">${pts(c.base)}</b><span class="op">of</span><span class="mono">100</span></div><div class="rc"><span>${gateTxt}</span><b class="mono">×${G.toFixed(G%1?2:0)}</b><span></span><span></span></div><div class="rc tot"><span>Score</span><b class="mono">${pts(S)}</b><span class="op">of</span><span class="mono">100</span></div></div><div><div class="lbh">Top of the ranking</div>${lb||'<div class="emptyv">Nothing to rank.</div>'}</div></div>`;
 }
@@ -1317,7 +1323,7 @@ const head=`<div class="ch"><h3>The same rule, written formally</h3><div class="
 let body;
 if(mode==='words'){
 body=`<div class="wq"><div class="wc sc"><b>Score</b><small>out of 100 points</small></div><span class="op">=</span><div class="wc gt2"><b>Gate</b><small>allowed is 1, refused is 0</small></div><span class="op">×</span><span class="op pr">(</span>${TERMS.map(t=>`<div class="wc" style="--c:${t.color}"><b>${t.name}</b><small>up to ${possible(t)} points</small></div>`).join('<span class="op">+</span>')}<span class="op pr">)</span></div>
-<p class="read">Read it left to right. First comes a yes or no. Is this facility allowed to treat the patient? Then five questions share 100 points. Add up the points earned. The highest score wins.</p>`;
+<p class="read">Read left to right. First, a yes-or-no eligibility gate. Then five criteria share 100 points. Add the earned points. The highest score wins.</p>`;
 }else{
 body=`<div class="eq serif" aria-label="Score equation"><span>S(p, f)</span><span class="op">=</span><span class="gt">G(p, f)</span><span class="op">×</span><span class="brk2">[</span>${TERMS.map(t=>`<span class="tm" style="--c:${t.color}">w<sub>${t.k}</sub>·${t.sym}</span>`).join('<span class="op">+</span>')}<span class="brk2">]</span></div>
 <div class="eq2 serif">where <span class="ind">G = [ S<sub>p</sub> ⊆ S<sub>f</sub> ] · [ seats<sub>f</sub> ≥ 1 ] · [ d ≤ R′ ]</span></div>
@@ -1349,12 +1355,12 @@ return`<div class="tlv" data-tryout="${key}"><b>${X.fmt(v)}</b> earns <b>${(X.fn
 const tierBars=['public','contracted','private'].map(k=>`<div class="${c.f.type===k?'on':''}"><b style="height:${CFG.tier[k]*100}%"></b>${TIER[k].label} ${Math.round(CFG.tier[k]*100)}%</div>`).join('');
 const up=[0,1,2].map(u=>`<tr><td>${['Routine','Soon','Urgent'][u]}</td><td class="mono">×${(1+CFG.boost*u).toFixed(1)}</td><td class="mono">${Math.round(effReach(state.policy,u))} km</td></tr>`).join('');
 $('#termCards').innerHTML=
-card(T.d,curve('d',c.d,'var(--td)',['0 km','120 km']),tryBlock('d',c.d),'Every 28 km roughly halves the points. Road distance is 1.3 times the straight line.','D = e^(−d / '+CFG.lambda+' km)')+
+card(T.d,curve('d',c.d,'var(--td)',['0 km','120 km']),tryBlock('d',c.d),'Distance points decay as e^(−d/40). Points halve every 27.7 km. Road distance is estimated at 1.3× straight-line distance.','D = e^(−d / '+CFG.lambda+' km)')+
 card(T.c,curve('c',c.f.m,'var(--tc)',['×'+CFG.mMin,'×'+CFG.mMax]),tryBlock('c',c.f.m),'The cheapest tariff earns full points. The dearest earns none. This visit costs the payer '+usd(c.cost)+' here.','C = (m_max − m) ÷ (m_max − m_min)')+
 card(T.t,`<div class="tbars" style="--c:var(--tt)">${tierBars}</div>`,`<div class="tlv"><b>${TIER[c.f.type].label}</b> earns <b>${Math.round(c.terms.t*100)}%</b> of the points.</div>`,'The admin owns this table. Raise the weight, or use the strict lock, to keep patients in public facilities.','T = tier value')+
-card(T.l,curve('l',c.u,'var(--tl)',['empty','full']),tryBlock('l',c.u),'A half-empty clinic scores almost full points. Past 60% full the points fall fast. The next patient goes elsewhere. Nobody phones anyone.','L = 1 − u³, u = seats taken ÷ capacity')+
+card(T.l,curve('l',c.u,'var(--tl)',['empty','full']),tryBlock('l',c.u),'Spare-seat points follow 1 − u³, where u is occupancy. At 50% occupancy a site retains 88 of 100 points; at 80% it retains 49. Load spreads without manual coordination.','L = 1 − u³, u = seats taken ÷ capacity')+
 card(T.q,curve('q',c.f.q,'var(--tq)',['0','1']),tryBlock('q',c.f.q),'Quality mixes outcomes and patient satisfaction. The quality team refreshes it.','Q = rating')+
-`<div class="card tcard" style="--c:var(--sel)"><div class="th"><span class="tsym serif">!</span><div><b>Urgency</b><span>What if it cannot wait?</span></div><span class="tw mono">${['Routine','Soon','Urgent'][p.urgency]}</span></div><p class="tworked"><b>${p.name} is a ${['routine','soon','urgent'][p.urgency]} case.</b> Reach is ${Math.round(m.reach)} km.</p><div class="tchart" style="height:auto"><table class="utable"><tr><th>Case</th><th>Distance points</th><th>Reach</th></tr>${up}</table></div><p class="tn">Urgent patients care more about distance. They are never sent far. The five weights still add up to 100.</p><details class="tmaths"><summary>Show the maths</summary><div class="tmath mono">w_d′ = w_d × (1 + 0.8u), R′ = R × (1 − 0.15u)</div></details></div>`;
+`<div class="card tcard" style="--c:var(--sel)"><div class="th"><span class="tsym serif">!</span><div><b>Urgency</b><span>Urgency adjustment</span></div><span class="tw mono">${['Routine','Soon','Urgent'][p.urgency]}</span></div><p class="tworked"><b>${p.name} is a ${['routine','soon','urgent'][p.urgency]} case.</b> Reach is ${Math.round(m.reach)} km.</p><div class="tchart" style="height:auto"><table class="utable"><tr><th>Case</th><th>Distance points</th><th>Reach</th></tr>${up}</table></div><p class="tn">Urgency multiplies the distance weight by (1 + 0.8u). The five weights still sum to 100.</p><details class="tmaths"><summary>Show the maths</summary><div class="tmath mono">w_d′ = w_d × (1 + 0.8u), R′ = R × (1 − 0.15u)</div></details></div>`;
 const gate=(ok,label,detail)=>`<div class="rule"><span class="ic ${ok?'p':'f'}">${ok?'✓':'✕'}</span><div>${label}<small>${detail}</small></div></div>`;
 const G=gateValue(c);
 $('#gates').innerHTML=`<div class="ch"><h3>Gates for ${c.f.short}</h3><span>${G>0?'allowed':'score forced to zero'}</span></div>
@@ -1391,7 +1397,7 @@ return{t,runs,changes:runs.length-1};
 const order=info.slice().sort((a,b)=>b.changes-a.changes);
 const sensitive=order[0].changes>0?`${order[0].t.name} moves the needle most. Sweeping it changes the winner ${order[0].changes} time${order[0].changes>1?'s':''}.`:'The winner never changes. This patient has one clearly best option.';
 const stable=order[order.length-1];
-$('#sens').innerHTML=`<div class="ch"><h3>Which dial flips the decision</h3><span>${sensitive}${order[0].changes>0&&stable.changes<order[0].changes?' '+stable.t.name+' matters least.':''}</span></div>
+$('#sens').innerHTML=`<div class="ch"><h3>Rank-flip thresholds</h3><span>${sensitive}${order[0].changes>0&&stable.changes<order[0].changes?' '+stable.t.name+' matters least.':''}</span></div>
 <p class="fine" style="margin:0 0 6px">Each bar sweeps one dial from 0 to 100 points. The other dials rescale in proportion. Blocks show who wins at each setting for ${state.patient.name}. The white line shows where the dial sits now. One long block means a stable choice.</p>
 <div class="sens">${info.map(x=>`<div><div class="sl"><span><i style="background:${x.t.color}"></i>${x.t.name}</span><em>${x.changes?'winner changes '+x.changes+' time'+(x.changes>1?'s':''):'winner never changes'}</em></div><div class="strip">${x.runs.map(r=>{const f=FBY[r.id];return`<div class="run" style="flex:${r.n};--c:${f?TIER[f.type].color:'var(--fa)'}" title="${f?f.name:'No route available'}">${f?f.short:'No route'}</div>`}).join('')}<div class="mk" style="left:${(raw[x.t.k]/tot*100).toFixed(1)}%"></div></div><div class="axis"><span>0 points</span><span>50</span><span>100 points</span></div></div>`).join('')}</div>`;
 }
@@ -1411,7 +1417,7 @@ const r=b-a;const good=k.better==='lower'?r<0:r>0;return{txt:r===0?'no change':(
 }
 function buildSim(){
 $('#kpis').innerHTML=KPIS.map(k=>`<div class="card kpi" data-kpi="${k.id}"><h5>${k.label}</h5><div class="kv"><div class="kr m"><span>Manual</span><span class="kb"><b></b></span><span class="n mono"></span></div><div class="kr e"><span>Engine</span><span class="kb"><b></b></span><span class="n mono"></span></div></div><span class="dlt flat"></span></div>`).join('');
-$('#tierCard').innerHTML=`<div class="ch"><h3>Where the patients went</h3><span>share of placements by tier</span></div><div class="tiers"><div class="tr"><span>Manual</span><div class="stack" data-tier="manual"></div></div><div class="tr"><span>Engine</span><div class="stack" data-tier="engine"></div></div></div><div class="stackl" style="margin-top:14px">${['public','contracted','private'].map(t=>`<span><i style="background:${TIER[t].color}"></i>${TIER[t].label}</span>`).join('')}</div><p class="fine">Public seats fill first because they cost the payer least. The spare-seats question stops one site taking the whole rush.</p>`;
+$('#tierCard').innerHTML=`<div class="ch"><h3>Where the patients went</h3><span>share of placements by tier</span></div><div class="tiers"><div class="tr"><span>Manual</span><div class="stack" data-tier="manual"></div></div><div class="tr"><span>Engine</span><div class="stack" data-tier="engine"></div></div></div><div class="stackl" style="margin-top:14px">${['public','contracted','private'].map(t=>`<span><i style="background:${TIER[t].color}"></i>${TIER[t].label}</span>`).join('')}</div><p class="fine">Public seats fill first because they cost the payer least. Spare-seat points (1 − u³) prevent one site absorbing the whole surge.</p>`;
 $('#utilCard').innerHTML=`<div class="ch"><h3>How full each facility ends up</h3><span>tick marks the starting load</span></div><div class="ulg"><span><i style="background:var(--fa)"></i>Manual</span><span><i style="background:var(--acc)"></i>Engine</span></div><div class="ugrid" id="ugrid">${FACILITIES.map(f=>`<div class="urow" data-f="${f.id}"><span class="un"><i class="tdot" style="--c:${TIER[f.type].color}"></i><span>${f.short}</span></span><div class="ut"><div class="tk m"><b></b><s></s></div><div class="tk e"><b></b><s></s></div></div></div>`).join('')}</div>`;
 }
 function paintSim(){
@@ -1510,6 +1516,78 @@ if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeT
 else fallback();
 }
 
+let toastTimer=0;
+function showToast(msg){
+const el=$('#toast');
+el.textContent=msg;
+el.hidden=false;
+clearTimeout(toastTimer);
+toastTimer=setTimeout(()=>{el.hidden=true},2000);
+}
+
+function buildDecisionRecord(){
+const m=model,p=state.patient;
+const origin=nearestPlace(p.x,p.y).s.name;
+const services=p.services.map(s=>SVC[s].name).join(', ');
+const urgency=['Routine','Soon','Urgent'][p.urgency];
+const presetId=matchPreset();
+const policyLabel=presetId==='custom'?'Custom':POLICIES[presetId].label;
+const weights=TERMS.map(t=>t.sym+' '+possible(t)).join(' \u00b7 ');
+const lines=[];
+lines.push('# Referral decision \u2014 '+p.name);
+lines.push('Generated '+new Date().toISOString()+'. Synthetic demonstration data.');
+lines.push('');
+lines.push('Origin: '+origin+'   Services: '+services+'   Urgency: '+urgency);
+lines.push('Policy: '+policyLabel+'   Weights (effective, after urgency): '+weights);
+lines.push('Reach limit: '+Math.round(m.reach)+' km');
+lines.push('');
+lines.push('## Outcome');
+if(!m.plan.length){
+lines.push('No facility passes all gates.');
+}else if(m.mode==='split'){
+lines.push('Split plan, '+m.plan.length+' stops:');
+m.plan.forEach((s,i)=>{lines.push((i+1)+'. '+s.c.f.name+' \u2014 '+s.services.map(z=>SVC[z].name).join(', '))});
+if(m.uncovered.length)lines.push('Not placeable today: '+m.uncovered.map(z=>SVC[z].name).join(', ')+'.');
+}else{
+const c=m.plan[0].c,dec=decisive(m);
+lines.push(c.f.name+' ('+TIER[c.f.type].label+').');
+lines.push('Total score '+pts(c.shown)+'/100. Margin over runner-up: '+(m.margin!==null?(m.margin*100).toFixed(1)+' points.':'no runner-up.'));
+if(dec)lines.push('Decisive criterion: '+dec.term.name+', contributing '+dec.pts.toFixed(1)+' more points than '+dec.over.f.short+'.');
+}
+lines.push('Estimated cost '+usd(m.planCost)+'. Estimated travel '+Math.round(m.planDist)+' km. Estimated wait '+dayText(m.planWait)+'.');
+lines.push('');
+lines.push('## Ranking');
+lines.push('| # | Facility | Type | Score | D | C | T | L | Q | km |');
+lines.push('|---|---|---|---|---|---|---|---|---|---|');
+m.ranked.forEach((c,i)=>{
+const cells=[i+1,c.f.name,TIER[c.f.type].label,pts(c.shown),...TERMS.map(t=>pts(c.contrib[t.k])),Math.round(c.d)];
+lines.push('| '+cells.join(' | ')+' |');
+});
+lines.push('');
+lines.push('## Excluded');
+lines.push('| Facility | Reason |');
+lines.push('|---|---|');
+m.all.filter(c=>!m.ranked.includes(c)).forEach(c=>{lines.push('| '+c.f.name+' | '+c.reason+' |')});
+return lines.join('\n');
+}
+
+function copyDecisionRecord(){
+const text=buildDecisionRecord();
+const done=()=>showToast('Decision record copied');
+const fallback=()=>{
+const ta=document.createElement('textarea');
+ta.value=text;
+ta.style.position='fixed';
+ta.style.opacity='0';
+document.body.appendChild(ta);
+ta.select();
+try{document.execCommand('copy');done()}catch(e){showToast('Copy failed \u2014 select and copy manually')}
+ta.remove();
+};
+if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(done,fallback);
+else fallback();
+}
+
 const GLOSSARY={
 seat:()=>`One appointment slot per day. ${FBY.sag.short} has ${FBY.sag.cap}, and ${FBY.sag.load} are taken.`,
 reach:()=>'The furthest we will send a patient. The default is 60 km. Urgent cases get less.',
@@ -1519,7 +1597,7 @@ load:()=>`The share of seats already taken. ${FBY.sag.short} is at ${Math.round(
 token:()=>'One override per patient per quarter. After that, the next request is refused.',
 'split route':()=>'Two or more stops for one patient. It is used when no single site covers every need.',
 gate:()=>'A hard yes or no. One no scores zero.',
-dial:()=>'A weight the admin can move. It sets how many of the 100 points a question gets.'
+dial:()=>'A weight the admin can move. It sets how many of the 100 points a criterion earns.'
 };
 const GLOSS_RE=/\b(price factor|split route|split plan|seats?|reach|tier|load|token|gates?|dials?)\b/gi;
 function glossKey(w){
@@ -1571,10 +1649,10 @@ const TOUR=[
 {hl:'#rec',run(){applyCase('sam');setPolicy('balanced');show('route')},text:()=>`Sam needs two services no single site offers. The engine plans ${model.plan.length} stops.`},
 {hl:'#rec',run(){applyCase('priya');setPolicy('nearest');show('route')},text:()=>`Set the policy to nearest-first. Priya goes to ${model.plan[0].c.f.short}, a ${TIER[model.plan[0].c.f.type].label.toLowerCase()} clinic.`},
 {hl:'#rec',run(){applyCase('priya');setPolicy('public');show('route')},text:()=>`Switch to public-first. Priya now goes to ${model.plan[0].c.f.short}, a public unit.`},
-{hl:'#v-brief',run(){show('brief')},text:()=>'Every referral gets a written reason. That is the whole idea.'}
+{hl:'#v-brief',run(){show('brief')},text:()=>'Every referral gets a written reason, traceable to the rule it passed or failed.'}
 ];
 function tourLabel(){
-$('#tourBtn').textContent=tour.i>0&&!tour.open?'Resume the tour':'Walk me through it';
+$('#tourBtn').textContent=tour.i>0&&!tour.open?'Resume the tour':'Step through a decision';
 }
 function tourMark(){
 $$('.tour-hl').forEach(e=>e.classList.remove('tour-hl'));
@@ -1639,7 +1717,7 @@ raf=requestAnimationFrame(()=>{raf=0;update()});
 function update(){
 model=evaluate(state.patient,state.policy,FACILITIES);
 syncControls();
-$('[data-tab="simulate"]').textContent=state.sim.n+' patients, 2 ways';
+$('[data-tab="simulate"]').textContent=state.sim.n+' patients — baseline vs weighted routing';
 if(state.tab==='route')paintRoute();
 else if(state.tab==='equation')paintEquation();
 else if(state.tab==='simulate')paintSim();
@@ -1706,6 +1784,7 @@ let b;
 if((b=t.closest('[data-preset]'))){const p=POLICIES[b.dataset.preset];state.policy.weights={...p.w};state.policy.lock=p.lock;update()}
 else if((b=t.closest('[data-explain]'))){state.explain=!state.explain;update()}
 else if((b=t.closest('[data-copy]'))){copyText($('#noteText').textContent,b)}
+else if((b=t.closest('[data-copyrecord]'))){copyDecisionRecord()}
 else if((b=t.closest('[data-show]'))){applyCase('priya');state.step=0;show('route')}
 else if((b=t.closest('#tourBtn'))){tourStart()}
 else if((b=t.closest('[data-tour]'))){tourAct(b.dataset.tour)}
