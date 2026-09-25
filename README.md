@@ -73,15 +73,3 @@ docs/audit-spec.txt    the original build spec / audit
 
 ## Data model
 A single JSON `Model` (`version, name, columns, rows, params, gates, criteria, combine`) is the only source of truth. It is stored in `localStorage['meridian.studio.v1']`. No server and no tables API are used.
-
-## Not in v1 (on purpose)
-- Fitting weights from examples the user ranks by hand
-- Comparing two models side by side
-- Cohort simulation
-- A dark theme
-
-## Suggested next steps
-1. Weight helpers adapted from Rubric: rank-order weights (sort criteria, get weights) and pairwise comparison with a consistency check.
-2. Soft rules (a points penalty instead of ruling an option out).
-3. Pairwise "I prefer A over B" checks that point out where the model disagrees with the user's intuition.
-4. A model comparison view.
