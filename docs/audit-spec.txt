@@ -1,0 +1,422 @@
+Your demo already contains the right core idea: **a gate × a weighted score, with every number traceable**. The new product takes that idea and turns it into a tool people can use to build their own models. A few suggestions before the spec:
+
+1. **Don't promise "perfect" equations.** No tool can know what perfect is for someone else's problem. It can show whether a model is robust: how much the weights can move before the winner changes, which criterion decides the result, and which options fail which rules. The sensitivity strip from your demo is the feature that delivers this, so make it central.
+2. **Two layers should come from where things appear, not from separate screens.** Simple mode shows a list of criteria with sliders. Clicking one opens an inspector. The Advanced switch adds fields in the same places: expressions, ranges, shape parameters and a custom combine formula. Nothing moves when you switch.
+3. **Keep one source of truth.** Everything is a JSON model. The simple UI writes to the same fields the expressions use, so the two modes can't disagree. Export is just printing that model in four formats.
+4. **Never use `eval`.** Custom formulas run through a small parser. That also makes it possible to explain every step of a calculation and to generate clean JavaScript for export.
+5. **Your demo becomes a starter template, "Care routing",** and the spec has a test that it reproduces the demo's score. That's a good check that Sonnet built the engine correctly.
+6. **Leave out of v1:** fitting weights automatically from examples the user ranks by hand, comparing two models side by side, and the cohort simulation. These are good v2 features, and adding them now is how the app gets busy again.
+
+Your palette is a muted blue-violet (#553f83, about hue 300° in OKLCH). The lighter version below is milky white with a faint lavender tint, with all colours kept soft.
+
+Give Sonnet one phase per session and paste the whole spec each time.
+
+---
+
+# MERIDIAN STUDIO — BUILD SPEC v1 (for the implementing model)
+
+## 0. Rules for the implementer
+
+1. Build exactly what this spec lists. Do not add features, settings, animations or copy that aren't specified.
+2. Use vanilla HTML, CSS and JS only. No frameworks, build tools, npm or CDNs, except the Google Fonts link in §3.
+3. Never use `eval`, `new Function`, `innerHTML` with user text that hasn't been escaped, or `with`. Escape all user strings with `esc()` from util.js.
+4. If something is truly unspecified, pick the simplest option and mark it with `// DECISION: <what and why>`. Don't ask questions.
+5. Use classic `<script>` tags, not ES modules, so the app works from `file://`. Every file attaches to one global: `window.M = window.M || {};`.
+6. Build one phase per session (§12) and stop when that phase's acceptance checks pass.
+
+## 1. What the app is
+
+The app is a sandbox for building a scoring equation that ranks a set of options, the rows of a small dataset. The equation is always:
+
+```
+Score(row) = Gate(row) × Combine( s₁…sₙ , w₁…wₙ ) × 100
+Gate(row)  = 1 if every enabled rule passes, else 0
+sᵢ         = Shape( Direction( Normalize( Raw_i(row) ) ) )   ∈ [0,1]
+wᵢ         = weightᵢ / Σ weights of enabled criteria
+```
+
+Users edit the rules, the criteria (source, direction, shape, weight), the combine method and the data. They can see the ranked result, trace any row step by step and export the model.
+
+## 2. File structure (exact)
+
+```
+index.html
+tests.html
+css/tokens.css
+css/app.css
+js/core/util.js
+js/core/expr.js
+js/core/shapes.js
+js/core/engine.js
+js/core/sensitivity.js
+js/core/codegen.js
+js/app/templates.js
+js/app/store.js
+js/app/render-top.js
+js/app/render-recipe.js
+js/app/render-result.js
+js/app/render-inspector.js
+js/app/render-data.js
+js/app/render-export.js
+js/app/charts.js
+js/app/main.js
+```
+
+Load scripts in the order above, core first, with `main.js` last. `tests.html` loads only `js/core/*` plus `js/app/templates.js`.
+
+## 3. Design system (tokens.css, exact values)
+
+Fonts, in the `<head>` of index.html:
+`https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,400&family=JetBrains+Mono:wght@400&family=Manrope:wght@400;600&display=swap`
+
+```css
+:root{
+  /* surfaces: milk white with a lavender tint, hue 300 */
+  --bg:       oklch(98.4% 0.006 300);
+  --surface:  oklch(99.6% 0.002 300);
+  --sunken:   oklch(96.4% 0.009 300);
+  --line:     oklch(91.5% 0.012 300);
+  --line-2:   oklch(85%   0.018 300);
+  /* ink */
+  --ink:      oklch(25%   0.030 300);
+  --ink-2:    oklch(47%   0.028 300);
+  --ink-3:    oklch(62%   0.020 300);
+  /* brand */
+  --brand:      oklch(50% 0.095 300);
+  --brand-ink:  oklch(40% 0.090 300);
+  --brand-soft: oklch(94.5% 0.028 300);
+  --on-brand:   oklch(99% 0.005 300);
+  --focus:      oklch(62% 0.120 300);
+  /* status */
+  --ok:   oklch(60% 0.090 160);
+  --warn: oklch(68% 0.100 75);
+  --bad:  oklch(58% 0.120 20);
+  /* criterion series: c = mark, t = tint, k = text on tint */
+  --c1:oklch(70% .08 300);--t1:oklch(95% .025 300);--k1:oklch(45% .08 300);
+  --c2:oklch(70% .08 255);--t2:oklch(95% .025 255);--k2:oklch(45% .08 255);
+  --c3:oklch(70% .08 210);--t3:oklch(95% .025 210);--k3:oklch(45% .08 210);
+  --c4:oklch(70% .08 165);--t4:oklch(95% .025 165);--k4:oklch(45% .08 165);
+  --c5:oklch(72% .08 95); --t5:oklch(95% .025 95); --k5:oklch(45% .08 95);
+  --c6:oklch(70% .08 55); --t6:oklch(95% .025 55); --k6:oklch(45% .08 55);
+  --c7:oklch(70% .08 15); --t7:oklch(95% .025 15); --k7:oklch(45% .08 15);
+  --c8:oklch(70% .08 340);--t8:oklch(95% .025 340);--k8:oklch(45% .08 340);
+  /* type */
+  --sans:Manrope,ui-sans-serif,system-ui,sans-serif;
+  --serif:Fraunces,Georgia,serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --fs-xs:11.5px;--fs-sm:12.5px;--fs-md:14px;--fs-lg:16px;--fs-xl:22px;--fs-2xl:32px;
+  /* space, radius, motion */
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;
+  --r1:8px;--r2:12px;--r3:16px;--rp:999px;
+  --ease:cubic-bezier(.2,.7,.2,1);--t-fast:160ms;--t-med:240ms;
+  --shadow-pop:0 16px 40px -16px oklch(30% .05 300 / .22);
+  color-scheme:light;
+}
+```
+
+Hard visual rules:
+1. Light theme only. No dark mode in v1.
+2. Allow at most one level of container: no card inside a card. Group things with whitespace and 1px `--line` hairlines. Only three things get a background different from `--bg`: the recipe panel (`--surface`), the inspector drawer (`--surface` + `--shadow-pop`) and the modal (`--surface` + `--shadow-pop`).
+3. Use two font weights only (400 and 600). Fraunces italic appears only in the equation and the model title. Every number is in `--mono` with `font-variant-numeric: tabular-nums`.
+4. Every border is 1px. Nothing uses gradients. The only shadows are the two in rule 2.
+5. Criterion `i` (in list order) always uses `--c{i}`, `--t{i}` and `--k{i}`. Allow at most 8 criteria.
+6. Transitions are `--t-fast` for hover and colour and `--t-med` for widths and positions. Respect `prefers-reduced-motion` by turning all motion off.
+7. Focus looks like this everywhere: `outline:2px solid var(--focus); outline-offset:2px`.
+8. Copy is sentence case, with no exclamation marks and at most one helper line per section.
+
+## 4. Data model (the single source of truth)
+
+```js
+Model = {
+  version: 1,
+  name: "Pick a laptop",
+  columns: [ { id:"price", label:"Price", type:"number"|"category"|"boolean", unit:"$" } ],
+  rows:    [ { id:"r1", label:"Aster 13", v:{ price:899, ... } } ],
+  params:  [ { id:"lambda", label:"Distance decay", value:40, min:1, max:200, step:1 } ],
+  gates:   [ { id:"g1", label:"Under budget", expr:"price <= 1800", enabled:true,
+               simple:{ column:"price", op:"<=", value:1800 } | null } ],
+  criteria:[ { id:"price", label:"Price", enabled:true, weight:30,          // raw 0..100
+               source:{ kind:"column", column:"price" } | { kind:"expr", expr:"..." },
+               direction:"higher"|"lower",
+               range:{ auto:true, lo:null, hi:null },                        // raw units
+               shape:{ type:"linear"|"curve"|"scurve"|"step"|"target"|"map",
+                       k:2, a:10, c:0.5, width:0.2, map:{ "public":1 } } } ],
+  combine: { type:"sum"|"product"|"min"|"custom", expr:"" }
+}
+```
+
+Rules:
+1. An id is `^[a-z_][a-z0-9_]{0,31}$`. Ids must be unique across columns, params and criteria, because they share one namespace in expressions. The reserved words are the function names in §5 plus `true` and `false`.
+2. `gate.expr` is always the truth. `simple` is only a UI helper. When the user edits `expr` directly, set `simple:null`.
+3. Shape parameters `c` and `width` are stored in normalized units (0–1). The UI shows them in raw units using `raw = lo + c·(hi−lo)`.
+4. Limits: 1000 rows, 24 columns, 12 params, 8 gates, 8 criteria. When the user hits a limit, show a toast (`"Up to 8 criteria"`) and do nothing.
+5. `rows[].v` of a missing value is `null`.
+
+## 5. Expression language (expr.js)
+
+API:
+```js
+M.expr.parse(src)            // -> { ast } or { error:{ msg, pos } }
+M.expr.check(ast, names)     // names: Set of allowed identifiers -> null or { msg, pos }
+M.expr.evaluate(ast, scope)  // scope: plain object; returns number (booleans as 1/0) or string
+M.expr.idents(src)           // -> array of {name, start, end} from tokens (for rename)
+M.expr.rename(src, old, neu) // token-exact replacement, preserves user formatting
+```
+
+Tokens are numbers (`12`, `1.5`, `.5`, `1e3`), identifiers, double-quoted strings, operators `+ - * / % ^ ( ) , < <= > >= == != && || !`, and whitespace. Anything else is `"Unexpected character"` at its position.
+
+Grammar (recursive descent, lowest precedence first):
+```
+or    := and ( "||" and )*
+and   := cmp ( "&&" cmp )*
+cmp   := add ( ("<"|"<="|">"|">="|"=="|"!=") add )?
+add   := mul ( ("+"|"-") mul )*
+mul   := unary ( ("*"|"/"|"%") unary )*
+unary := ("-"|"!") unary | pow
+pow   := atom ( "^" unary )?          // right-associative: 2^3^2 = 512
+atom  := number | string | "true" | "false" | ident | ident "(" args? ")" | "(" or ")"
+```
+AST nodes: `{t:'num',v}`, `{t:'str',v}`, `{t:'id',name,pos}`, `{t:'un',op,a}`, `{t:'bin',op,a,b}`, `{t:'call',fn,args,pos}`.
+
+Functions (fixed list): `min(…)`, `max(…)`, `abs(x)`, `sqrt(x)`, `exp(x)`, `ln(x)`, `log10(x)`, `pow(a,b)`, `clamp(x,lo,hi)`, `if(cond,a,b)`, `round(x)`, `round(x,n)`. A wrong argument count gives `"clamp needs 3 values"`.
+
+Semantics:
+1. Comparisons and logic return 1 or 0.
+2. Strings are only allowed on either side of `==` or `!=`. Anywhere else is the runtime error `"Text can only be compared"`.
+3. An identifier whose scope value is `null` gives the runtime error `"Missing value: price"`.
+4. If `evaluate` throws, the engine catches it. A non-finite result counts as invalid.
+
+## 6. Shapes (shapes.js)
+
+Every shape takes `t ∈ [0,1]` and returns `s ∈ [0,1]`:
+```
+linear : s = t
+curve  : s = t^k                           k ∈ [0.25,4], default 2   (k>1 strict, k<1 lenient)
+scurve : σ(x)=1/(1+e^(−a(x−c)));  s = (σ(t)−σ(0))/(σ(1)−σ(0))   a ∈ [2,30] default 10, c default .5
+step   : s = t >= c ? 1 : 0                c default .5
+target : s = exp(−((t−c)/width)²)          c default .5, width ∈ [.05,1] default .2   (ignores direction)
+map    : category columns only; s = map[value] ?? 0, values in [0,1]
+```
+Export `M.shapes.apply(shape, t)` and `M.shapes.META` (labels, parameter lists with min, max and step, and one plain-English line each):
+- linear: "Straight line"
+- curve: "Bends toward strict or lenient"
+- scurve: "Soft cut-off around a point"
+- step: "Full points past a line, none before"
+- target: "Best at a sweet spot"
+- map: "Points per category"
+
+## 7. Engine (engine.js)
+
+`M.engine.compute(model)` is pure. It returns:
+```js
+{ ranges:{ [critId]:{lo,hi,auto} },
+  weights:{ [critId]: share },            // normalized, sums to 1 over enabled criteria with weight>0
+  rows:[ { id,label, pass, gates:[{id,pass,error}], failReason,
+           crit:{ [critId]:{ raw, t, s, w, contrib, error } },
+           S, score, rank } ],             // rank null if !pass
+  ranked:[rowId...], out:[rowId...],
+  lead:{ winner, runnerUp, margin, driver:{critId, pts} } | null,
+  errors:[ { where:'gate'|'criterion'|'combine', id, msg, pos } ] }
+```
+Pipeline, in exactly this order:
+1. **Parse and check** every enabled gate expression, criterion `expr` source and custom combine expression once. Allowed names: gates and criterion sources may use column ids and param ids. A custom combine may use criterion ids (their `s`), `w_<critId>` (their share) and param ids. Anything that fails to parse or check goes into `errors`. That item is treated as disabled for this computation, and the UI shows the error.
+2. **Gates:** evaluate per row with scope = row values + params. `pass` = all enabled gates are 1. If there's a runtime error, the gate fails and `error` holds the message. `failReason` = the label of the first failing gate, or its expr if it has no label.
+3. **Raw values:** evaluate per row for every row, including rows that fail a gate. A `boolean` column becomes 1 or 0.
+4. **Range per criterion:** if `auto`, use the min and max of valid raw values over all rows, including failed ones, so that rules don't shift other rows' scores. Otherwise use `lo` and `hi`. Skip this for `map`.
+5. **Normalize:** `t = clamp((raw−lo)/(hi−lo), 0, 1)`. If `hi===lo`, then `t = 0.5`, and the inspector shows "Every row is equal here, so this criterion has no effect." If direction is `lower` and the shape isn't `target`, use `t = 1−t`.
+6. **Shape:** `s = shapes.apply`. If raw is invalid or missing, set `s = 0` and store `error`.
+7. **Weights:** `share_i = weight_i / Σ weight over enabled criteria`. If the sum is 0, every score is 0 and the result area shows "Give at least one criterion some weight."
+8. **Combine:**
+   - sum: `S = Σ share·s`, with `contrib = share·s`
+   - product: `S = Π s^share`
+   - min: `S = min s` over enabled criteria with share > 0
+   - custom: evaluate the expression. If `S` is outside [0,1], don't clamp it; add a warning to `errors`.
+9. `score = pass ? S·100 : 0`. Round only when displaying (one decimal).
+10. **Rank:** passing rows by score descending, ties broken by label ascending. Failing rows go in `out`, ordered by label.
+11. **Lead** (sum mode only, when at least 2 rows are ranked): `margin = score₁ − score₂`. The driver is the criterion with the largest `(contrib_winner − contrib_runnerUp)·100`.
+
+`M.engine.trace(model, result, rowId)` returns an ordered array of plain lines for the inspector, e.g. `{kind:'raw', critId, text:'price = 899'}`, then `norm`, `dir`, `shape`, `weight`, `gate`, `combine` and `final`. Each line has a `value` field for the number to display.
+
+## 8. Sensitivity (sensitivity.js)
+
+`M.sensitivity.sweep(model, critId)` runs for `v = 0..100` step 1:
+1. Set the weight of `critId` to `v`.
+2. Scale the other enabled weights proportionally so they sum to `100−v`. If they're all zero, split `100−v` equally.
+3. Compute and record the winner id (or null).
+4. Collapse the results into runs `[{from, to, winner}]` and return `{runs, current: currentShare×100}`.
+
+Only run it when Advanced is on, debounced by 150 ms after the last change.
+
+## 9. Codegen (codegen.js)
+
+`M.codegen.js(model, result)` returns a string. Build it from the ASTs, never by pasting source text. Map identifiers like this:
+- column → `r.<id>`
+- param → `P.<id>`
+- criterion in combine → `s.<id>`
+- `w_<id>` → `W.<id>`
+
+Function calls go to `F.<name>`, and strings go through `JSON.stringify`. Auto ranges are baked in as literals, with the comment `// auto range from current data`. Required output shape:
+
+```js
+// Meridian model: "<name>" · generated <ISO date>
+const P = { lambda: 40 };
+const W = { price: 0.3, battery_h: 0.25 };
+const F = { min:Math.min, max:Math.max, abs:Math.abs, sqrt:Math.sqrt, exp:Math.exp,
+  ln:Math.log, log10:Math.log10, pow:Math.pow, round:(x,n=0)=>Math.round(x*10**n)/10**n,
+  clamp:(x,a,b)=>Math.max(a,Math.min(b,x)), if:(c,a,b)=>c?a:b };
+const norm = (x, lo, hi) => hi === lo ? 0.5 : F.clamp((x - lo) / (hi - lo), 0, 1);
+/* only the shape helpers this model uses */
+export function score(r) {
+  if (!(r.price <= 1800)) return { pass: false, score: 0, s: {} };
+  const s = {};
+  s.price = 1 - norm(r.price, 749, 1999);
+  s.battery_h = norm(r.battery_h, 8, 20);
+  const S = W.price * s.price + W.battery_h * s.battery_h;
+  return { pass: true, score: S * 100, s };
+}
+```
+
+`M.codegen.formula(model)` returns Unicode plain text: the main equation, then one line per criterion (`Price = linear(1 − norm(price, 749…1999))`) and one line per rule.
+
+## 10. App state, history, rendering (store.js, main.js)
+
+```js
+M.state = { model, result, ui:{ view:'build'|'data', advanced:false,
+            inspector:null | {kind:'criterion'|'gate'|'row'|'param'|'combine', id},
+            selectedRow:null, modal:null|'export', exportTab:'json' } };
+M.commit(label, fn)   // snapshot = structuredClone(model); fn(model); push snapshot to past (cap 100); clear future; recompute; save; M.render.all()
+M.preview(fn)         // first call of a gesture stores snapshot; fn(model); recompute; M.render.live()
+M.endGesture()        // push the stored snapshot to past; clear future; save; M.render.all()
+M.undo() / M.redo()
+```
+
+Rules:
+1. Sliders and text inputs call `M.preview` on `input` and `M.endGesture` on `change`. This rule exists so that re-rendering never destroys the control being dragged: `render.live()` must **not** rebuild the recipe list or the inspector controls. It only updates the equation, the results, the sensitivity panel, the chart in the inspector, and any element with `data-live="share:<critId>"` or `data-live="value:<key>"` (by setting `textContent`).
+2. `render.all()` rebuilds regions from state. After rebuilding, restore focus to the element with the same `data-focus-key` if one existed.
+3. Save to `localStorage['meridian.studio.v1']`, debounced 400 ms. On load, use this priority: URL hash `#m=` (base64url of UTF-8 JSON) → localStorage → the Care routing template.
+4. Handle events by delegation on `document` with `data-action="name"` plus `data-id`. Use this exact action list: `set-view`, `toggle-advanced`, `undo`, `redo`, `open-export`, `close-modal`, `export-tab`, `copy-export`, `download-export`, `import-json`, `share-link`, `add-criterion`, `remove-criterion`, `toggle-criterion`, `add-gate`, `remove-gate`, `toggle-gate`, `add-param`, `remove-param`, `open` (with `data-kind`), `close-inspector`, `select-row`, `set-combine`, `set-shape`, `set-direction`, `load-template`, `add-row`, `remove-row`, `add-column`, `remove-column`, `paste-csv`.
+5. Keyboard: Ctrl/Cmd+Z undoes, Shift+Ctrl/Cmd+Z redoes, and Esc closes the modal first, then the inspector.
+6. Renaming an id updates column-source references directly and runs `M.expr.rename` on every expression.
+
+## 11. Screens (exact layout)
+
+**Top bar** (height 56, `--bg`, hairline below):
+- Left: a 28px mark (reuse the demo's compass SVG in `--brand`), then "Meridian" in 600 weight, then the model name in Fraunces italic `--fs-lg`, editable inline on click.
+- Centre: a segmented control with Build and Data.
+- Right: an "Advanced" switch, undo and redo icon buttons (disabled when there's nothing to undo or redo) and an "Export" primary button (`--brand`).
+
+**Build view** is a 2-column grid: `380px | 1fr`. Below 900px it becomes 1 column.
+
+*Recipe panel* (left, `--surface`, hairline right, scrolls on its own, padding `--s5`). Sections in this order:
+1. **Rules.** One sentence per gate: `[column ▾] [≤ ▾] [value]`. For a category column, the ops are "is" and "is not" and the value is a select. The row has a toggle dot and a hover ×. A text link "Add a rule" sits below. If `simple` is null, show the expr in mono with the tag "custom". In Advanced, clicking any gate opens the inspector.
+2. **Criteria.** One row per criterion, 52px tall: colour dot, label, share % (mono, `data-live`) on the right, and below that a full-width range slider (0–100) whose filled part uses `--c{i}`. Clicking the label opens the inspector. A hover × removes the criterion. A text link "Add a criterion" sits below; it adds the first numeric column that isn't used yet, as linear/higher/weight 20.
+3. **Combine.** A segmented control with "Add up", "Multiply" and "Weakest link", plus "Custom" in Advanced. Under it, one helper line per option:
+   - Add up: "Strengths make up for weaknesses."
+   - Multiply: "A weak spot drags the whole score down."
+   - Weakest link: "Only the worst criterion counts."
+   - Custom: "Write your own."
+4. **Parameters** (Advanced only). One row per param: label, value in mono and a slider. Also "Add a parameter".
+
+*Result area* (right, `--bg`, padding `--s6`, max content width 880):
+1. **Equation** (no container). Fraunces italic `--fs-2xl`. Chips are inline spans with background `--t{i}`, a 2px bottom border `--c{i}` and radius `--r2`. In sum mode it reads: `Score = Rules × ( 30% Price + 25% Battery + … ) × 100`, where "Rules" is a chip in `--sunken`. Multiply mode reads `( Price^0.30 × … )` and weakest link reads `min( Price, Battery, … )`. Custom shows the expression. When a row is selected, a second line in mono `--fs-md` `--ink-2` shows the numbers plugged in, e.g. `= 1 × ( 0.30·0.88 + 0.25·0.50 ) × 100 = 38.9`. In Advanced, one mono line per criterion follows, taken from `codegen.formula`. Clicking a chip opens that criterion in the inspector. Below the equation, one line in `--ink-2`: "**Aster 13** leads by 4.2 points. Biggest reason: Price (+3.1)." (sum mode only).
+2. **Ranking.** One row per ranked item, separated by hairlines, 56px tall. The grid is `28px | 1fr | 88px`: rank in mono `--ink-3`, label (600), and score in mono `--fs-xl` right-aligned. Under the label is a 6px stacked bar where the full width is 100 points and each segment is `contrib×100` in `--c{i}`. In product, min or custom mode, show a single `--brand` bar of `score` instead. Clicking a row selects it (background `--sunken`) and opens the row trace in the inspector. Reordering uses FLIP: record `getBoundingClientRect().top` per `data-row-id` before render, set `transform: translateY(old−new)` after, then transition to 0 over `--t-med`.
+3. **Ruled out · N**, a `<details>` element that starts closed. Each row shows the label in `--ink-3` and a `failReason` chip in the `--bad` tint.
+4. **Robustness** (Advanced only). One strip per criterion: a 28px bar of runs, each run tinted `--sunken` with alternating `--line` borders and the winner's label inside it (with ellipsis). A 2px `--ink` marker shows the current share. Caption: "Aster 13 stays on top while Price is between 12% and 48%."
+
+*Inspector drawer:* 400px wide, fixed to the right, full height below the top bar, `--surface` + `--shadow-pop`, slides in over `--t-med`, with a close × and Esc to close.
+- **Criterion (simple):**
+  - label input
+  - "Uses" select of columns (plus "Expression…" in Advanced)
+  - "Better when" segmented Higher/Lower, hidden for `target` and `map`
+  - "Shape": five 44×28 SVG icon buttons with names under them (map replaces them for category columns)
+  - shape parameter sliders labelled in raw units, e.g. "Full points at 400 nits"
+  - chart
+  - weight slider with share
+- **Criterion (Advanced adds):** range with an Auto checkbox plus lo/hi number inputs, numeric inputs for shape params, an expression textarea (mono) with a live error line in `--bad` ("Unknown name 'pirce' at 3"), and the formula line.
+- **Chart** (charts.js): SVG `viewBox 0 0 336 128`, padding 12. The x axis runs over the raw range lo→hi, with tick labels at the two ends only, in mono `--fs-xs`. The shape curve is a 64-sample polyline, stroke `--c{i}`, 1.5px. Each row is a dot at (raw, s): passing rows are filled `--c{i}` r=3, failing rows are hollow `--ink-3`, and the selected row gets r=5 plus its label. For `map`, draw horizontal bars per category with a 0–1 slider each.
+- **Row trace:** the row label in Fraunces italic, then the score, then the ordered trace lines from `engine.trace` in groups (Rules, then each criterion: raw → normalized → direction → shape → × share = points, then Combine and Final). Numbers are mono and right-aligned. Lines with an error show a `--bad` dot.
+- **Gate / param / combine:** a label input, the expr textarea with a live error line, and for params the min, max and step inputs.
+
+**Data view:** one table with sticky headers, sitting on `--surface` inside `--bg` padding.
+- Header cell: label input, id in mono `--ink-3` (editable only in Advanced), and a type select.
+- Body cells are borderless inputs, with a hairline grid.
+- Toolbar: "Add row", "Add column", "Paste CSV" (a modal textarea; the first line is the headers; types are inferred as number if every non-empty value parses, boolean if it's only true/false, otherwise category), "Import model" and "Templates ▾" (Blank, Pick a laptop, Care routing — this replaces the model after a confirm()).
+
+**Export modal:** 720px, centred, tabs JSON / JavaScript / Formula / CSV. Each tab shows a `<pre>` in mono on `--sunken` with "Copy" and "Download" buttons. The file names are `<slug>.json`, `.js`, `.txt` and `.csv`; the CSV holds rows plus s per criterion, score, rank and pass. There's also a "Copy share link" button (warn by toast if the URL is over 8000 characters). Import checks for `version===1` and the arrays `columns`, `rows` and `criteria`; if any is missing, toast "That file isn't a Meridian model".
+
+**Empty states:**
+- No criteria: the equation reads `Score = Rules × ( … ) × 100`, with one line "Add a criterion to start scoring" and a button.
+- No rows: "Add some options in Data".
+
+## 12. Templates (templates.js)
+
+1. **Blank:** columns `value` (number). Rows `Option A`=1, `Option B`=2, `Option C`=3. No criteria, no gates, combine sum.
+2. **Pick a laptop** (default for new users is Care routing; this one is simple-mode only):
+
+```
+id,label,price,battery_h,weight_kg,screen_nits,warranty_y
+l1,Aster 13,899,14,1.2,400,1
+l2,Birch Pro 14,1399,18,1.4,500,2
+l3,Cobalt Air,1099,11,1.0,350,1
+l4,Dune 16,1799,9,2.1,600,3
+l5,Ember X,749,8,1.6,300,1
+l6,Fjord 14,1249,16,1.3,450,2
+l7,Garnet Book,999,12,1.5,400,2
+l8,Harbor Ultra,1999,20,1.1,550,3
+```
+Criteria: price lower linear 30, battery_h higher linear 25, weight_kg lower curve k=2 20, screen_nits higher linear 15, warranty_y higher linear 10. Gate: "Under budget", `price <= 1800`. Combine: sum.
+
+3. **Care routing** (ported from the old demo). Copy the `FACILITIES` array from the old `index.html` into templates.js. For each facility, derive these columns with a fixed patient at x=34, y=30:
+   - `distance_km = round1(hypot(34−f.x, 30−f.y) × 1.3)`
+   - `type` (category)
+   - `free_seats = cap − load`
+   - `occupancy = load / cap`
+   - `cost_multiplier = m`
+   - `quality = q`
+
+   Params: `lambda` = 40 (1–200).
+
+   Gates:
+   - "Has a free seat", `free_seats >= 1`
+   - "Within reach", `distance_km <= 60`
+
+   Criteria:
+   - Distance: expr `exp(-distance_km / lambda)`, higher, linear, range fixed 0..1, weight 26
+   - Cost: column cost_multiplier, lower, linear, range fixed 0.9..2.8, weight 16
+   - Public-first: column type, map {public:1, contracted:0.55, private:0.25}, weight 22
+   - Spare seats: expr `1 - occupancy^3`, higher, linear, range fixed 0..1, weight 20
+   - Quality: column quality, higher, linear, range fixed 0..1, weight 16
+
+   Combine: sum.
+
+## 13. Build phases and acceptance
+
+**Phase 1 — core + tests.** util, expr, shapes, engine, sensitivity, codegen and templates. tests.html shows a pass/fail list. Every test must pass:
+- `1+2*3`=7, `2^3^2`=512, `-2^2`=−4, `min(3,1,2)`=1, `if(1>2,5,6)`=6, `clamp(5,0,3)`=3, `type=="public"` with type "public" gives 1
+- `1+` gives an error at pos 2; `foo` checked against an empty name set gives "Unknown name 'foo'"
+- `rename("price*2+price_max","price","cost")` returns `"cost*2+price_max"`
+- curve(.5, k=2)=.25; scurve(0)=0, scurve(1)=1, scurve(.5; c=.5)=.5; target(c)=1
+- Engine dataset: rows A{price:100,q:.9}, B{200,.6}, C{300,.3}, D{150,.3}. Criteria: price lower linear 50, q higher linear 50. Sum mode: A=100, B=50, C=0, D=37.5. With the gate `price<=250`, C is in `out`. Product mode: B=50 and D=0.
+- Care routing: Sarema General scores 79.3 (±0.05).
+- Laptop codegen: evaluating the generated `score` (strip `export` and load it via a Blob URL `<script>`) gives the same scores as the engine for every row.
+
+**Phase 2 — shell and simple Build view.** tokens.css, app.css, top bar, recipe (rules, criteria, combine), equation, ranking and store/history. Acceptance: dragging a weight slider updates shares, the equation and the ranking live without the slider losing its drag; undo reverts the whole drag in one step; reloading keeps the model.
+
+**Phase 3 — inspector, charts and trace.** Acceptance: changing a shape redraws the chart and re-ranks; clicking a result row shows a full trace whose final number equals the displayed score.
+
+**Phase 4 — Advanced layer.** Expressions, ranges, params, custom combine, robustness strips and formula lines. Acceptance: turning Advanced off hides everything added and keeps all values; an invalid expression shows its error in place and never crashes the render.
+
+**Phase 5 — data, import/export, sharing.** Acceptance: pasted CSV replaces the data and types are inferred; export → import round-trips the model identically (deep-equal); a share link opens the same model in a new tab.
+
+**Phase 6 — polish checklist (verify every item, fix only these):**
+- all text contrast is at least 4.5:1 except `--ink-3`, which is labels only
+- every control can be reached by keyboard and shows the focus ring
+- there are no nested containers
+- every number is mono
+- no layout shift when the inspector opens
+- reduced motion turns off FLIP and the drawer slide
+- 1000 rows re-rank in under 50 ms on input (measure with `performance.now()` and log a warning if slower)
+
+---
+
+When you hand this over, start the first session with: "Implement Phase 1 of the attached spec. Output complete files only." Then do one phase per session. If you'd like, I can also write the Phase 1 test file myself, so you can check Sonnet's engine against it rather than against tests Sonnet wrote itself.

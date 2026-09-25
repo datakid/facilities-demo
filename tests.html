@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meridian Studio · engine tests</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body{padding:32px;max-width:860px;margin:0 auto}
+    li{font-size:var(--fs-sm);padding:4px 0;border-bottom:1px solid var(--line);list-style:none;display:flex;gap:10px}
+    ul{padding:0}.p{color:var(--ok-k)}.f{color:var(--bad-k);font-weight:600}
+  </style>
+</head>
+<body>
+  <h1 style="font:italic 400 28px var(--serif)">Engine tests</h1>
+  <p id="summary" class="muted">Running…</p>
+  <ul id="list"></ul>
+  <script src="js/core.js"></script>
+  <script src="js/templates.js"></script>
+  <script src="js/engine-tests.js"></script>
+</body>
+</html>

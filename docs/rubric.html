@@ -1,0 +1,2758 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rubric — weighted ranking workbench</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23faf8f5'/%3E%3Ccircle cx='16' cy='16' r='11' fill='%23221f2b'/%3E%3Crect x='10' y='12' width='4' height='10' fill='%23faf8f5'/%3E%3Crect x='15' y='15' width='4' height='7' fill='%23faf8f5'/%3E%3Crect x='20' y='18' width='4' height='4' fill='%23faf8f5'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#6b5596">
+<style>
+:root{
+--paper:#faf8f5;--paper-2:#f3efe9;--surface:rgba(255,255,255,.72);
+--ink:#221f2b;--ink-mu:#6a6478;--ink-fa:#9a93a6;
+--line:rgba(34,31,43,.10);--line-2:rgba(34,31,43,.18);
+--accent:#6b5596;--accent-soft:rgba(107,85,150,.12);--focus:#8a6fc0;
+--ok:#4e8f6d;--warn:#b08034;--bad:#b05a52;
+--c1:#6d8cb0;--c2:#8d79ad;--c3:#7fa08a;--c4:#c08a6a;--c5:#6f9aa3;--c6:#a8829b;--c7:#9a9367;--c8:#7b8fa8;
+--serif:Fraunces,'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
+--sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,'Helvetica Neue',Arial,sans-serif;
+--mono:'JetBrains Mono','SF Mono',Menlo,Consolas,'Liberation Mono',monospace;
+--r1:14px;--r2:20px;--r3:28px;
+}
+[data-theme="dark"]{
+--paper:#17151c;--paper-2:#1e1b24;--surface:rgba(255,255,255,.06);
+--ink:#f1eef6;--ink-mu:#b6afc6;--ink-fa:#847d94;
+--line:rgba(255,255,255,.10);--line-2:rgba(255,255,255,.16);
+--accent:#a58bd6;--accent-soft:rgba(165,139,214,.16);--focus:#c3aef0;
+--ok:#6db38c;--warn:#d3a15c;--bad:#d18178;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3,.serif{font-family:var(--serif)}
+.mono,input,select,td,.num{font-family:var(--mono)}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--accent)}
+.hidden,[hidden]{display:none!important}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+
+header{position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:14px;padding:10px 18px;
+background:var(--surface);backdrop-filter:blur(18px) saturate(1.15);-webkit-backdrop-filter:blur(18px) saturate(1.15);
+border-bottom:1px solid var(--line);box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
+[data-theme="dark"] header{box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.brand{display:flex;align-items:baseline;gap:8px;margin-right:auto}
+.brand b{font-family:var(--serif);font-size:17px;font-weight:600}
+.brand span{color:var(--ink-fa);font-size:11.5px}
+nav.tabs{display:flex;gap:2px;background:var(--paper-2);border:1px solid var(--line);border-radius:999px;padding:3px}
+nav.tabs button{border:none;background:none;padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:600;color:var(--ink-mu)}
+nav.tabs button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.iconbtn{border:1px solid var(--line-2);background:var(--surface);border-radius:10px;padding:7px 10px;font-size:12px;font-weight:600;color:var(--ink-mu)}
+.iconbtn:hover{color:var(--ink);border-color:var(--ink-fa)}
+.iconbtn:disabled{opacity:.35;cursor:default}
+select.hdr{border:1px solid var(--line-2);background:var(--surface);border-radius:10px;padding:7px 10px;font-size:12px}
+#testBadge{font-family:var(--mono);font-size:11px;color:var(--ink-fa);padding:4px 8px}
+#testBadge:empty{display:none}
+
+main{max-width:1180px;margin:0 auto;padding:22px 18px 80px}
+.view h1{font-size:22px;margin:0 0 2px}
+.viewsub{color:var(--ink-mu);font-size:12.5px;margin:0 0 20px}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r2);padding:16px}
+.toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.btn{border:1px solid var(--line-2);background:var(--paper-2);color:var(--ink);border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:600}
+.btn:hover{border-color:var(--ink-fa)}
+.btn.primary{background:var(--accent);border-color:transparent;color:#fff}
+.btn.ghost{background:none}
+.btn:disabled{opacity:.4;cursor:default}
+
+.gridwrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r1)}
+table.grid{border-collapse:collapse;width:100%;background:var(--paper)}
+table.grid th,table.grid td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:0;white-space:nowrap}
+table.grid th{background:var(--paper-2);text-align:left;font-size:11px;color:var(--ink-mu);font-weight:700;padding:8px 10px;position:sticky;top:0}
+table.grid td.lbl,table.grid th.lbl{position:sticky;left:0;background:var(--paper-2);z-index:2;min-width:160px}
+table.grid td{font-family:var(--mono);font-size:12.5px;text-align:right;min-width:90px}
+table.grid td.lbl{text-align:left;font-family:var(--sans)}
+table.grid .cellbox{padding:7px 10px;outline:none}
+table.grid .cellbox.missing{color:var(--ink-fa);font-style:italic}
+table.grid td.sel .cellbox{outline:2px solid var(--focus);outline-offset:-2px;border-radius:4px}
+table.grid input.cellinput{width:100%;border:none;background:var(--accent-soft);padding:7px 10px;font:inherit;text-align:inherit;outline:2px solid var(--focus)}
+table.grid th .colhead{display:flex;align-items:center;justify-content:space-between;gap:6px}
+table.grid th .colhead small{color:var(--ink-fa);font-weight:500}
+table.grid button.mini{border:none;background:none;color:var(--ink-fa);font-size:13px;padding:0 2px;line-height:1}
+table.grid button.mini:hover{color:var(--bad)}
+
+.criteria-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.ccard{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--r2);padding:16px}
+.ccard .copyglyph{position:absolute;top:12px;right:12px;border:1px solid var(--line-2);background:var(--paper);border-radius:8px;width:26px;height:26px;font-size:12px;color:var(--ink-mu);display:flex;align-items:center;justify-content:center}
+.ccard .copyglyph:hover{color:var(--ink);border-color:var(--ink-fa)}
+.ccard h3{margin:0 0 8px;padding-right:32px}
+.ccard input.field,.ccard select.field,.ccard textarea.field{width:100%;border:1px solid var(--line-2);background:var(--paper);border-radius:8px;padding:6px 9px;font-size:12.5px;margin:2px 0 8px}
+.ccard label.flabel{display:block;font-size:11px;color:var(--ink-mu);font-weight:600;margin-top:6px}
+.badge{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.badge.rel{background:var(--accent-soft);color:var(--accent)}
+.badge.abs{background:var(--paper-2);color:var(--ink-mu)}
+.dirtoggle{display:flex;border:1px solid var(--line-2);border-radius:999px;overflow:hidden;width:fit-content}
+.dirtoggle button{border:none;background:var(--paper);padding:5px 12px;font-size:11.5px;font-weight:700;color:var(--ink-mu)}
+.dirtoggle button.on{background:var(--accent);color:#fff}
+.paramrow{display:flex;gap:8px}
+.paramrow>div{flex:1}
+.curveplot{width:100%;height:auto;margin:8px 0}
+.curveplot .axis{stroke:var(--line-2);stroke-width:1}
+.curveplot .curve{stroke:var(--accent);stroke-width:2;fill:none}
+.curveplot .dot{fill:var(--ink-mu);opacity:.6}
+.curveplot .bar{fill:var(--accent-soft);stroke:var(--accent)}
+.weightreadout{display:flex;justify-content:space-between;align-items:baseline;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.weightreadout b{font-family:var(--mono);font-size:16px}
+
+.modalbg{position:fixed;inset:0;z-index:70;background:rgba(20,17,26,.4);display:flex;align-items:center;justify-content:center;padding:20px}
+[data-theme="dark"] .modalbg{background:rgba(0,0,0,.6)}
+.modal{background:var(--paper);border:1px solid var(--line-2);border-radius:var(--r2);padding:20px;max-width:640px;width:100%;max-height:82vh;overflow:auto;
+backdrop-filter:blur(18px) saturate(1.15);box-shadow:0 30px 60px -20px rgba(0,0,0,.4)}
+.modal h2{margin:0 0 4px;font-size:18px}
+.modal table{width:100%;border-collapse:collapse;margin:12px 0}
+.modal th,.modal td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);font-size:12.5px}
+.modal .mactions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:80;background:var(--ink);color:var(--paper);
+border-radius:999px;padding:10px 20px;font-size:12.5px;font-weight:600;box-shadow:0 18px 40px -18px rgba(0,0,0,.5)}
+[data-theme="dark"] .toast{background:var(--paper-2);color:var(--ink);border:1px solid var(--line-2)}
+.toast[hidden]{display:none}
+
+.tooltip{position:fixed;z-index:75;pointer-events:none;background:var(--surface);backdrop-filter:blur(18px);border:1px solid var(--line-2);
+border-radius:10px;padding:6px 10px;font-size:11.5px;box-shadow:0 12px 30px -14px rgba(0,0,0,.5)}
+.tooltip[hidden]{display:none}
+
+.banner{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--accent-soft);border:1px solid var(--line-2);
+border-radius:var(--r1);padding:10px 14px;font-size:12.5px;margin-bottom:16px}
+.banner button{border:none;background:none;color:var(--ink-mu);font-size:16px;line-height:1}
+
+.methodtabs{display:flex;gap:2px;background:var(--paper-2);border:1px solid var(--line);border-radius:999px;padding:3px;width:fit-content;margin-bottom:14px}
+.methodtabs button{border:none;background:none;padding:6px 13px;border-radius:999px;font-size:12px;font-weight:600;color:var(--ink-mu)}
+.methodtabs button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.wsummary{margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
+.weightbar{display:flex;height:28px;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+.weightbar span{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;overflow:hidden;white-space:nowrap}
+.deltalist{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0}
+.deltalist .dchip{font-family:var(--mono);font-size:11.5px;background:var(--paper-2);border-radius:8px;padding:5px 9px}
+.deltalist .dchip b{color:var(--ink)}
+.presetlist{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.presetrow{display:flex;align-items:center;gap:8px;background:var(--paper-2);border-radius:8px;padding:6px 10px;font-size:12.5px}
+.presetrow .presetname{flex:1;font-weight:600}
+.directrow{display:grid;grid-template-columns:140px 1fr 60px 70px 60px;align-items:center;gap:10px;padding:6px 0}
+.directrow input[type="range"]{width:100%}
+.directrow input[type="number"]{width:100%;border:1px solid var(--line-2);border-radius:6px;padding:4px 6px}
+.rocrow{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--paper-2);border-radius:8px;margin-bottom:6px}
+.rocrow .rocw{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--ink-mu)}
+.ahppair{text-align:center;padding:20px 0}
+.ahppair .pairnames{display:flex;justify-content:space-between;font-weight:700;font-size:13px;margin-bottom:10px}
+.ahppair input[type="range"]{width:100%}
+.ahpnav{display:flex;justify-content:space-between;align-items:center;margin-top:14px}
+.ahpresult{margin-top:16px;padding:14px;border-radius:10px;background:var(--paper-2)}
+.ahpresult.cr-bad{background:rgba(176,90,82,.12)}
+.ranklist{display:flex;flex-direction:column;gap:8px}
+.rankrow{background:var(--surface);border:1px solid var(--line);border-radius:var(--r1);padding:10px 14px}
+.rankrow .rankhead{display:flex;align-items:center;gap:12px;cursor:pointer}
+.rankrow .rn{font-family:var(--mono);font-size:15px;color:var(--ink-mu);width:22px}
+.rankrow .rl{flex:1;font-weight:700}
+.rankrow .rt{font-family:var(--mono);font-size:15px}
+.contribbar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:6px}
+.rankbreakdown{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:12.5px}
+.rankbreakdown table{width:100%;border-collapse:collapse}
+.rankbreakdown td,.rankbreakdown th{padding:4px 6px;text-align:right;font-family:var(--mono);font-size:11.5px}
+.rankbreakdown td:first-child,.rankbreakdown th:first-child{text-align:left;font-family:var(--sans)}
+.h2h{margin:16px 0;padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r1)}
+.h2h .h2hrow{display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px;border-bottom:1px dashed var(--line)}
+.exsection{margin-top:20px}
+.exrow{background:var(--surface);border:1px solid var(--line);border-radius:var(--r1);padding:10px 14px;margin-bottom:6px;font-size:12.5px}
+.notesfoot{margin-top:20px;padding:14px;background:var(--paper-2);border-radius:var(--r1);font-size:12px;color:var(--ink-mu)}
+.notesfoot li{margin-bottom:4px}
+.pinbtn{border:1px solid var(--line-2);background:var(--paper);border-radius:6px;font-size:10.5px;padding:3px 8px;font-weight:700}
+.pinbtn.on{background:var(--accent);color:#fff;border-color:transparent}
+
+@media print{
+header,nav.tabs,.toolbar,.iconbtn,.skiplink,.toast,#modalRoot,.tooltip,.copyglyph,.pinbtn{display:none!important}
+main{max-width:none;padding:0}
+:root{--paper:#fff;--ink:#111;--ink-mu:#444;--line:#ccc;--surface:#fff}
+body{background:#fff;color:#111}
+.panel{border-color:#ccc;background:#fff}
+a{color:#111;text-decoration:underline}
+}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.cellbox:focus-visible{outline:2px solid var(--focus);outline-offset:-2px;border-radius:4px}
+.skiplink{position:fixed;left:-999px;top:8px;z-index:100;background:var(--accent);color:#fff;padding:8px 14px;border-radius:8px;font-size:12.5px;font-weight:700}
+.skiplink:focus{left:8px}
+
+@media (prefers-reduced-motion:reduce){
+*{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<body>
+<a href="#main" class="skiplink">Skip to content</a>
+
+<header>
+<div class="brand"><b>Rubric</b><span>weighted ranking workbench</span></div>
+<nav class="tabs" id="tabs">
+<button data-view="data" class="on">Data</button>
+<button data-view="criteria">Criteria</button>
+<button data-view="weights">Weights</button>
+<button data-view="rank">Rank</button>
+<button data-view="stress">Stress</button>
+<button data-view="record">Record</button>
+</nav>
+<select class="hdr" id="exampleSel">
+<option value="">Load example\u2026</option>
+</select>
+<button class="iconbtn" id="undoBtn" title="Undo">Undo</button>
+<button class="iconbtn" id="redoBtn" title="Redo">Redo</button>
+<button class="iconbtn" id="themeBtn" title="Toggle dark theme">Dark</button>
+<span id="testBadge"></span>
+</header>
+
+<main id="main">
+<div id="banner"></div>
+<section class="view" id="v-data" hidden></section>
+<section class="view" id="v-criteria" hidden></section>
+<section class="view" id="v-weights" hidden></section>
+<section class="view" id="v-rank" hidden></section>
+<section class="view" id="v-stress" hidden></section>
+<section class="view" id="v-record" hidden></section>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="tooltip" id="tooltip" hidden></div>
+<div id="modalRoot"></div>
+
+<script>
+
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const sum=a=>a.reduce((x,y)=>x+y,0);
+function fmt(n,decimals=1,unit=''){
+if(n===null||n===undefined||Number.isNaN(n))return '\u2014';
+const s=Number(n).toLocaleString('en-US',{minimumFractionDigits:decimals,maximumFractionDigits:decimals});
+return unit?s+' '+unit:s;
+}
+let _uidN=0;
+function uid(prefix='id'){_uidN+=1;return prefix+'_'+Date.now().toString(36)+'_'+_uidN.toString(36);}
+function deepClone(o){return typeof structuredClone==='function'?structuredClone(o):JSON.parse(JSON.stringify(o));}
+function download(filename,text,mime='text/plain'){
+const blob=new Blob([text],{type:mime});
+const url=URL.createObjectURL(blob);
+const a=document.createElement('a');
+a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+URL.revokeObjectURL(url);
+}
+function copyText(text){
+const fallback=()=>new Promise((resolve,reject)=>{
+const ta=document.createElement('textarea');
+ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+document.body.appendChild(ta);ta.select();
+try{document.execCommand('copy');resolve()}catch(e){reject(e)}
+ta.remove();
+});
+if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(text).catch(fallback);
+return fallback();
+}
+let _toastTimer=0;
+function toast(msg,ms=2000){
+const el=$('#toast');
+if(!el)return;
+el.textContent=msg;
+el.hidden=false;
+clearTimeout(_toastTimer);
+_toastTimer=setTimeout(()=>{el.hidden=true},ms);
+}
+
+
+const NORMALIZERS={
+linear:{
+id:'linear',label:'Linear',blurb:'Scales between the lowest and highest value in the current option set.',
+params:[],needs:'numeric',
+fn(x,p,stats){
+if(stats.max===stats.min)return{v:0.5,flag:'No variation across options for this criterion.'};
+return{v:clamp((x-stats.min)/(stats.max-stats.min),0,1),flag:null};
+},
+inverse(v,p,stats){if(stats.max===stats.min)return null;return stats.min+v*(stats.max-stats.min);},
+latex(p,stats){return`\\frac{x - ${stats.min}}{${stats.max} - ${stats.min}}`;},
+plain(p,stats){return`(x \u2212 ${stats.min}) / (${stats.max} \u2212 ${stats.min})`;},
+sheet(p,stats,ref){return`=(${ref}-${stats.min})/(${stats.max}-${stats.min})`;}
+},
+'fixed-linear':{
+id:'fixed-linear',label:'Fixed range',blurb:'Scales between two bounds you set, regardless of the current option set.',
+params:[{key:'lo',label:'Low bound',type:'number',default:0},{key:'hi',label:'High bound',type:'number',default:1}],
+needs:'numeric',
+fn(x,p){
+const raw=(x-p.lo)/(p.hi-p.lo);
+const v=clamp(raw,0,1);
+return{v,flag:(raw<0||raw>1)?'Clamped to the fixed range.':null};
+},
+inverse(v,p){return p.lo+v*(p.hi-p.lo);},
+latex(p){return`\\mathrm{clamp}\\left(\\frac{x - ${p.lo}}{${p.hi} - ${p.lo}}, 0, 1\\right)`;},
+plain(p){return`clamp((x \u2212 ${p.lo}) / (${p.hi} \u2212 ${p.lo}), 0, 1)`;},
+sheet(p,stats,ref){return`=MIN(1,MAX(0,(${ref}-${p.lo})/(${p.hi}-${p.lo})))`;}
+},
+decay:{
+id:'decay',label:'Decay',blurb:'Falls off smoothly from 1, halving every stated half-life.',
+params:[{key:'halfLife',label:'Half-life',type:'number',default:10}],
+needs:'numeric',
+fn(x,p){const lambda=p.halfLife/Math.LN2;return{v:Math.exp(-x/lambda),flag:null};},
+inverse(v,p){if(v<=0||v>1)return null;const lambda=p.halfLife/Math.LN2;return -lambda*Math.log(v);},
+latex(p){return`e^{-x / \\lambda},\\ \\lambda = \\frac{${p.halfLife}}{\\ln 2}`;},
+plain(p){return`e^(\u2212x / \u03bb), \u03bb = half-life \u00f7 ln 2 = ${(p.halfLife/Math.LN2).toFixed(2)}`;},
+sheet(p,stats,ref){return`=EXP(-${ref}/${(p.halfLife/Math.LN2).toFixed(4)})`;}
+},
+logistic:{
+id:'logistic',label:'Logistic',blurb:'S-curve centred on a midpoint, controlled by a 10\u201390% width.',
+params:[{key:'midpoint',label:'Midpoint',type:'number',default:0},{key:'width',label:'10\u201390% width',type:'number',default:1}],
+needs:'numeric',
+fn(x,p){const k=Math.log(81)/p.width;return{v:1/(1+Math.exp(-k*(x-p.midpoint))),flag:null};},
+inverse(v,p){if(v<=0||v>=1)return null;const k=Math.log(81)/p.width;return p.midpoint-Math.log(1/v-1)/k;},
+latex(p){return`\\frac{1}{1+e^{-k(x-${p.midpoint})}},\\ k=\\frac{\\ln 81}{${p.width}}`;},
+plain(p){return`1 / (1 + e^(\u2212k(x \u2212 ${p.midpoint}))), k = ln81 \u00f7 ${p.width}`;},
+sheet(p,stats,ref){const k=(Math.log(81)/p.width).toFixed(6);return`=1/(1+EXP(-${k}*(${ref}-${p.midpoint})))`;}
+},
+'target-band':{
+id:'target-band',label:'Target band',blurb:'Full points at an ideal value, falling off linearly within a tolerance.',
+params:[{key:'ideal',label:'Ideal value',type:'number',default:0},{key:'tol',label:'Tolerance',type:'number',default:1}],
+needs:'numeric',
+fn(x,p){return{v:1-Math.min(1,Math.abs(x-p.ideal)/p.tol),flag:null};},
+inverse(){return null;},
+latex(p){return`1 - \\min\\left(1, \\frac{|x-${p.ideal}|}{${p.tol}}\\right)`;},
+plain(p){return`1 \u2212 min(1, |x \u2212 ${p.ideal}| / ${p.tol})`;},
+sheet(p,stats,ref){return`=1-MIN(1,ABS(${ref}-${p.ideal})/${p.tol})`;}
+},
+'target-soft':{
+id:'target-soft',label:'Target (soft)',blurb:'Bell curve peaking at an ideal value, width set by sigma.',
+params:[{key:'ideal',label:'Ideal value',type:'number',default:0},{key:'sigma',label:'Sigma',type:'number',default:1}],
+needs:'numeric',
+fn(x,p){return{v:Math.exp(-Math.pow((x-p.ideal)/p.sigma,2)),flag:null};},
+inverse(){return null;},
+latex(p){return`e^{-\\left(\\frac{x-${p.ideal}}{${p.sigma}}\\right)^2}`;},
+plain(p){return`e^(\u2212((x \u2212 ${p.ideal}) / ${p.sigma})\u00b2)`;},
+sheet(p,stats,ref){return`=EXP(-(((${ref}-${p.ideal})/${p.sigma})^2))`;}
+},
+step:{
+id:'step',label:'Step',blurb:'Piecewise-constant value that changes at your breakpoints.',
+params:[{key:'breakpoints',label:'Breakpoints',type:'breakpoints',default:[]}],
+needs:'numeric',
+fn(x,p){
+const bps=[...(p.breakpoints||[])].sort((a,b)=>a.at-b.at);
+let v=bps.length?bps[0].v:0;
+for(const b of bps){if(x>=b.at)v=b.v;else break;}
+return{v:clamp(v,0,1),flag:null};
+},
+inverse(){return null;},
+latex(p){return`\\text{piecewise constant over }${(p.breakpoints||[]).length}\\text{ breakpoints}`;},
+plain(){return`piecewise constant over user breakpoints`;},
+sheet(p,stats,ref){
+const bps=[...(p.breakpoints||[])].sort((a,b)=>a.at-b.at);
+return`=LOOKUP(${ref},{${bps.map(b=>b.at).join(',')}},{${bps.map(b=>b.v).join(',')}})`;
+}
+},
+'log-linear':{
+id:'log-linear',label:'Log-linear',blurb:'Linear on a log scale between the lowest and highest value.',
+params:[],needs:'numeric',
+fn(x,p,stats){
+if(x<=0)throw new Error('log-linear requires x > 0');
+if(stats.min<=0)throw new Error('log-linear requires all values > 0');
+if(stats.max===stats.min)return{v:0.5,flag:'No variation across options for this criterion.'};
+return{v:(Math.log(x)-Math.log(stats.min))/(Math.log(stats.max)-Math.log(stats.min)),flag:null};
+},
+inverse(v,p,stats){if(stats.max===stats.min)return null;return Math.exp(Math.log(stats.min)+v*(Math.log(stats.max)-Math.log(stats.min)));},
+latex(p,stats){return`\\frac{\\ln x - \\ln ${stats.min}}{\\ln ${stats.max} - \\ln ${stats.min}}`;},
+plain(p,stats){return`(ln x \u2212 ln ${stats.min}) / (ln ${stats.max} \u2212 ln ${stats.min})`;},
+sheet(p,stats,ref){return`=(LN(${ref})-LN(${stats.min}))/(LN(${stats.max})-LN(${stats.min}))`;}
+},
+percentile:{
+id:'percentile',label:'Percentile',blurb:'Rank among the current options, 0 for lowest, 1 for highest, tied ranks averaged.',
+params:[],needs:'numeric',
+fn(x,p,stats){
+const vals=stats.values,n=vals.length;
+if(n<=1)return{v:0.5,flag:'No variation across options for this criterion.'};
+const sorted=[...vals].sort((a,b)=>a-b);
+let sumRank=0,count=0;
+sorted.forEach((v,i)=>{if(v===x){sumRank+=(i+1);count++;}});
+const avgRank=sumRank/count;
+return{v:(avgRank-1)/(n-1),flag:null};
+},
+inverse(){return null;},
+latex(){return`\\frac{\\mathrm{rank}(x) - 1}{n - 1}`;},
+plain(){return`(rank \u2212 1) / (n \u2212 1), average rank for ties`;},
+sheet(p,stats,ref){return`=(RANK.AVG(${ref},$criterion_range,1)-1)/(${Math.max(1,stats.values.length-1)})`;}
+},
+categorical:{
+id:'categorical',label:'Categorical',blurb:'An explicit points value for each named category.',
+params:[{key:'map',label:'Category map',type:'map',default:{}}],
+needs:'categorical',
+fn(x,p){
+if(Object.prototype.hasOwnProperty.call(p.map||{},x))return{v:p.map[x],flag:null};
+return{v:null,flag:'Unmapped category value.'};
+},
+inverse(v,p){
+for(const k in(p.map||{}))if(p.map[k]===v)return k;
+return null;
+},
+latex(){return`\\text{map}(x)`;},
+plain(){return`explicit category \u2192 value map`;},
+sheet(p,stats,ref){return`=VLOOKUP(${ref},category_map_range,2,FALSE)`;}
+},
+boolean:{
+id:'boolean',label:'Boolean',blurb:'True earns full points, false earns none.',
+params:[],needs:'boolean',
+fn(x){
+if(x===true)return{v:1,flag:null};
+if(x===false)return{v:0,flag:null};
+return{v:null,flag:'Boolean value expected.'};
+},
+inverse(v){return v>=0.5;},
+latex(){return`[x]`;},
+plain(){return`true \u2192 1, false \u2192 0`;},
+sheet(p,stats,ref){return`=IF(${ref},1,0)`;}
+}
+};
+
+
+function isMissingVal(v){
+return v===null||v===''||v===undefined||(typeof v==='number'&&Number.isNaN(v));
+}
+function evalCondition(cond,option){
+switch(cond.t){
+case'all':return cond.of.every(c=>evalCondition(c,option));
+case'any':return cond.of.some(c=>evalCondition(c,option));
+case'not':return!evalCondition(cond.of[0],option);
+case'cmp':{
+const v=option.values[cond.criterion];
+switch(cond.op){
+case'<':return v<cond.value;
+case'<=':return v<=cond.value;
+case'>':return v>cond.value;
+case'>=':return v>=cond.value;
+case'==':return v===cond.value;
+case'!=':return v!==cond.value;
+default:return false;
+}
+}
+case'between':{const v=option.values[cond.criterion];return v>=cond.lo&&v<=cond.hi;}
+case'in':{const v=option.values[cond.criterion];return cond.values.includes(v);}
+case'tag':return(option.tags||[]).includes(cond.value);
+case'missing':{const v=option.values[cond.criterion];return isMissingVal(v);}
+default:return false;
+}
+}
+
+const ENGINE={
+score(model){
+const notes=[];
+const imputations=[];
+
+const stats={};
+model.criteria.forEach(cr=>{
+const vals=model.options.map(o=>o.values[cr.id]).filter(v=>!isMissingVal(v));
+const numericVals=vals.filter(v=>typeof v==='number');
+stats[cr.id]={
+min:numericVals.length?Math.min(...numericVals):undefined,
+max:numericVals.length?Math.max(...numericVals):undefined,
+mean:numericVals.length?sum(numericVals)/numericVals.length:undefined,
+n:vals.length,
+values:vals
+};
+});
+
+const excludeOptionIds=new Set();
+const incomplete=[];
+const normValues={};
+
+model.options.forEach(opt=>{
+normValues[opt.id]={};
+const missingCrits=[];
+model.criteria.forEach(cr=>{
+const raw=opt.values[cr.id];
+let missing=isMissingVal(raw);
+const norm=NORMALIZERS[cr.scale.kind];
+let v=null,flag=null;
+if(!missing){
+try{
+const r=norm.fn(raw,cr.scale.params||{},stats[cr.id]);
+v=r.v;flag=r.flag;
+if(v===null)missing=true;
+}catch(e){
+missing=true;
+flag=e.message;
+}
+}
+if(missing){
+missingCrits.push(cr.id);
+const policy=cr.missing;
+if(policy==='worst'){v=0;imputations.push({optionId:opt.id,criterionId:cr.id,policy,valueUsed:0});}
+else if(policy==='neutral'){v=0.5;imputations.push({optionId:opt.id,criterionId:cr.id,policy,valueUsed:0.5});}
+else if(policy==='best'){v=1;imputations.push({optionId:opt.id,criterionId:cr.id,policy,valueUsed:1});}
+else if(policy==='redistribute'){v=null;imputations.push({optionId:opt.id,criterionId:cr.id,policy,valueUsed:null});}
+else{v=null;imputations.push({optionId:opt.id,criterionId:cr.id,policy:'exclude-option',valueUsed:null});}
+}else{
+if(flag)notes.push(`${cr.label}: ${flag} (${opt.label})`);
+if(cr.direction==='min'&&cr.scale.kind!=='decay'&&cr.scale.kind!=='target-band'){
+v=1-v;
+}
+}
+normValues[opt.id][cr.id]=v;
+});
+const excludeHit=missingCrits.some(cid=>{
+const cr=model.criteria.find(c=>c.id===cid);
+return cr&&cr.missing==='exclude-option';
+});
+if(excludeHit){
+excludeOptionIds.add(opt.id);
+incomplete.push({option:opt,missing:missingCrits});
+}
+});
+
+const excluded=[];
+const softPenalties={};
+const gatedOptionIds=new Set();
+model.options.forEach(opt=>{
+if(excludeOptionIds.has(opt.id))return;
+for(const g of model.gates){
+const pass=evalCondition(g.when,opt);
+if(!pass){
+if(g.severity==='hard'){
+excluded.push({option:opt,gate:g.label,message:g.message});
+gatedOptionIds.add(opt.id);
+break;
+}else{
+softPenalties[opt.id]=(softPenalties[opt.id]||0)+(g.penalty||0);
+}
+}
+}
+});
+
+const rankable=model.options.filter(o=>!excludeOptionIds.has(o.id)&&!gatedOptionIds.has(o.id));
+const weightSum=sum(model.criteria.map(c=>c.weight))||1;
+
+const scored=rankable.map(opt=>{
+const critList=model.criteria;
+const nullCrits=critList.filter(c=>normValues[opt.id][c.id]===null);
+const weights={};
+if(nullCrits.length){
+const remaining=critList.filter(c=>normValues[opt.id][c.id]!==null);
+const remSum=sum(remaining.map(c=>c.weight))||1;
+remaining.forEach(c=>{weights[c.id]=c.weight/remSum*100;});
+nullCrits.forEach(c=>{weights[c.id]=0;});
+notes.push(`${opt.label}: weights redistributed over ${remaining.length} of ${critList.length} criteria; score not directly comparable.`);
+}else{
+critList.forEach(c=>{weights[c.id]=c.weight/weightSum*100;});
+}
+
+const wFrac={};critList.forEach(c=>{wFrac[c.id]=weights[c.id]/100;});
+const contributions={};
+let total;
+const p=model.aggregate.kind==='topsis'?1:model.aggregate.p;
+
+if(p===0){
+let prod=1;
+critList.forEach(c=>{
+const v=normValues[opt.id][c.id];
+if(v===null){contributions[c.id]={v:null,weighted:0,pctOfTotal:0};return;}
+const vv=Math.max(v,0.001);
+prod*=Math.pow(vv,wFrac[c.id]);
+contributions[c.id]={v,weighted:wFrac[c.id]*vv,pctOfTotal:0};
+});
+total=prod;
+}else{
+let floored=false,s=0;
+critList.forEach(c=>{
+const v=normValues[opt.id][c.id];
+if(v===null){contributions[c.id]={v:null,weighted:0,pctOfTotal:0};return;}
+let vv=v;
+if(p<0&&vv<0.001){vv=0.001;floored=true;}
+const term=wFrac[c.id]*Math.pow(vv,p);
+s+=term;
+contributions[c.id]={v,weighted:wFrac[c.id]*vv,pctOfTotal:0};
+});
+if(floored)notes.push('values floored at 0.001 for p \u2264 0');
+total=Math.pow(s,1/p);
+}
+
+const penalty=softPenalties[opt.id]||0;
+const totalPts=clamp(total*100-penalty,0,100);
+const wsum=sum(Object.values(contributions).map(c=>c.weighted))||1;
+Object.values(contributions).forEach(c=>{c.pctOfTotal=totalPts?c.weighted/wsum*100:0;});
+
+return{option:opt,total:totalPts,rank:0,tied:false,contributions,
+penalties:penalty?[{gate:'soft gate(s)',points:penalty}]:[],softNotes:[]};
+});
+
+if(model.aggregate.kind==='topsis'){
+const crit=model.criteria;
+const y={};
+rankable.forEach(opt=>{
+y[opt.id]={};
+crit.forEach(c=>{
+const v=normValues[opt.id][c.id];
+y[opt.id][c.id]=(v===null?0:v)*(c.weight/weightSum);
+});
+});
+const ideal={},antiIdeal={};
+crit.forEach(c=>{
+const colVals=rankable.map(o=>y[o.id][c.id]);
+ideal[c.id]=colVals.length?Math.max(...colVals):0;
+antiIdeal[c.id]=colVals.length?Math.min(...colVals):0;
+});
+scored.forEach(s=>{
+let dPos=0,dNeg=0;
+crit.forEach(c=>{
+dPos+=Math.pow(y[s.option.id][c.id]-ideal[c.id],2);
+dNeg+=Math.pow(y[s.option.id][c.id]-antiIdeal[c.id],2);
+});
+dPos=Math.sqrt(dPos);dNeg=Math.sqrt(dNeg);
+const C=(dPos+dNeg)?dNeg/(dPos+dNeg):0;
+const penalty=softPenalties[s.option.id]||0;
+s.total=clamp(C*100-penalty,0,100);
+});
+}
+
+scored.sort((a,b)=>b.total-a.total);
+let rank=0,prevTotal=null;
+scored.forEach((s,i)=>{
+if(prevTotal===null||Math.abs(s.total-prevTotal)>1e-9){rank=i+1;}
+else{s.tied=true;scored[i-1].tied=true;}
+s.rank=rank;
+prevTotal=s.total;
+});
+if(model.aggregate.tiebreak&&model.aggregate.tiebreak.length){
+const groups={};
+scored.forEach(s=>{(groups[s.rank]=groups[s.rank]||[]).push(s);});
+Object.values(groups).forEach(g=>{
+if(g.length>1){
+g.sort((a,b)=>{
+for(const cid of model.aggregate.tiebreak){
+const av=normValues[a.option.id][cid]||0,bv=normValues[b.option.id][cid]||0;
+if(av!==bv)return bv-av;
+}
+return 0;
+});
+notes.push(`Tie among ${g.map(x=>x.option.label).join(', ')} broken by ${model.aggregate.tiebreak.join(', ')}.`);
+}
+});
+}
+
+const winner=scored[0]||null;
+const runnerUp=scored[1]||null;
+const margin=winner&&runnerUp?winner.total-runnerUp.total:null;
+let decisiveCriterion=null;
+if(winner&&runnerUp){
+let best=null,bv=-Infinity;
+model.criteria.forEach(c=>{
+const wc=winner.contributions[c.id],rc=runnerUp.contributions[c.id];
+const dv=(wc&&wc.v!==null?wc.pctOfTotal:0)-(rc&&rc.v!==null?rc.pctOfTotal:0);
+if(dv>bv){bv=dv;best=c;}
+});
+decisiveCriterion=best;
+}
+
+return{
+ranked:scored,excluded,incomplete,imputations,
+stats:{perCriterion:stats},notes,
+winner:winner?winner.option:null,
+runnerUp:runnerUp?runnerUp.option:null,
+margin,decisiveCriterion,
+marginPct:(winner&&runnerUp&&winner.total)?(margin/winner.total*100):null
+};
+}
+};
+
+
+const WEIGHTS={
+applyDirect(criteria,id,value){
+const target=criteria.find(c=>c.id===id);
+if(!target)return{ok:false,reason:'Unknown criterion.'};
+if(target.locked)return{ok:false,reason:'This weight is locked.'};
+value=clamp(Math.round(value),0,100);
+const lockedSum=sum(criteria.filter(c=>c.locked).map(c=>c.weight));
+const others=criteria.filter(c=>c.id!==id&&!c.locked);
+const remaining=100-lockedSum-value;
+const weights={};
+weights[id]=value;
+criteria.filter(c=>c.locked).forEach(c=>{weights[c.id]=c.weight;});
+if(remaining<-1e-9)return{ok:false,reason:'Locked weights plus this value exceed 100 points.'};
+if(!others.length){
+if(Math.abs(remaining)>0.5)return{ok:false,reason:'No unlocked criteria left to absorb the remaining '+Math.round(remaining)+' points.'};
+return{ok:true,weights};
+}
+const otherSum=sum(others.map(c=>c.weight));
+others.forEach(c=>{
+weights[c.id]=otherSum>0?Math.round(remaining*c.weight/otherSum*100)/100:Math.round(remaining/others.length*100)/100;
+});
+return{ok:true,weights};
+},
+equal(criteria){
+const n=criteria.length,weights={};
+if(!n)return weights;
+const base=Math.floor(100/n*100)/100;
+let assigned=0;
+criteria.forEach((c,i)=>{
+if(i<n-1){weights[c.id]=base;assigned+=base;}
+else weights[c.id]=Math.round((100-assigned)*100)/100;
+});
+return weights;
+},
+rankOrderCentroid(orderedIds){
+const n=orderedIds.length,weights={};
+if(!n)return weights;
+for(let i=1;i<=n;i++){
+let s=0;
+for(let k=i;k<=n;k++)s+=1/k;
+weights[orderedIds[i-1]]=Math.round((s/n)*10000)/100;
+}
+return weights;
+},
+allPairs(ids){
+const out=[];
+for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++)out.push({i,j});
+return out;
+},
+sliderToRatio(s){
+s=clamp(Math.round(s),-8,8);
+return s>=0?1+s:1/(1-s);
+},
+ratioToSlider(ratio){
+if(ratio>=1)return clamp(Math.round(ratio-1),0,8);
+return clamp(Math.round(1-1/ratio),-8,0);
+},
+eigenvector(matrix){
+const n=matrix.length;
+let v=new Array(n).fill(1/n);
+let iterations=0;
+for(let iter=0;iter<100;iter++){
+iterations=iter+1;
+const nv=matrix.map(row=>sum(row.map((val,j)=>val*v[j])));
+const s=sum(nv)||1;
+const normalized=nv.map(x=>x/s);
+const delta=sum(normalized.map((x,i)=>Math.abs(x-v[i])));
+v=normalized;
+if(delta<1e-10)break;
+}
+const Av=matrix.map(row=>sum(row.map((val,j)=>val*v[j])));
+const ratios=Av.map((av,i)=>v[i]>1e-12?av/v[i]:0);
+const lambdaMax=sum(ratios)/n;
+return{vector:v,lambdaMax,iterations};
+},
+consistency(n,lambdaMax){
+const RI=[0,0,0.58,0.90,1.12,1.24,1.32,1.41,1.45,1.49];
+const ri=(n>=1&&n<=10)?RI[n-1]:1.49;
+const CI=(lambdaMax-n)/((n-1)||1);
+const CR=ri>0?CI/ri:0;
+return{CI,CR,RI:ri};
+},
+pairwiseResult(ids,judgments){
+const n=ids.length;
+const matrix=Array.from({length:n},()=>new Array(n).fill(1));
+judgments.forEach(j=>{matrix[j.i][j.j]=j.ratio;matrix[j.j][j.i]=1/j.ratio;});
+const{vector,lambdaMax,iterations}=this.eigenvector(matrix);
+const{CI,CR,RI:ri}=this.consistency(n,lambdaMax);
+const weights={};
+ids.forEach((id,i)=>{weights[id]=Math.round(vector[i]*10000)/100;});
+const worst=judgments.map(j=>{
+const impliedRatio=vector[j.i]/(vector[j.j]||1e-12);
+const deviation=Math.abs(Math.log(j.ratio)-Math.log(Math.max(impliedRatio,1e-12)));
+return{i:j.i,j:j.j,idA:ids[j.i],idB:ids[j.j],ratio:j.ratio,impliedRatio,deviation};
+}).sort((a,b)=>b.deviation-a.deviation).slice(0,3);
+return{weights,lambdaMax,CI,CR,RI:ri,iterations,worst,n};
+}
+};
+
+
+function mulberry32(seed){
+let a=seed>>>0;
+return function(){
+a|=0;a=a+0x6D2B79F5|0;
+let t=Math.imul(a^a>>>15,1|a);
+t=t+Math.imul(t^t>>>7,61|t)^t;
+return((t^t>>>14)>>>0)/4294967296;
+};
+}
+function randNormal(rng){
+let u=0,v=0;
+while(u===0)u=rng();
+while(v===0)v=rng();
+return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+function contribV(result,optId,critId){
+const entry=result.ranked.find(s=>s.option.id===optId);
+if(!entry)return null;
+const c=entry.contributions[critId];
+return c&&c.v!==null?c.v:0;
+}
+function flipThresholdExact(model,result,critId,optA,optB){
+const base={};model.criteria.forEach(c=>{base[c.id]=c.weight;});
+const w0=base[critId];
+const S0=100-w0;
+const vA=contribV(result,optA,critId),vB=contribV(result,optB,critId);
+const dv=vA-vB;
+const others=model.criteria.filter(c=>c.id!==critId);
+let RA=0,RB=0,scaleBase=S0,redistributedEqually=false;
+if(S0<=1e-9){
+redistributedEqually=true;
+scaleBase=others.length||1;
+others.forEach(c=>{RA+=contribV(result,optA,c.id);RB+=contribV(result,optB,c.id);});
+}else{
+others.forEach(c=>{RA+=base[c.id]*contribV(result,optA,c.id);RB+=base[c.id]*contribV(result,optB,c.id);});
+}
+const dR=RA-RB;
+const denom=scaleBase*dv-dR;
+if(Math.abs(denom)<1e-9)return{tStar:null,inRange:false,redistributedEqually,label:'exact'};
+const t=-100*dR/denom;
+return{tStar:t,inRange:t>=0&&t<=100,redistributedEqually,label:'exact'};
+}
+function scoreWithCritAt(model,critId,t){
+const clone=deepClone(model);
+const before={};clone.criteria.forEach(c=>{before[c.id]=c.weight;});
+const w0=before[critId];
+const S0=100-w0;
+const others=clone.criteria.filter(c=>c.id!==critId);
+if(S0<=1e-9)others.forEach(c=>{c.weight=(100-t)/(others.length||1);});
+else others.forEach(c=>{c.weight=(100-t)*before[c.id]/S0;});
+clone.criteria.find(c=>c.id===critId).weight=t;
+return ENGINE.score(clone);
+}
+function flipThresholdNumeric(model,critId,optA,optB){
+function diffAt(t){
+const r=scoreWithCritAt(model,critId,t);
+const a=r.ranked.find(s=>s.option.id===optA),b=r.ranked.find(s=>s.option.id===optB);
+return(a?a.total:-1)-(b?b.total:-1);
+}
+let bracket=null,prev=diffAt(0),prevT=0;
+const steps=200;
+for(let i=1;i<=steps;i++){
+const tt=i*100/steps,cur=diffAt(tt);
+if((prev<0&&cur>=0)||(prev>0&&cur<=0)){bracket=[prevT,tt];break;}
+prev=cur;prevT=tt;
+}
+if(!bracket)return{tStar:null,inRange:false,label:'numerical'};
+let[a,b]=bracket,fa=diffAt(a);
+for(let i=0;i<60;i++){
+const mid=(a+b)/2,fm=diffAt(mid);
+if(fa*fm<=0)b=mid;else{a=mid;fa=fm;}
+}
+const t=(a+b)/2;
+return{tStar:t,inRange:t>=0&&t<=100,label:'numerical'};
+}
+function flipThreshold(model,result,critId,optA,optB){
+if(model.aggregate.kind==='power-mean'&&model.aggregate.p===1)return flipThresholdExact(model,result,critId,optA,optB);
+return flipThresholdNumeric(model,critId,optA,optB);
+}
+function closestFlip(model,result){
+if(!result.winner||result.ranked.length<2)return null;
+const winnerId=result.winner.id;
+let best=null;
+model.criteria.forEach(c=>{
+result.ranked.slice(1).forEach(s=>{
+const ft=flipThreshold(model,result,c.id,winnerId,s.option.id);
+if(ft.tStar!==null&&ft.inRange){
+const w0=c.weight,delta=Math.abs(ft.tStar-w0);
+if(!best||delta<best.delta)best={criterionId:c.id,delta,tStar:ft.tStar,w0,against:s.option.id};
+}
+});
+});
+return best;
+}
+function bisectRawForTarget(model,optId,critId,otherId){
+const vals=model.options.map(o=>o.values[critId]).filter(v=>typeof v==='number');
+if(!vals.length)return null;
+const lo0=Math.min(...vals),hi0=Math.max(...vals);
+const pad=(hi0-lo0)*0.5||Math.abs(lo0||1)*0.5;
+const lo=lo0-pad,hi=hi0+pad;
+function diffAt(x){
+const clone=deepClone(model);
+const o=clone.options.find(oo=>oo.id===optId);
+if(!o)return null;
+o.values[critId]=x;
+const r=ENGINE.score(clone);
+const a=r.ranked.find(s=>s.option.id===optId),b=r.ranked.find(s=>s.option.id===otherId);
+if(!a||!b)return null;
+return a.total-b.total;
+}
+let a=lo,b=hi,fa=diffAt(a),fb=diffAt(b);
+if(fa===null||fb===null||fa*fb>0)return null;
+for(let i=0;i<60;i++){
+const mid=(a+b)/2,fm=diffAt(mid);
+if(fa*fm<=0){b=mid;}else{a=mid;fa=fm;}
+}
+return(a+b)/2;
+}
+function inputTolerance(model,optId,critId,otherId){
+const cr=model.criteria.find(c=>c.id===critId);
+const opt=model.options.find(o=>o.id===optId);
+const currentRaw=opt.values[critId];
+if(typeof currentRaw!=='number')return{possible:false};
+const raw=bisectRawForTarget(model,optId,critId,otherId);
+if(raw===null)return{possible:false,currentRaw};
+return{possible:true,raw,currentRaw,delta:raw-currentRaw};
+}
+function monteCarlo(model,samples){
+samples=samples||2000;
+const seed=model.view.seed||1;
+const rng=mulberry32(seed);
+const active=model.criteria.filter(c=>c.uncertainty&&c.uncertainty.kind!=='none');
+if(!active.length)return null;
+const stats={};
+model.criteria.forEach(c=>{
+const vals=model.options.map(o=>o.values[c.id]).filter(v=>typeof v==='number');
+stats[c.id]={min:vals.length?Math.min(...vals):0,max:vals.length?Math.max(...vals):1};
+});
+const rankLists={};model.options.forEach(o=>{rankLists[o.id]=[];});
+for(let s=0;s<samples;s++){
+const clone=deepClone(model);
+clone.criteria.forEach(c=>{
+const unc=c.uncertainty;
+if(!unc||unc.kind==='none')return;
+const st=stats[c.id];
+const sigma=unc.kind==='abs'?unc.value:(unc.value/100)*((st.max-st.min)||1);
+clone.options.forEach(o=>{
+const base=o.values[c.id];
+if(typeof base!=='number')return;
+o.values[c.id]=clamp(base+randNormal(rng)*sigma,st.min,st.max);
+});
+});
+const r=ENGINE.score(clone);
+const ranked=new Set();
+r.ranked.forEach(entry=>{rankLists[entry.option.id].push(entry.rank);ranked.add(entry.option.id);});
+model.options.forEach(o=>{if(!ranked.has(o.id))rankLists[o.id].push(null);});
+}
+const byOption={};
+model.options.forEach(o=>{
+const ranks=rankLists[o.id].filter(r=>r!==null);
+if(!ranks.length){byOption[o.id]={pRank1:0,meanRank:null,p5:null,p95:null,excludedShare:1};return;}
+const sorted=[...ranks].sort((a,b)=>a-b);
+byOption[o.id]={
+pRank1:ranks.filter(r=>r===1).length/samples,
+meanRank:sum(ranks)/ranks.length,
+p5:sorted[Math.floor(0.05*(sorted.length-1))],
+p95:sorted[Math.floor(0.95*(sorted.length-1))],
+excludedShare:1-ranks.length/samples
+};
+});
+return{seed,samples,byOption};
+}
+function weightAgnosticRobustness(model,samples){
+samples=samples||5000;
+const seed=(model.view.seed||1)+777;
+const rng=mulberry32(seed);
+const locked=model.criteria.filter(c=>c.locked);
+const unlocked=model.criteria.filter(c=>!c.locked);
+const lockedSum=sum(locked.map(c=>c.weight));
+const budget=100-lockedSum;
+const wins={};model.options.forEach(o=>{wins[o.id]=0;});
+let validSamples=0;
+for(let s=0;s<samples;s++){
+const clone=deepClone(model);
+if(unlocked.length){
+const g=unlocked.map(()=>{let u=rng();if(u<=0)u=1e-12;return -Math.log(u);});
+const gs=sum(g)||1;
+unlocked.forEach((c,i)=>{clone.criteria.find(x=>x.id===c.id).weight=budget*(g[i]/gs);});
+}
+const r=ENGINE.score(clone);
+if(r.winner){wins[r.winner.id]=(wins[r.winner.id]||0)+1;validSamples++;}
+}
+const shares={};
+model.options.forEach(o=>{shares[o.id]=validSamples?wins[o.id]/validSamples:0;});
+return{samples,validSamples,shares};
+}
+function rankReversalCheck(model,result){
+const hasRelative=model.criteria.some(c=>['linear','log-linear','percentile'].includes(c.scale.kind));
+if(!hasRelative||!result.winner)return null;
+const winnerId=result.winner.id;
+const flips=[];
+model.options.forEach(o=>{
+if(o.id===winnerId)return;
+const clone=deepClone(model);
+clone.options=clone.options.filter(x=>x.id!==o.id);
+const r=ENGINE.score(clone);
+if(r.winner&&r.winner.id!==winnerId)flips.push({removed:o,newWinner:r.winner});
+});
+return flips.length?{triggered:true,flips}:null;
+}
+function flipSentence(model,cr,otherOpt,ft){
+if(ft.tStar===null||!ft.inRange)return'No weight for '+cr.label+' between 0 and 100 changes the winner.';
+return'The winner changes to '+otherOpt.label+' when '+cr.label+' exceeds '+ft.tStar.toFixed(1)+' points (currently '+cr.weight.toFixed(1)+').';
+}
+function closestFlipSentence(cf,model){
+if(!cf)return'No single weight change unseats the current winner within 0\u2013100 points.';
+const cr=model.criteria.find(c=>c.id===cf.criterionId);
+const d=cf.tStar-cf.w0;
+return'Closest flip: '+cr.label+', '+(d>=0?'+':'')+d.toFixed(1)+' points.';
+}
+function toleranceSentence(model,opt,cr,tol){
+if(!tol.possible)return opt.label+' has no '+cr.label+' value within the extended range that flips this ranking.';
+const dir=tol.raw>tol.currentRaw?'rises above':'falls below';
+return opt.label+' loses if its '+cr.label.toLowerCase()+' '+dir+' '+fmt(tol.raw,2,cr.unit)+' (currently '+fmt(tol.currentRaw,2,cr.unit)+').';
+}
+function robustnessSentence(shares,model){
+let best=null;
+Object.keys(shares).forEach(id=>{if(best===null||shares[id]>shares[best])best=id;});
+if(best===null)return'No option wins under any sampled weighting.';
+const opt=model.options.find(o=>o.id===best);
+return opt.label+' wins under '+(shares[best]*100).toFixed(0)+'% of all possible weightings.';
+}
+const ANALYSIS={
+mulberry32,randNormal,flipThreshold,flipThresholdExact,flipThresholdNumeric,
+closestFlip,inputTolerance,monteCarlo,weightAgnosticRobustness,rankReversalCheck,
+flipSentence,closestFlipSentence,toleranceSentence,robustnessSentence
+};
+
+
+function csvCell(s){
+s=String(s);
+if(/[",\n]/.test(s))return'"'+s.replace(/"/g,'""')+'"';
+return s;
+}
+const EXPORT={
+criterionFormats(cr,stats,colLetter){
+const norm=NORMALIZERS[cr.scale.kind];
+const p=cr.scale.params||{};
+return{plain:norm.plain(p,stats),latex:norm.latex(p,stats),sheet:norm.sheet(p,stats,colLetter+'2')};
+},
+modelLatex(model,result){
+const agg=model.aggregate.kind==='topsis'?'\\text{TOPSIS closeness coefficient}':('S=\\left(\\sum_i w_i v_i^{'+model.aggregate.p+'}\\right)^{1/'+model.aggregate.p+'}');
+const lines=[agg,''];
+model.criteria.forEach(c=>{
+const norm=NORMALIZERS[c.scale.kind];
+lines.push(c.label+': '+norm.latex(c.scale.params||{},result.stats.perCriterion[c.id]));
+});
+return lines.join('\n');
+},
+weightsJSON(model){
+const w={};model.criteria.forEach(c=>{w[c.id]=c.weight;});
+return JSON.stringify(w,null,2);
+},
+weightsCSV(model){
+const lines=['criterion,weight'];
+model.criteria.forEach(c=>{lines.push(csvCell(c.label)+','+c.weight);});
+return lines.join('\n');
+},
+weightsProse(model){return model.criteria.map(c=>c.label+' '+c.weight).join(', ');},
+rankingTable(model,result){
+const cols=['#','Option',...model.criteria.map(c=>c.label),'Total'];
+const rows=result.ranked.map(s=>[s.rank,s.option.label,...model.criteria.map(c=>{
+const v=s.contributions[c.id];
+return v&&v.v!==null?(v.weighted*100).toFixed(1):'';
+}),s.total.toFixed(1)]);
+return{cols,rows};
+},
+rankingMarkdown(model,result){
+const{cols,rows}=this.rankingTable(model,result);
+const lines=['| '+cols.join(' | ')+' |','|'+cols.map(()=>'---').join('|')+'|'];
+rows.forEach(r=>lines.push('| '+r.map(x=>x===''?'\u2014':x).join(' | ')+' |'));
+return lines.join('\n');
+},
+rankingDelim(model,result,delim){
+const{cols,rows}=this.rankingTable(model,result);
+const lines=[cols.map(csvCell).join(delim)];
+rows.forEach(r=>lines.push(r.map(csvCell).join(delim)));
+return lines.join('\n');
+},
+rankingJSON(model,result){
+return JSON.stringify(result.ranked.map(s=>({
+rank:s.rank,option:s.option.label,total:s.total,
+contributions:Object.fromEntries(model.criteria.map(c=>{
+const v=s.contributions[c.id];
+return[c.label,v&&v.v!==null?Math.round(v.weighted*10000)/100:null];
+}))
+})),null,2);
+},
+optionBreakdownMarkdown(model,result,optId){
+const s=result.ranked.find(x=>x.option.id===optId);
+if(!s)return'';
+const lines=['# '+s.option.label,''];
+model.criteria.forEach(c=>{
+const contrib=s.contributions[c.id];
+const raw=s.option.values[c.id];
+const rawDisp=(raw===null||raw===undefined)?'missing':(typeof raw==='number'?fmt(raw,2,c.unit):String(raw));
+const normDisp=contrib&&contrib.v!==null?contrib.v.toFixed(3):'\u2014';
+const pts=contrib&&contrib.v!==null?(contrib.weighted*100).toFixed(1):'0.0';
+lines.push('- **'+c.label+'**: '+rawDisp+' \u2192 '+normDisp+' \u00d7 '+c.weight+' pts \u2192 '+pts+' points');
+});
+(s.penalties||[]).forEach(p=>lines.push('- Penalty ('+p.gate+'): \u2212'+p.points));
+lines.push('','**Total: '+s.total.toFixed(1)+'/100**');
+return lines.join('\n');
+},
+sensitivityMarkdown(sentences){return sentences.map(s=>'- '+s).join('\n');},
+decisionRecordMarkdown(model,result,extra){
+extra=extra||{};
+const lines=[];
+lines.push('# '+model.meta.name);
+lines.push('Generated '+new Date().toISOString().slice(0,10)+'.');
+lines.push('');
+lines.push('## Question');
+lines.push(model.meta.notes||'(no question stated)');
+lines.push('');
+lines.push('## Options considered');
+model.options.forEach(o=>lines.push('- '+o.label));
+lines.push('');
+lines.push('## Criteria');
+model.criteria.forEach(c=>lines.push('- **'+c.label+'** ('+(c.unit||'\u2014')+'), '+c.direction+' is better, '+NORMALIZERS[c.scale.kind].label+', weight '+c.weight+' pts'));
+lines.push('');
+lines.push('## Method');
+lines.push('Aggregation: '+model.aggregate.kind+(model.aggregate.kind==='power-mean'?' (p='+model.aggregate.p+')':''));
+lines.push('');
+if(model.gates.length){
+lines.push('## Gates');
+model.gates.forEach(g=>lines.push('- '+g.label+' ('+g.severity+')'));
+lines.push('');
+}
+lines.push('## Ranking');
+lines.push(this.rankingMarkdown(model,result));
+lines.push('');
+if(result.winner&&result.runnerUp){
+lines.push('## Winner');
+lines.push(result.winner.label+' wins by '+result.margin.toFixed(1)+' points ('+(result.marginPct||0).toFixed(1)+'%).');
+if(result.decisiveCriterion)lines.push('Decisive criterion: '+result.decisiveCriterion.label+'.');
+lines.push('');
+}
+if(extra.closestFlip||extra.robustness||extra.monteCarlo){
+lines.push('## Robustness');
+if(extra.closestFlip)lines.push(extra.closestFlip);
+if(extra.robustness)lines.push(extra.robustness);
+if(extra.monteCarlo)lines.push(extra.monteCarlo);
+lines.push('');
+}
+if(result.notes.length){
+lines.push('## Notes');
+result.notes.forEach(n=>lines.push('- '+n));
+lines.push('');
+}
+if(result.imputations.length){
+lines.push('## Imputations');
+result.imputations.forEach(i=>{
+const c=model.criteria.find(x=>x.id===i.criterionId),o=model.options.find(x=>x.id===i.optionId);
+lines.push('- '+(o?o.label:i.optionId)+' \u00d7 '+(c?c.label:i.criterionId)+': '+i.policy+(i.valueUsed!==null?' \u2192 '+i.valueUsed:''));
+});
+lines.push('');
+}
+lines.push('## Assumptions and limitations');
+lines.push('- Scores are relative to the criteria and weights defined in this model, not an absolute measure.');
+if(model.criteria.some(c=>['linear','log-linear','percentile'].includes(c.scale.kind)))lines.push('- Some criteria use relative scoring, so adding or removing options can change every score.');
+if(model.criteria.every(c=>c.uncertainty.kind==='none'))lines.push('- No uncertainty was declared on any criterion; all inputs are treated as exact.');
+return lines.join('\n');
+},
+modelJSON(model){return JSON.stringify(model,null,2);},
+spreadsheetCSV(model,result){
+const cols=model.criteria;
+const colLetters=cols.map((c,i)=>String.fromCharCode(66+i));
+const lastCol=colLetters[colLetters.length-1]||'B';
+const lines=[];
+lines.push('# Raw data');
+lines.push(['Option',...cols.map(c=>c.label)].map(csvCell).join(','));
+model.options.forEach(o=>{
+lines.push([csvCell(o.label),...cols.map(c=>{
+const v=o.values[c.id];
+return v===null||v===undefined?'':(typeof v==='number'?v:csvCell(String(v)));
+})].join(','));
+});
+lines.push('');
+lines.push('# Normalized (formulas). Total = SUMPRODUCT(normalized row, weights row) / 100.');
+lines.push(['Option',...cols.map(c=>c.label),'Total'].map(csvCell).join(','));
+const normStartRow=lines.length+1;
+const weightsRow=normStartRow+model.options.length+2;
+model.options.forEach((o,ri)=>{
+const row=normStartRow+ri;
+const cells=cols.map((c,ci)=>{
+const norm=NORMALIZERS[c.scale.kind];
+return norm.sheet(c.scale.params||{},result.stats.perCriterion[c.id],colLetters[ci]+row);
+});
+const total='=SUMPRODUCT(B'+row+':'+lastCol+row+',$B$'+weightsRow+':$'+lastCol+'$'+weightsRow+')/100';
+lines.push([csvCell(o.label),...cells,total].join(','));
+});
+lines.push('');
+lines.push('# Weights (points, sum to 100)');
+lines.push(['',...cols.map(c=>c.weight)].join(','));
+lines.push('');
+lines.push('# Aggregation: '+model.aggregate.kind+(model.aggregate.kind==='power-mean'?(' (p='+model.aggregate.p+')'):'')+'. Values floored at 0.001 where p \u2264 0.');
+return lines.join('\n');
+}
+};
+
+
+const STORE=(function(){
+let model=null;
+const ui={activeView:'data',selection:null,editingCell:null,modal:null};
+let past=[],future=[];
+const subs=[];
+let notifyScheduled=false;
+function notify(){
+if(notifyScheduled)return;
+notifyScheduled=true;
+(typeof requestAnimationFrame==='function'?requestAnimationFrame:setTimeout)(()=>{
+notifyScheduled=false;
+subs.forEach(fn=>fn());
+});
+}
+function act(name,mutator){
+const before=model;
+const next=deepClone(model);
+mutator(next);
+past.push({name,model:before});
+if(past.length>50)past.shift();
+future=[];
+model=next;
+autosave();
+notify();
+}
+function actUI(mutator){mutator(ui);notify();}
+function undo(){
+if(!past.length)return;
+const entry=past.pop();
+future.push({name:entry.name,model});
+model=entry.model;
+autosave();
+notify();
+}
+function redo(){
+if(!future.length)return;
+const entry=future.pop();
+past.push({name:entry.name,model});
+model=entry.model;
+autosave();
+notify();
+}
+function subscribe(fn){subs.push(fn);}
+
+let lsOK=true;
+try{localStorage.setItem('rubric.probe','1');localStorage.removeItem('rubric.probe');}
+catch(e){lsOK=false;}
+let autosaveTimer=0;
+function autosave(){
+if(!lsOK)return;
+clearTimeout(autosaveTimer);
+autosaveTimer=setTimeout(()=>{
+try{localStorage.setItem('rubric.autosave',JSON.stringify(model));}
+catch(e){lsOK=false;}
+},400);
+}
+function save(){autosave();}
+function saveAs(name){
+if(!lsOK)return false;
+try{localStorage.setItem('rubric.save.'+name,JSON.stringify(model));return true;}
+catch(e){return false;}
+}
+function listSaves(){
+if(!lsOK)return[];
+const out=[];
+try{
+for(let i=0;i<localStorage.length;i++){
+const k=localStorage.key(i);
+if(k&&k.indexOf('rubric.save.')===0)out.push(k.slice('rubric.save.'.length));
+}
+}catch(e){lsOK=false;}
+return out;
+}
+function load(){
+if(lsOK){
+try{
+const raw=localStorage.getItem('rubric.autosave');
+if(raw){model=JSON.parse(raw);past=[];future=[];notify();return'autosave';}
+}catch(e){lsOK=false;}
+}
+model=deepClone(EXAMPLES.meridian);
+past=[];future=[];
+notify();
+return'example';
+}
+function loadModel(m,name){
+model=deepClone(m);
+past=[];future=[];
+autosave();
+notify();
+}
+return{
+get model(){return model;},
+ui,
+get past(){return past;},
+get future(){return future;},
+act,actUI,undo,redo,subscribe,save,load,saveAs,listSaves,autosave,loadModel,
+get lsOK(){return lsOK;}
+};
+})();
+
+
+const VIEWS={};
+
+function inferColType(values){
+const nonEmpty=values.filter(v=>v!==''&&v!==null&&v!==undefined);
+if(!nonEmpty.length)return'categorical';
+if(nonEmpty.every(v=>/^(true|false)$/i.test(String(v).trim())))return'boolean';
+if(nonEmpty.every(v=>String(v).trim()!==''&&Number.isFinite(Number(String(v).trim()))))return'numeric';
+return'categorical';
+}
+function parseTable(text){
+const lines=text.replace(/\r\n?/g,'\n').split('\n').filter(l=>l.length>0);
+if(!lines.length)return[];
+const delim=lines[0].indexOf('\t')>=0?'\t':',';
+return lines.map(l=>l.split(delim));
+}
+function defaultParams(kind){
+const norm=NORMALIZERS[kind];
+const p={};
+(norm.params||[]).forEach(pp=>{p[pp.key]=(pp.default&&typeof pp.default==='object')?deepClone(pp.default):pp.default;});
+return p;
+}
+
+let pendingPaste=null;
+
+VIEWS.data={
+render(){
+const model=STORE.model;
+const heads=model.criteria.map((cr,ci)=>`<th data-c="${ci}"><div class="colhead">
+<span>${esc(cr.label)}${cr.unit?'<br><small>'+esc(cr.unit)+'</small>':''}</span>
+<span><button class="mini" data-colop="dup" data-c="${ci}" title="Duplicate column">\u29c9</button><button class="mini" data-colop="del" data-c="${ci}" title="Remove column">\u2715</button></span>
+</div></th>`).join('');
+const rows=model.options.map((opt,ri)=>{
+const labelEditing=STORE.ui.editingCell&&STORE.ui.editingCell.r===ri&&STORE.ui.editingCell.c===-1;
+const labelCell=labelEditing
+?`<input class="cellinput" id="cellEdit" value="${esc(opt.label)}">`
+:`<div class="cellbox" tabindex="0"><button class="mini" data-rowop="up" data-r="${ri}" title="Move up">\u2191</button><button class="mini" data-rowop="down" data-r="${ri}" title="Move down">\u2193</button><button class="mini" data-rowop="dup" data-r="${ri}" title="Duplicate row">\u29c9</button><button class="mini" data-rowop="del" data-r="${ri}" title="Remove row">\u2715</button> ${esc(opt.label)}</div>`;
+const cells=model.criteria.map((cr,ci)=>{
+const raw=opt.values[cr.id];
+const missing=raw===null||raw===undefined||raw==='';
+const editing=STORE.ui.editingCell&&STORE.ui.editingCell.r===ri&&STORE.ui.editingCell.c===ci;
+if(editing)return`<td data-r="${ri}" data-c="${ci}"><input class="cellinput" id="cellEdit" value="${missing?'':esc(String(raw))}"></td>`;
+const disp=missing?'\u2014':(typeof raw==='number'?fmt(raw,2):esc(String(raw)));
+return`<td data-r="${ri}" data-c="${ci}"><div class="cellbox${missing?' missing':''}" tabindex="0" title="${missing?'Missing value':''}">${disp}</div></td>`;
+}).join('');
+return`<tr><td class="lbl" data-r="${ri}" data-c="-1">${labelCell}</td>${cells}</tr>`;
+}).join('');
+$('#v-data').innerHTML=`
+<h1>Data</h1>
+<p class="viewsub">Options as rows, criteria as columns. Paste a table from a spreadsheet, or edit cells directly.</p>
+<div class="toolbar">
+<button class="btn" data-act="addOption">Add option</button>
+<button class="btn" data-act="addCriterion">Add criterion</button>
+<span style="color:var(--ink-fa);font-size:11.5px">Click a cell, then Enter to edit. Paste a block to import.</span>
+</div>
+<div class="gridwrap"><table class="grid" id="gridPasteTarget" tabindex="0">
+<thead><tr><th class="lbl">Option</th>${heads}</tr></thead>
+<tbody>${rows||'<tr><td class="lbl"><div class="cellbox">Paste a table, or open an example model.</div></td></tr>'}</tbody>
+</table></div>`;
+const inp=$('#cellEdit');
+if(inp){inp.focus();inp.select();}
+},
+handlePaste(text){
+const rows=parseTable(text);
+if(rows.length<2){toast('Paste needs a header row and at least one data row.');return;}
+const header=rows[0],body=rows.slice(1);
+const detect=[];
+for(let c=1;c<header.length;c++){
+const colVals=body.map(r=>(r[c]!==undefined?r[c].trim():''));
+detect.push({label:(header[c]||'Column '+c).trim(),type:inferColType(colVals),direction:'max'});
+}
+pendingPaste={header,body,detect};
+this.renderPasteModal();
+const h=$('#pasteModalTitle');
+if(h){h.setAttribute('tabindex','-1');h.focus();}
+},
+renderPasteModal(){
+const{body,detect}=pendingPaste;
+$('#modalRoot').innerHTML=`<div class="modalbg" id="pasteModalBg"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="pasteModalTitle">
+<h2 id="pasteModalTitle">Confirm column types</h2>
+<p class="viewsub">${body.length} rows \u00d7 ${detect.length} columns detected. Adjust any column, then import.</p>
+<table><thead><tr><th>Column</th><th>Type</th><th>Direction</th></tr></thead>
+<tbody>${detect.map((d,i)=>`<tr>
+<td>${esc(d.label)}</td>
+<td><select class="field" data-pc="${i}" data-pf="type">
+<option value="numeric"${d.type==='numeric'?' selected':''}>Numeric</option>
+<option value="categorical"${d.type==='categorical'?' selected':''}>Categorical</option>
+<option value="boolean"${d.type==='boolean'?' selected':''}>Boolean</option>
+</select></td>
+<td><div class="dirtoggle">
+<button data-pc="${i}" data-pf="direction" data-pv="max" class="${d.direction==='max'?'on':''}">Higher is better</button>
+<button data-pc="${i}" data-pf="direction" data-pv="min" class="${d.direction==='min'?'on':''}">Lower is better</button>
+</div></td>
+</tr>`).join('')}</tbody></table>
+<div class="mactions"><button class="btn ghost" id="pasteCancel">Cancel</button><button class="btn primary" id="pasteConfirm">Import</button></div>
+</div></div>`;
+},
+closeModal(){$('#modalRoot').innerHTML='';pendingPaste=null;},
+confirmPaste(){
+const{header,body,detect}=pendingPaste;
+STORE.act('Paste '+body.length+'\u00d7'+detect.length+' block',model=>{
+const critIds=detect.map(d=>{
+let cr=model.criteria.find(c=>c.label.toLowerCase()===d.label.toLowerCase());
+if(!cr){
+const kind=d.type==='numeric'?'linear':d.type==='boolean'?'boolean':'categorical';
+cr={id:uid('crit'),label:d.label,unit:'',description:'',direction:d.direction,
+scale:{kind,params:defaultParams(kind)},weight:0,locked:false,
+missing:'exclude-option',uncertainty:{kind:'none',value:0}};
+model.criteria.push(cr);
+}else cr.direction=d.direction;
+return cr.id;
+});
+detect.forEach((d,i)=>{
+if(d.type!=='categorical')return;
+const cr=model.criteria.find(c=>c.id===critIds[i]);
+if(!cr||cr.scale.kind!=='categorical')return;
+const cats=[...new Set(body.map(r=>(r[i+1]||'').trim()).filter(Boolean))];
+cats.forEach((cat,ci)=>{
+if(!(cat in cr.scale.params.map))cr.scale.params.map[cat]=cats.length>1?Math.round((1-ci/(cats.length-1))*100)/100:1;
+});
+});
+body.forEach(r=>{
+const label=(r[0]||'').trim()||'Untitled option';
+let opt=model.options.find(o=>o.label.toLowerCase()===label.toLowerCase());
+if(!opt){opt={id:uid('opt'),label,tags:[],notes:'',values:{}};model.options.push(opt);}
+detect.forEach((d,i)=>{
+const raw=(r[i+1]!==undefined?r[i+1].trim():'');
+const cid=critIds[i];
+if(raw===''){opt.values[cid]=null;return;}
+if(d.type==='numeric'){const n=Number(raw);opt.values[cid]=Number.isFinite(n)?n:null;}
+else if(d.type==='boolean'){opt.values[cid]=/^true$/i.test(raw);}
+else opt.values[cid]=raw;
+});
+});
+});
+this.closeModal();
+toast('Imported '+body.length+' rows \u00d7 '+detect.length+' columns');
+}
+};
+
+function curveDomain(cr,stats){
+const p=cr.scale.params||{};
+const kind=cr.scale.kind;
+if(kind==='linear'||kind==='log-linear'||kind==='percentile'){
+const lo=stats.min,hi=stats.max;
+if(lo===undefined||hi===undefined||lo===hi)return[0,1];
+const pad=(hi-lo)*.08;
+return[lo-pad,hi+pad];
+}
+if(kind==='fixed-linear'){const pad=(p.hi-p.lo)*.15||1;return[p.lo-pad,p.hi+pad];}
+if(kind==='decay'){const lambda=p.halfLife/Math.LN2;return[0,lambda*4];}
+if(kind==='logistic')return[p.midpoint-p.width*3,p.midpoint+p.width*3];
+if(kind==='target-band')return[p.ideal-p.tol*2.5,p.ideal+p.tol*2.5];
+if(kind==='target-soft')return[p.ideal-p.sigma*3,p.ideal+p.sigma*3];
+if(kind==='step'){
+const bps=p.breakpoints||[];
+if(!bps.length)return[0,1];
+const ats=bps.map(b=>b.at),lo=Math.min(...ats),hi=Math.max(...ats),pad=(hi-lo)*.2||1;
+return[lo-pad,hi+pad];
+}
+return[0,1];
+}
+function evalDisplay(cr,x,stats){
+const norm=NORMALIZERS[cr.scale.kind];
+try{
+const r=norm.fn(x,cr.scale.params||{},stats);
+let v=(typeof r==='object')?r.v:r;
+if(v===null)return null;
+if(cr.direction==='min'&&cr.scale.kind!=='decay'&&cr.scale.kind!=='target-band')v=1-v;
+return v;
+}catch(e){return null;}
+}
+function renderCurvePlot(cr,stats){
+const W=300,H=120,PAD=8,BASE=H-PAD-14,SPAN=H-PAD*2-14;
+const norm=NORMALIZERS[cr.scale.kind];
+if(norm.needs==='boolean'||norm.needs==='categorical'){
+let items;
+if(norm.needs==='boolean')items=[['False',evalDisplay(cr,false,stats)],['True',evalDisplay(cr,true,stats)]];
+else{
+const map=(cr.scale.params&&cr.scale.params.map)||{};
+items=Object.keys(map).map(k=>[k,evalDisplay(cr,k,stats)]);
+}
+if(!items.length)return`<svg class="curveplot" viewBox="0 0 ${W} ${H}"></svg>`;
+const bw=(W-PAD*2)/items.length;
+const bars=items.map(([label,v],i)=>{
+const x=PAD+i*bw,bh=(v===null?0:v)*SPAN;
+return`<rect class="bar" x="${(x+bw*.15).toFixed(1)}" y="${(BASE-bh).toFixed(1)}" width="${(bw*.7).toFixed(1)}" height="${bh.toFixed(1)}"></rect><text x="${(x+bw/2).toFixed(1)}" y="${H-2}" font-size="8" fill="var(--ink-fa)" text-anchor="middle">${esc(String(label)).slice(0,10)}</text>`;
+}).join('');
+return`<svg class="curveplot" viewBox="0 0 ${W} ${H}"><line class="axis" x1="${PAD}" y1="${BASE}" x2="${W-PAD}" y2="${BASE}"></line>${bars}</svg>`;
+}
+const[lo,hi]=curveDomain(cr,stats);
+const N=60;let d='';
+for(let i=0;i<=N;i++){
+const x=lo+(hi-lo)*i/N,v=evalDisplay(cr,x,stats);
+const px=PAD+(W-PAD*2)*i/N,py=BASE-(v===null?0:v)*SPAN;
+d+=(i===0?'M':'L')+px.toFixed(1)+' '+py.toFixed(1)+' ';
+}
+const dots=(stats.values||[]).filter(v=>typeof v==='number').map(rv=>{
+const px=PAD+(W-PAD*2)*(rv-lo)/((hi-lo)||1),v=evalDisplay(cr,rv,stats);
+const py=BASE-(v===null?0:v)*SPAN;
+return`<circle class="dot" cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="2.5"></circle>`;
+}).join('');
+return`<svg class="curveplot" viewBox="0 0 ${W} ${H}"><line class="axis" x1="${PAD}" y1="${BASE}" x2="${W-PAD}" y2="${BASE}"></line><line class="axis" x1="${PAD}" y1="${PAD}" x2="${PAD}" y2="${BASE}"></line><path class="curve" d="${d.trim()}"></path>${dots}</svg>`;
+}
+function renderCritCard(cr,stats,weightSum){
+const norm=NORMALIZERS[cr.scale.kind];
+const relative=cr.scale.kind==='linear'||cr.scale.kind==='log-linear'||cr.scale.kind==='percentile';
+const share=weightSum?(cr.weight/weightSum*100):0;
+const paramFields=(norm.params||[]).map(p=>{
+if(p.type==='number'){
+const v=(cr.scale.params&&cr.scale.params[p.key]!==undefined)?cr.scale.params[p.key]:p.default;
+return`<label class="flabel">${esc(p.label)}</label><input class="field" type="number" step="any" data-crit="${cr.id}" data-param="${p.key}" value="${v}">`;
+}
+if(p.type==='breakpoints'){
+const bps=(cr.scale.params&&cr.scale.params.breakpoints)||[];
+return`<label class="flabel">Breakpoints, one \u2018at:value\u2019 per line</label><textarea class="field" rows="3" data-crit="${cr.id}" data-param="breakpoints">${bps.map(b=>b.at+':'+b.v).join('\n')}</textarea>`;
+}
+if(p.type==='map'){
+const map=(cr.scale.params&&cr.scale.params.map)||{};
+return`<label class="flabel">Category points, one \u2018label:value\u2019 per line</label><textarea class="field" rows="3" data-crit="${cr.id}" data-param="map">${Object.keys(map).map(k=>k+':'+map[k]).join('\n')}</textarea>`;
+}
+return'';
+}).join('');
+return`<div class="ccard" data-critcard="${cr.id}">
+<button class="copyglyph" data-copycrit="${cr.id}" title="Copy formula" aria-label="Copy formula for ${esc(cr.label)}">\u2398</button>
+<h3><input class="field" style="font-family:var(--serif);font-size:15px;font-weight:600;border:none;background:none;padding:2px 0;margin:0" data-crit="${cr.id}" data-field="label" value="${esc(cr.label)}"></h3>
+<span class="badge ${relative?'rel':'abs'}">${relative?'Relative':'Absolute'}</span>
+<label class="flabel">Unit</label><input class="field" data-crit="${cr.id}" data-field="unit" value="${esc(cr.unit||'')}">
+<label class="flabel">Description</label><input class="field" data-crit="${cr.id}" data-field="description" value="${esc(cr.description||'')}">
+<label class="flabel">Direction</label>
+<div class="dirtoggle">
+<button data-crit="${cr.id}" data-field="direction" data-val="max" class="${cr.direction==='max'?'on':''}">Higher is better</button>
+<button data-crit="${cr.id}" data-field="direction" data-val="min" class="${cr.direction==='min'?'on':''}">Lower is better</button>
+</div>
+<label class="flabel">Value function</label>
+<select class="field" data-crit="${cr.id}" data-field="normalizer">
+${Object.values(NORMALIZERS).map(n=>`<option value="${n.id}"${n.id===cr.scale.kind?' selected':''}>${n.label}</option>`).join('')}
+</select>
+<p class="viewsub" style="margin:-4px 0 8px">${esc(norm.blurb)}</p>
+${paramFields}
+${renderCurvePlot(cr,stats)}
+<label class="flabel">If missing</label>
+<select class="field" data-crit="${cr.id}" data-field="missing">
+<option value="exclude-option"${cr.missing==='exclude-option'?' selected':''}>Exclude the option</option>
+<option value="worst"${cr.missing==='worst'?' selected':''}>Score as worst</option>
+<option value="neutral"${cr.missing==='neutral'?' selected':''}>Score as neutral</option>
+<option value="best"${cr.missing==='best'?' selected':''}>Score as best</option>
+<option value="redistribute"${cr.missing==='redistribute'?' selected':''}>Redistribute remaining weight</option>
+</select>
+<label class="flabel">Uncertainty</label>
+<div class="paramrow">
+<select class="field" data-crit="${cr.id}" data-field="uncKind">
+<option value="none"${cr.uncertainty.kind==='none'?' selected':''}>None</option>
+<option value="abs"${cr.uncertainty.kind==='abs'?' selected':''}>\u00b1 absolute</option>
+<option value="pct"${cr.uncertainty.kind==='pct'?' selected':''}>\u00b1 % of column range</option>
+</select>
+<input class="field" type="number" step="any" data-crit="${cr.id}" data-field="uncValue" value="${cr.uncertainty.value}"${cr.uncertainty.kind==='none'?' disabled':''}>
+</div>
+<div class="weightreadout"><span>Weight</span><b>${cr.weight} pts \u00b7 ${share.toFixed(1)}%</b></div>
+<button class="btn ghost" style="margin-top:10px" data-delcrit="${cr.id}">Remove criterion</button>
+</div>`;
+}
+VIEWS.criteria={
+render(){
+const model=STORE.model;
+const result=ENGINE.score(model);
+const stats=result.stats.perCriterion;
+const weightSum=sum(model.criteria.map(c=>c.weight))||1;
+const cards=model.criteria.map(cr=>renderCritCard(cr,stats[cr.id],weightSum)).join('');
+$('#v-criteria').innerHTML=`
+<h1>Criteria</h1>
+<p class="viewsub">What each criterion measures, how a raw value becomes points, and what happens when it is missing.</p>
+<div class="toolbar"><button class="btn" data-act="addCriterion">Add criterion</button></div>
+<div class="criteria-grid">${cards||'<p class="viewsub">No criteria yet. Add one, or open an example model.</p>'}</div>`;
+}
+};
+
+
+function critColor(i){const cols=['c1','c2','c3','c4','c5','c6','c7','c8'];return'var(--'+cols[i%8]+')';}
+
+function renderWeightSummary(model){
+const weightSum=sum(model.criteria.map(c=>c.weight))||1;
+const bar=model.criteria.map((c,i)=>{
+const pct=c.weight/weightSum*100;
+return`<span style="width:${pct}%;background:${critColor(i)}" title="${esc(c.label)}: ${c.weight} pts">${pct>=8?esc(c.label):''}</span>`;
+}).join('');
+const eq=100/(model.criteria.length||1);
+const deltas=model.criteria.map(c=>{
+const d=c.weight-eq;
+return`<span class="dchip">${esc(c.label)} <b>${d>=0?'+':''}${d.toFixed(1)}</b> vs equal</span>`;
+}).join('');
+const presets=(model.presets||[]).map((p,i)=>`<div class="presetrow"><span class="presetname">${esc(p.name)}</span>
+<button class="btn ghost" data-applypreset="${i}">Apply</button>
+<button class="btn ghost" data-delpreset="${i}">Delete</button></div>`).join('');
+return`<div class="wsummary">
+<label class="flabel">Current weights</label>
+<div class="weightbar">${bar}</div>
+<div class="deltalist">${deltas}</div>
+<div class="toolbar"><button class="btn" id="savePresetBtn">Save as preset</button></div>
+<div class="presetlist">${presets||'<p class="viewsub">No saved presets yet.</p>'}</div>
+</div>`;
+}
+
+function ahpSliderText(s){
+s=+s;
+const words={1:'slightly',2:'slightly',3:'moderately',4:'moderately',5:'strongly',6:'strongly',7:'very strongly',8:'extremely'};
+if(s===0)return'Equally important';
+if(s>0)return'Left is '+words[s]+' more important ('+WEIGHTS.sliderToRatio(s).toFixed(0)+'\u00d7)';
+return'Right is '+words[-s]+' more important ('+WEIGHTS.sliderToRatio(s).toFixed(2)+'\u00d7)';
+}
+
+VIEWS.weights={
+render(){
+const model=STORE.model;
+const method=STORE.ui.weightsMethod||'direct';
+let body='';
+if(method==='direct')body=this.renderDirect(model);
+else if(method==='equal')body=this.renderEqual(model);
+else if(method==='roc')body=this.renderRoc(model);
+else if(method==='ahp')body=this.renderAhp(model);
+$('#v-weights').innerHTML=`
+<h1>Weights</h1>
+<p class="viewsub">How much each criterion counts toward the total. Four ways to set it \u2014 pick whichever fits what you know.</p>
+<div class="methodtabs" id="wmethods">
+<button data-wm="direct" class="${method==='direct'?'on':''}">Direct budget</button>
+<button data-wm="equal" class="${method==='equal'?'on':''}">Equal</button>
+<button data-wm="roc" class="${method==='roc'?'on':''}">Rank order</button>
+<button data-wm="ahp" class="${method==='ahp'?'on':''}">Pairwise</button>
+</div>
+<div class="panel">${body}</div>
+${renderWeightSummary(model)}`;
+},
+renderDirect(model){
+if(!model.criteria.length)return'<p class="viewsub">No criteria yet.</p>';
+const rows=model.criteria.map(c=>`<div class="directrow">
+<span>${esc(c.label)}</span>
+<input type="range" min="0" max="100" value="${c.weight}" data-directid="${c.id}" ${c.locked?'disabled':''}>
+<input type="number" min="0" max="100" value="${c.weight}" data-directnum="${c.id}" ${c.locked?'disabled':''}>
+<button class="iconbtn" data-locktoggle="${c.id}">${c.locked?'Locked':'Lock'}</button>
+</div>`).join('');
+return`<p class="viewsub">Drag a slider or type a value. Unlocked weights rescale together so the total stays 100.</p>${rows}`;
+},
+renderEqual(model){
+return`<p class="viewsub">Resets every criterion to the same weight. Useful as a baseline to compare other methods against.</p>
+<button class="btn primary" id="applyEqualBtn">Set all weights equal</button>`;
+},
+renderRoc(model){
+if(!STORE.ui.rocOrder||STORE.ui.rocOrder.length!==model.criteria.length){
+STORE.ui.rocOrder=model.criteria.map(c=>c.id);
+}
+const order=STORE.ui.rocOrder;
+const preview=WEIGHTS.rankOrderCentroid(order);
+const rows=order.map((id,i)=>{
+const c=model.criteria.find(cc=>cc.id===id);
+if(!c)return'';
+return`<div class="rocrow">
+<span style="font-family:var(--mono);color:var(--ink-fa)">${i+1}</span>
+<span>${esc(c.label)}</span>
+<button class="mini" data-rocop="up" data-id="${id}" title="More important">\u2191</button>
+<button class="mini" data-rocop="down" data-id="${id}" title="Less important">\u2193</button>
+<span class="rocw">${(preview[id]||0).toFixed(1)} pts</span>
+</div>`;
+}).join('');
+return`<p class="viewsub">Order criteria by importance, most important first. Weights follow automatically.</p>${rows}
+<button class="btn primary" id="applyRocBtn" style="margin-top:10px">Apply this order</button>`;
+},
+renderAhp(model){
+const ids=model.criteria.map(c=>c.id);
+if(ids.length<2)return'<p class="viewsub">Pairwise comparison needs at least two criteria.</p>';
+const pairs=WEIGHTS.allPairs(ids);
+if(STORE.ui.ahpIndex===undefined||STORE.ui.ahpIndex>pairs.length)STORE.ui.ahpIndex=0;
+if(!STORE.ui.ahpJudgments)STORE.ui.ahpJudgments={};
+const idx=STORE.ui.ahpIndex;
+if(idx<pairs.length){
+const pair=pairs[idx];
+const crA=model.criteria.find(c=>c.id===ids[pair.i]),crB=model.criteria.find(c=>c.id===ids[pair.j]);
+const key=pair.i+'-'+pair.j;
+const s=STORE.ui.ahpJudgments[key]!==undefined?STORE.ui.ahpJudgments[key]:0;
+return`<p class="viewsub">Pair ${idx+1} of ${pairs.length}. Move the slider toward whichever matters more, and by how much.</p>
+<div class="ahppair">
+<div class="pairnames"><span>${esc(crA.label)}</span><span>${esc(crB.label)}</span></div>
+<input type="range" min="-8" max="8" step="1" value="${s}" id="ahpSlider" data-i="${pair.i}" data-j="${pair.j}">
+<p class="viewsub" id="ahpSliderLabel">${ahpSliderText(s)}</p>
+</div>
+<div class="ahpnav">
+<button class="btn ghost" id="ahpBack" ${idx===0?'disabled':''}>Back</button>
+<button class="btn primary" id="ahpNext">${idx===pairs.length-1?'See result':'Next'}</button>
+</div>`;
+}
+const judgments=pairs.map(p=>({i:p.i,j:p.j,ratio:WEIGHTS.sliderToRatio(STORE.ui.ahpJudgments[p.i+'-'+p.j]||0)}));
+const result=WEIGHTS.pairwiseResult(ids,judgments);
+const rows=ids.map(id=>`<span class="dchip">${esc(model.criteria.find(c=>c.id===id).label)} <b>${result.weights[id].toFixed(1)}</b> pts</span>`).join('');
+const worst=result.worst.map(w=>{
+const crA=model.criteria.find(c=>c.id===w.idA),crB=model.criteria.find(c=>c.id===w.idB);
+return`<li>${esc(crA.label)} vs ${esc(crB.label)}: you said ${w.ratio.toFixed(1)}\u00d7, the rest of your answers imply ${w.impliedRatio.toFixed(1)}\u00d7. <button class="linkbtn" data-revisit="${w.i}-${w.j}">Revisit</button></li>`;
+}).join('');
+return`<p class="viewsub">All ${pairs.length} pairs answered.</p>
+<div class="ahpresult ${result.CR>0.10?'cr-bad':''}">
+<p style="margin:0 0 8px"><b>\u03bbmax</b> ${result.lambdaMax.toFixed(3)} \u00b7 <b>CI</b> ${result.CI.toFixed(3)} \u00b7 <b>CR</b> ${result.CR.toFixed(3)}</p>
+${result.CR>0.10
+?`<p style="margin:0 0 8px;color:var(--bad);font-weight:600">CR exceeds 0.10 \u2014 these weights are not applied. Revisit the least consistent judgments below.</p><ul>${worst}</ul>`
+:`<p style="margin:0 0 8px">Consistent enough to apply.</p><div class="deltalist">${rows}</div><button class="btn primary" id="applyAhpBtn" style="margin-top:8px">Apply these weights</button>`}
+</div>
+<div class="ahpnav"><button class="btn ghost" id="ahpBack">Back</button><button class="btn ghost" id="ahpRestart">Start over</button></div>`;
+}
+};
+
+VIEWS.rank={
+render(){
+const model=STORE.model;
+const result=ENGINE.score(model);
+const pinned=model.view.pinned||[];
+const weightSum=sum(model.criteria.map(c=>c.weight))||1;
+const rows=result.ranked.map(s=>{
+const expanded=!!(STORE.ui.rankExpanded&&STORE.ui.rankExpanded[s.option.id]);
+const bar=model.criteria.map((c,i)=>{
+const contrib=s.contributions[c.id];
+const pct=contrib&&contrib.v!==null?Math.max(0,contrib.pctOfTotal):0;
+return`<span style="width:${pct}%;background:${critColor(i)}"></span>`;
+}).join('');
+const isPinned=pinned.includes(s.option.id);
+let breakdown='';
+if(expanded){
+const critRows=model.criteria.map(c=>{
+const contrib=s.contributions[c.id];
+const raw=s.option.values[c.id];
+const rawDisp=(raw===null||raw===undefined||raw==='')?'\u2014':(typeof raw==='number'?fmt(raw,2,c.unit):esc(String(raw)));
+const normDisp=contrib&&contrib.v!==null?contrib.v.toFixed(3):'\u2014';
+const wpts=(c.weight/weightSum*100).toFixed(1);
+const ptsDisp=contrib&&contrib.v!==null?(contrib.weighted*100).toFixed(1):'0.0';
+return`<tr><td>${esc(c.label)}</td><td>${rawDisp}</td><td>${normDisp}</td><td>${wpts}</td><td>${ptsDisp}</td></tr>`;
+}).join('');
+const penRows=(s.penalties||[]).map(p=>`<tr><td colspan="4">Penalty: ${esc(p.gate)}</td><td>-${p.points}</td></tr>`).join('');
+breakdown=`<div class="rankbreakdown"><table>
+<thead><tr><th>Criterion</th><th>Raw</th><th>Normalized</th><th>Weight pts</th><th>Points</th></tr></thead>
+<tbody>${critRows}${penRows}<tr><td colspan="4"><b>Total</b></td><td><b>${s.total.toFixed(1)}</b></td></tr></tbody>
+</table></div>`;
+}
+return`<div class="rankrow" data-rankrow="${s.option.id}">
+<div class="rankhead" data-toggleexpand="${s.option.id}">
+<span class="rn">${s.rank}${s.tied?'*':''}</span>
+<span class="rl">${esc(s.option.label)}</span>
+<button class="pinbtn ${isPinned?'on':''}" data-pin="${s.option.id}">${isPinned?'Pinned':'Pin'}</button>
+<span class="rt">${s.total.toFixed(1)}</span>
+</div>
+<div class="contribbar">${bar}</div>
+${breakdown}
+</div>`;
+}).join('');
+
+let h2h='';
+if(pinned.length===2){
+const a=result.ranked.find(s=>s.option.id===pinned[0]);
+const b=result.ranked.find(s=>s.option.id===pinned[1]);
+if(a&&b){
+const deltas=model.criteria.map(c=>{
+const av=a.contributions[c.id],bv=b.contributions[c.id];
+const ap=(av&&av.v!==null)?av.weighted*100:0;
+const bp=(bv&&bv.v!==null)?bv.weighted*100:0;
+return{label:c.label,delta:ap-bp};
+}).sort((x,y)=>Math.abs(y.delta)-Math.abs(x.delta));
+h2h=`<div class="h2h"><h3 style="margin-top:0">${esc(a.option.label)} vs ${esc(b.option.label)}</h3>
+${deltas.map(d=>`<div class="h2hrow"><span>${esc(d.label)}</span><span>${d.delta>=0?'+':''}${d.delta.toFixed(1)} pts \u2192 ${esc(a.option.label)}</span></div>`).join('')}
+</div>`;
+}
+}
+
+const excluded=result.excluded.map(e=>`<div class="exrow"><b>${esc(e.option.label)}</b> \u2014 ${esc(e.gate)}. ${esc(e.message)}</div>`).join('');
+const incomplete=result.incomplete.map(e=>`<div class="exrow"><b>${esc(e.option.label)}</b> \u2014 missing ${e.missing.map(cid=>{const c=model.criteria.find(x=>x.id===cid);return c?esc(c.label):cid;}).join(', ')}</div>`).join('');
+const notes=result.notes.length?`<div class="notesfoot"><b>Notes</b><ul>${result.notes.map(n=>`<li>${esc(n)}</li>`).join('')}</ul></div>`:'';
+
+$('#v-rank').innerHTML=`
+<h1>Rank</h1>
+<p class="viewsub">Ordered by total score. Click a row for the full arithmetic; pin two rows to compare them directly.</p>
+<div class="ranklist">${rows||'<p class="viewsub">No rankable options yet. Add data, or open an example model.</p>'}</div>
+${h2h}
+${excluded?`<div class="exsection"><h3>Excluded</h3>${excluded}</div>`:''}
+${incomplete?`<div class="exsection"><h3>Incomplete</h3>${incomplete}</div>`:''}
+${notes}`;
+}
+};
+
+
+function renderMcResults(model,mc){
+const assumed=STORE.ui.mcAssumed;
+const rows=model.options.map(o=>{
+const b=mc.byOption[o.id];
+if(!b||b.meanRank===null)return`<div class="h2hrow"><span>${esc(o.label)}</span><span>never ranked</span></div>`;
+return`<div class="h2hrow"><span>${esc(o.label)}</span><span>P(rank 1) ${(b.pRank1*100).toFixed(0)}% \u00b7 mean rank ${b.meanRank.toFixed(1)} \u00b7 band ${b.p5}\u2013${b.p95}</span></div>`;
+}).join('');
+return`<div style="margin-top:10px">${assumed?'<p class="viewsub"><i>Assumed uncertainty, not measured.</i></p>':''}<div class="h2h" style="margin:8px 0 0">${rows}</div></div>`;
+}
+
+VIEWS.stress={
+render(){
+const model=STORE.model;
+const result=ENGINE.score(model);
+if(!result.winner||result.ranked.length<2){
+$('#v-stress').innerHTML='<h1>Stress</h1><p class="viewsub">Needs at least two rankable options to test robustness.</p>';
+return;
+}
+const rr=ANALYSIS.rankReversalCheck(model,result);
+const cf=ANALYSIS.closestFlip(model,result);
+const winner=result.winner,runnerUp=result.runnerUp;
+
+const flipRows=model.criteria.map(c=>{
+const ft=ANALYSIS.flipThreshold(model,result,c.id,winner.id,runnerUp.id);
+return'<li>'+esc(ANALYSIS.flipSentence(model,c,runnerUp,ft))+(ft.label==='numerical'?' <i>(numerical)</i>':'')+'</li>';
+}).join('');
+
+const tolRows=[];
+model.criteria.forEach(c=>{
+const tolW=ANALYSIS.inputTolerance(model,winner.id,c.id,runnerUp.id);
+tolRows.push('<li>'+esc(ANALYSIS.toleranceSentence(model,winner,c,tolW))+'</li>');
+const tolR=ANALYSIS.inputTolerance(model,runnerUp.id,c.id,winner.id);
+tolRows.push('<li>'+esc(ANALYSIS.toleranceSentence(model,runnerUp,c,tolR))+'</li>');
+});
+
+const robustness=STORE.ui.robustnessResult;
+const mc=STORE.ui.monteCarloResult;
+
+$('#v-stress').innerHTML=`
+<h1>Stress</h1>
+<p class="viewsub">How much the current answer depends on the weights and inputs you chose.</p>
+${rr?`<div class="exrow" style="border-color:var(--bad);background:rgba(176,90,82,.1)"><b>Rank reversal</b> \u2014 removing ${esc(rr.flips[0].removed.label)} changes the winner to ${esc(rr.flips[0].newWinner.label)}. This can happen because one or more criteria use relative scoring: switching them to a fixed range removes the effect.</div>`:''}
+
+<div class="panel" style="margin-top:14px">
+<h3 style="margin-top:0">Closest flip</h3>
+<p>${esc(ANALYSIS.closestFlipSentence(cf,model))}</p>
+</div>
+
+<div class="panel" style="margin-top:14px">
+<h3 style="margin-top:0">Per-criterion flip thresholds</h3>
+<p class="viewsub" style="margin-top:-6px">${esc(winner.label)} vs ${esc(runnerUp.label)}</p>
+<ul>${flipRows}</ul>
+</div>
+
+<div class="panel" style="margin-top:14px">
+<h3 style="margin-top:0">Input tolerances</h3>
+<ul>${tolRows.join('')}</ul>
+</div>
+
+<div class="panel" style="margin-top:14px">
+<h3 style="margin-top:0">Weight-agnostic win share</h3>
+<p class="viewsub" style="margin-top:-6px">5000 random weight draws, unlocked criteria only.</p>
+<button class="btn primary" id="runRobustnessBtn">Run</button>
+${robustness?`<p style="margin-top:10px">${esc(ANALYSIS.robustnessSentence(robustness.shares,model))}</p>
+<div class="weightbar" style="margin-top:8px">${model.options.map((o,i)=>{const pct=(robustness.shares[o.id]||0)*100;return pct>0.5?`<span style="width:${pct}%;background:${critColor(i)}" title="${esc(o.label)}: ${pct.toFixed(1)}%">${pct>=8?esc(o.label):''}</span>`:'';}).join('')}</div>`:''}
+</div>
+
+<div class="panel" style="margin-top:14px">
+<h3 style="margin-top:0">Monte Carlo</h3>
+<p class="viewsub" style="margin-top:-6px">Seed ${model.view.seed||1}. Default uncertainty is zero \u2014 off.</p>
+<button class="btn" id="assumeUncBtn">Assume \u00b15% of column range</button>
+<button class="btn primary" id="runMcBtn">Run Monte Carlo</button>
+${mc?renderMcResults(model,mc):(model.criteria.some(c=>c.uncertainty.kind!=='none')?'':'<p class="viewsub" style="margin-top:8px">No uncertainty declared \u2014 Monte Carlo has nothing to sample.</p>')}
+</div>`;
+}
+};
+
+VIEWS.record={
+render(){
+const model=STORE.model;
+const result=ENGINE.score(model);
+const cf=ANALYSIS.closestFlip(model,result);
+const robustness=STORE.ui.robustnessResult;
+const extra={
+closestFlip:ANALYSIS.closestFlipSentence(cf,model),
+robustness:robustness?ANALYSIS.robustnessSentence(robustness.shares,model):null
+};
+const md=EXPORT.decisionRecordMarkdown(model,result,extra);
+$('#v-record').innerHTML=`
+<h1>Record</h1>
+<p class="viewsub">The full decision, in writing \u2014 copy it, print it, or download the model.</p>
+<div class="toolbar">
+<button class="btn primary" id="copyRecordBtn">Copy record</button>
+<button class="btn" id="printRecordBtn">Print</button>
+<button class="btn" id="downloadModelBtn">Download model (.json)</button>
+<button class="btn" id="downloadSheetBtn">Download spreadsheet rebuild (.csv)</button>
+<label class="btn ghost" style="cursor:pointer">Import model (.json)<input type="file" id="importModelInput" accept="application/json" style="display:none"></label>
+</div>
+<div class="panel" id="recordBody" style="white-space:pre-wrap;font-family:var(--mono);font-size:12px;line-height:1.6">${esc(md)}</div>
+<div class="panel" style="margin-top:14px;position:relative">
+<button class="copyglyph" id="copyJsonBtn" title="Copy model JSON" aria-label="Copy model JSON">\u2398</button>
+<h3 style="margin-top:0">Model JSON</h3>
+<pre style="max-height:300px;overflow:auto;font-size:11px;margin:0">${esc(EXPORT.modelJSON(model))}</pre>
+</div>`;
+}
+};
+
+
+const EXAMPLES={};
+(function(){
+const SETTLEMENT_ORIGIN={x:12,y:16};
+const ROAD=1.3;
+const FAC=[
+{id:'sag',name:'Sarema General Hospital',type:'public',x:29,y:27,services:['lab','xray','mri','cardio','dialysis','ortho','mater','peds','physio'],cap:60,load:51,m:.95,q:.78},
+{id:'ntg',name:'Northgate Teaching Hospital',type:'public',x:88,y:18,services:['lab','xray','mri','cardio','ortho','mater','peds','physio','onco'],cap:70,load:44,m:1,q:.86},
+{id:'krh',name:'Kestrel Regional Hospital',type:'public',x:66,y:58,services:['lab','xray','mri','cardio','dialysis','ortho','mater','peds'],cap:50,load:21,m:.95,q:.74},
+{id:'bfh',name:'Bramble Ford Health Center',type:'public',x:52,y:42,services:['lab','xray','peds','mater','physio'],cap:24,load:9,m:.9,q:.66},
+{id:'aru',name:'Almond Row Rural Unit',type:'public',x:12,y:16,services:['lab','peds','mater'],cap:14,load:6,m:.9,q:.6},
+{id:'fcc',name:'Fenwick Community Clinic',type:'public',x:22,y:56,services:['lab','xray','physio','peds'],cap:18,load:15,m:.9,q:.63},
+{id:'lcu',name:'Linden Kidney and Care Unit',type:'public',x:108,y:46,services:['dialysis','lab','cardio'],cap:16,load:7,m:1,q:.7},
+{id:'pcu',name:'Pebble Creek Health Unit',type:'public',x:102,y:70,services:['lab','xray','peds','mater','physio'],cap:16,load:5,m:.9,q:.62},
+{id:'tdu',name:'Thistledown Dispensary',type:'public',x:52,y:10,services:['lab','peds'],cap:10,load:3,m:.9,q:.58},
+{id:'hhv',name:'Harbor Heart and Vascular',type:'contracted',x:97,y:27,services:['cardio','lab','xray','mri'],cap:30,load:14,m:1.5,q:.9},
+{id:'shl',name:'Saffron Hill Diagnostics',type:'contracted',x:82,y:44,services:['lab','xray','mri'],cap:40,load:22,m:1.35,q:.84},
+{id:'wbr',name:'Willow Bend Rehab',type:'contracted',x:64,y:29,services:['physio','ortho','xray'],cap:26,load:10,m:1.4,q:.82},
+{id:'srp',name:'Sarema Renal Partners',type:'contracted',x:38,y:34,services:['dialysis','lab'],cap:20,load:9,m:1.55,q:.83},
+{id:'tom',name:'Tamarind Oncology Center',type:'contracted',x:46,y:63,services:['onco','mri','lab','xray'],cap:24,load:11,m:1.65,q:.88},
+{id:'sgc',name:'Sarema Grand Clinic',type:'private',x:39,y:23,services:['lab','xray','mri','cardio','ortho','mater','peds','physio','dialysis'],cap:36,load:15,m:2.4,q:.94},
+{id:'mwc',name:'Marigold Women and Child',type:'private',x:14,y:38,services:['mater','peds','lab','xray'],cap:14,load:5,m:2.2,q:.92},
+{id:'kbh',name:'Kestrel Bayview Hospital',type:'private',x:76,y:64,services:['cardio','mri','ortho','onco','lab','xray','mater'],cap:30,load:12,m:2.7,q:.95},
+{id:'hiu',name:'Harbor Imaging',type:'private',x:106,y:15,services:['mri','xray','lab'],cap:22,load:8,m:2.3,q:.9}
+];
+const TIER_MAP={public:1,contracted:.55,private:.25};
+const options=FAC.map(f=>{
+const d=Math.hypot(SETTLEMENT_ORIGIN.x-f.x,SETTLEMENT_ORIGIN.y-f.y)*ROAD;
+return{
+id:f.id,label:f.name,tags:f.services.slice(),notes:'',
+values:{
+distance_km:Math.round(d*100)/100,
+cost_index:f.m,
+tier:f.type,
+spare_seats_pct:Math.round((f.cap-f.load)/f.cap*10000)/100,
+quality:f.q
+}
+};
+});
+EXAMPLES.meridian={
+schema:1,
+meta:{id:'meridian-ada',name:'Meridian \u2014 care routing snapshot',
+notes:'Routing for Ada \u2014 cardiology and lab, origin Almond Row, routine urgency. Snapshot of one patient\u2019s routing decision. Distance is fixed to this patient\u2019s origin. The full Meridian model recomputes distance per patient.',
+created:'2026-09-23',updated:'2026-09-23',source:'example'},
+criteria:[
+{id:'distance_km',label:'Distance',unit:'km',description:'Straight-line distance from the patient, scaled 1.3\u00d7 for road distance.',direction:'min',scale:{kind:'decay',params:{halfLife:27.7}},weight:26,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'cost_index',label:'Cost',unit:'\u00d7 tariff',description:'Price factor against the reference tariff.',direction:'min',scale:{kind:'fixed-linear',params:{lo:0.9,hi:2.8}},weight:16,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'tier',label:'Public-first',unit:'',description:'Ownership tier of the facility.',direction:'max',scale:{kind:'categorical',params:{map:TIER_MAP}},weight:22,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'spare_seats_pct',label:'Spare seats',unit:'%',description:'Share of daily capacity not already booked.',direction:'max',scale:{kind:'fixed-linear',params:{lo:0,hi:100}},weight:20,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'quality',label:'Quality',unit:'',description:'Outcome and satisfaction rating.',direction:'max',scale:{kind:'fixed-linear',params:{lo:0.5,hi:1.0}},weight:16,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}}
+],
+options,
+gates:[
+{id:'gate_services',label:'Offers every requested service',severity:'hard',penalty:100,message:'Missing a required service.',when:{t:'all',of:[{t:'tag',value:'cardio'},{t:'tag',value:'lab'}]}},
+{id:'gate_seat',label:'At least one free seat',severity:'hard',penalty:100,message:'No seats free.',when:{t:'cmp',criterion:'spare_seats_pct',op:'>',value:0}}
+],
+aggregate:{kind:'power-mean',p:1,tiebreak:[]},
+presets:[],
+view:{sort:'score',pinned:[],seed:20240101}
+};
+})();
+
+(function(){
+EXAMPLES.supplier={
+schema:1,
+meta:{id:'supplier-selection',name:'Supplier selection',
+notes:'Synthetic and illustrative data for 8 candidate suppliers. Not a real sourcing decision.',
+created:'2026-09-24',updated:'2026-09-24',source:'example'},
+criteria:[
+{id:'unit_price',label:'Unit price',unit:'$',description:'Price per unit at standard order volume.',direction:'min',scale:{kind:'linear',params:{}},weight:22,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'lead_time_days',label:'Lead time',unit:'days',description:'Days from order to delivery.',direction:'min',scale:{kind:'decay',params:{halfLife:10}},weight:18,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'defect_rate_pct',label:'Defect rate',unit:'%',description:'Share of units failing incoming inspection.',direction:'min',scale:{kind:'logistic',params:{midpoint:2.5,width:2}},weight:20,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'capacity_units',label:'Capacity',unit:'units/mo',description:'Maximum monthly output the supplier states.',direction:'max',scale:{kind:'fixed-linear',params:{lo:0,hi:6000}},weight:14,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'financial_rating',label:'Financial rating',unit:'',description:'Third-party credit rating band.',direction:'max',scale:{kind:'categorical',params:{map:{AAA:1,AA:0.85,A:0.7,BBB:0.55,BB:0.35,B:0.15}}},weight:14,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'distance_km',label:'Distance',unit:'km',description:'Shipping distance from the nearest plant.',direction:'min',scale:{kind:'percentile',params:{}},weight:12,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}}
+],
+options:[
+{id:'alderbrook',label:'Alderbrook Components',tags:['iso9001'],notes:'',values:{unit_price:4.20,lead_time_days:12,defect_rate_pct:1.1,capacity_units:3000,financial_rating:'AA',distance_km:340}},
+{id:'brightwell',label:'Brightwell Manufacturing',tags:['iso9001'],notes:'',values:{unit_price:3.85,lead_time_days:18,defect_rate_pct:2.4,capacity_units:5000,financial_rating:'A',distance_km:610}},
+{id:'copperline',label:'Copperline Industries',tags:['iso9001'],notes:'',values:{unit_price:5.10,lead_time_days:7,defect_rate_pct:0.6,capacity_units:1800,financial_rating:'AAA',distance_km:210}},
+{id:'driftwood',label:'Driftwood Parts Co',tags:[],notes:'',values:{unit_price:3.40,lead_time_days:25,defect_rate_pct:3.8,capacity_units:4200,financial_rating:'BBB',distance_km:890}},
+{id:'elmsworth',label:'Elmsworth Fabrication',tags:['iso9001'],notes:'',values:{unit_price:4.65,lead_time_days:14,defect_rate_pct:1.5,capacity_units:2600,financial_rating:'A',distance_km:450}},
+{id:'fenwick',label:'Fenwick Precision',tags:['iso9001'],notes:'',values:{unit_price:4.95,lead_time_days:9,defect_rate_pct:0.9,capacity_units:2200,financial_rating:'AA',distance_km:300}},
+{id:'graylock',label:'Graylock Supply',tags:[],notes:'',values:{unit_price:3.20,lead_time_days:30,defect_rate_pct:4.5,capacity_units:6000,financial_rating:'BB',distance_km:1200}},
+{id:'harrow',label:'Harrow Industrial',tags:['iso9001'],notes:'',values:{unit_price:4.10,lead_time_days:16,defect_rate_pct:1.8,capacity_units:3400,financial_rating:'A',distance_km:520}}
+],
+gates:[
+{id:'gate_cert',label:'ISO 9001 certified',severity:'hard',penalty:100,message:'Not ISO 9001 certified.',when:{t:'tag',value:'iso9001'}}
+],
+aggregate:{kind:'power-mean',p:1,tiebreak:[]},
+presets:[],
+view:{sort:'score',pinned:[],seed:20240902}
+};
+})();
+
+(function(){
+EXAMPLES.hiring={
+schema:1,
+meta:{id:'hiring-shortlist',name:'Hiring shortlist',
+notes:'Synthetic and illustrative data for 10 candidates. Not a real hiring decision. Two cells are deliberately left blank to show how missing data is handled.',
+created:'2026-09-24',updated:'2026-09-24',source:'example'},
+criteria:[
+{id:'years_experience',label:'Experience',unit:'yrs',description:'Years of relevant professional experience.',direction:'max',scale:{kind:'fixed-linear',params:{lo:0,hi:15}},weight:20,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'technical_score',label:'Technical score',unit:'/100',description:'Score on the take-home technical exercise.',direction:'max',scale:{kind:'fixed-linear',params:{lo:0,hi:100}},weight:30,locked:false,missing:'neutral',uncertainty:{kind:'none',value:0}},
+{id:'interview_rating',label:'Interview rating',unit:'',description:'Panel consensus rating from the onsite interview.',direction:'max',scale:{kind:'categorical',params:{map:{Excellent:1,Good:0.7,Fair:0.4,Poor:0.1}}},weight:25,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'salary_expectation_k',label:'Salary expectation',unit:'$k',description:'Candidate\u2019s stated salary expectation.',direction:'min',scale:{kind:'linear',params:{}},weight:15,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'availability_weeks',label:'Availability',unit:'wks',description:'Weeks of notice before the candidate can start.',direction:'min',scale:{kind:'decay',params:{halfLife:4}},weight:10,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}}
+],
+options:[
+{id:'cand1',label:'Priya Nakamura',tags:[],notes:'',values:{years_experience:6,technical_score:88,interview_rating:'Excellent',salary_expectation_k:118,availability_weeks:3}},
+{id:'cand2',label:'Tomas Reyes',tags:[],notes:'',values:{years_experience:9,technical_score:74,interview_rating:'Good',salary_expectation_k:135,availability_weeks:6}},
+{id:'cand3',label:'Faye Okonkwo',tags:[],notes:'',values:{years_experience:3,technical_score:91,interview_rating:'Excellent',salary_expectation_k:98,availability_weeks:2}},
+{id:'cand4',label:'Lucas Beringer',tags:[],notes:'',values:{years_experience:12,technical_score:null,interview_rating:'Good',salary_expectation_k:150,availability_weeks:8}},
+{id:'cand5',label:'Meera Chandran',tags:[],notes:'',values:{years_experience:5,technical_score:80,interview_rating:'Fair',salary_expectation_k:105,availability_weeks:4}},
+{id:'cand6',label:'Oskar Lindqvist',tags:[],notes:'',values:{years_experience:8,technical_score:69,interview_rating:'Good',salary_expectation_k:null,availability_weeks:5}},
+{id:'cand7',label:'Ada Whitfield',tags:[],notes:'',values:{years_experience:2,technical_score:76,interview_rating:'Fair',salary_expectation_k:88,availability_weeks:2}},
+{id:'cand8',label:'Ravi Deshmukh',tags:[],notes:'',values:{years_experience:14,technical_score:83,interview_rating:'Good',salary_expectation_k:145,availability_weeks:10}},
+{id:'cand9',label:'Sienna Cole',tags:[],notes:'',values:{years_experience:4,technical_score:95,interview_rating:'Excellent',salary_expectation_k:110,availability_weeks:3}},
+{id:'cand10',label:'Noah Petrov',tags:[],notes:'',values:{years_experience:7,technical_score:62,interview_rating:'Poor',salary_expectation_k:120,availability_weeks:6}}
+],
+gates:[],
+aggregate:{kind:'power-mean',p:1,tiebreak:[]},
+presets:[],
+view:{sort:'score',pinned:[],seed:20240915}
+};
+})();
+
+(function(){
+EXAMPLES.site={
+schema:1,
+meta:{id:'site-selection',name:'Site selection',
+notes:'Synthetic and illustrative data for 6 candidate retail sites. Not a real leasing decision.',
+created:'2026-09-24',updated:'2026-09-24',source:'example'},
+criteria:[
+{id:'rent_per_sqm',label:'Rent',unit:'$/sqm/yr',description:'Annual rent per square metre.',direction:'min',scale:{kind:'linear',params:{}},weight:20,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'floor_area_sqm',label:'Floor area',unit:'sqm',description:'Usable floor area.',direction:'max',scale:{kind:'target-band',params:{ideal:800,tol:250}},weight:18,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'commute_score',label:'Staff commute',unit:'/10',description:'Average staff commute convenience, surveyed.',direction:'max',scale:{kind:'fixed-linear',params:{lo:0,hi:10}},weight:12,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'parking_spaces',label:'Parking',unit:'spaces',description:'On-site or contracted parking spaces.',direction:'max',scale:{kind:'fixed-linear',params:{lo:0,hi:50}},weight:10,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'zoning_fit',label:'Zoning fit',unit:'',description:'How well current zoning matches intended use.',direction:'max',scale:{kind:'categorical',params:{map:{Prime:1,Good:0.7,Marginal:0.4}}},weight:15,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'foot_traffic_index',label:'Foot traffic',unit:'',description:'Pedestrian count index versus the other sites under review.',direction:'max',scale:{kind:'percentile',params:{}},weight:15,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'distance_to_hq_km',label:'Distance to HQ',unit:'km',description:'Road distance to head office.',direction:'min',scale:{kind:'decay',params:{halfLife:8}},weight:10,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}}
+],
+options:[
+{id:'siteA',label:'Site A \u2014 Riverside Row',tags:[],notes:'',values:{rent_per_sqm:210,floor_area_sqm:720,commute_score:7.5,parking_spaces:18,zoning_fit:'Prime',foot_traffic_index:840,distance_to_hq_km:4}},
+{id:'siteB',label:'Site B \u2014 Harbor Quarter',tags:[],notes:'',values:{rent_per_sqm:265,floor_area_sqm:950,commute_score:8.2,parking_spaces:12,zoning_fit:'Prime',foot_traffic_index:1100,distance_to_hq_km:9}},
+{id:'siteC',label:'Site C \u2014 Millbrook Plaza',tags:[],notes:'',values:{rent_per_sqm:150,floor_area_sqm:1400,commute_score:5.5,parking_spaces:40,zoning_fit:'Good',foot_traffic_index:430,distance_to_hq_km:22}},
+{id:'siteD',label:'Site D \u2014 Old Town Court',tags:[],notes:'',values:{rent_per_sqm:190,floor_area_sqm:560,commute_score:6.8,parking_spaces:8,zoning_fit:'Marginal',foot_traffic_index:610,distance_to_hq_km:6}},
+{id:'siteE',label:'Site E \u2014 Northgate Retail Park',tags:[],notes:'',values:{rent_per_sqm:175,floor_area_sqm:1050,commute_score:6.0,parking_spaces:50,zoning_fit:'Good',foot_traffic_index:520,distance_to_hq_km:18}},
+{id:'siteF',label:'Site F \u2014 Cathedral Green',tags:[],notes:'',values:{rent_per_sqm:240,floor_area_sqm:830,commute_score:8.8,parking_spaces:6,zoning_fit:'Prime',foot_traffic_index:990,distance_to_hq_km:3}}
+],
+gates:[],
+aggregate:{kind:'power-mean',p:1,tiebreak:[]},
+presets:[],
+view:{sort:'score',pinned:[],seed:20240730}
+};
+})();
+
+
+const TESTS=(function(){
+const results=[];
+function assert(name,cond){results.push({name,pass:!!cond});}
+function approx(a,b,eps=1e-6){return Math.abs(a-b)<=eps;}
+
+function run(){
+results.length=0;
+
+const lin=NORMALIZERS.linear;
+const statsAB={min:0,max:10,values:[0,5,10]};
+assert('linear at min returns 0',approx(lin.fn(0,{},statsAB).v,0));
+assert('linear at max returns 1',approx(lin.fn(10,{},statsAB).v,1));
+assert('linear at midpoint returns 0.5',approx(lin.fn(5,{},statsAB).v,0.5));
+assert('linear zero-variance returns 0.5 and flags',(()=>{
+const r=lin.fn(3,{},{min:3,max:3,values:[3,3]});
+return approx(r.v,0.5)&&!!r.flag;
+})());
+
+const fl=NORMALIZERS['fixed-linear'];
+assert('fixed-linear at lo returns 0',approx(fl.fn(0,{lo:0,hi:10}).v,0));
+assert('fixed-linear at hi returns 1',approx(fl.fn(10,{lo:0,hi:10}).v,1));
+assert('fixed-linear clamps and flags out-of-range',(()=>{
+const r=fl.fn(15,{lo:0,hi:10});
+return approx(r.v,1)&&!!r.flag;
+})());
+
+const dec=NORMALIZERS.decay;
+assert('decay at x=0 returns 1',approx(dec.fn(0,{halfLife:10}).v,1));
+assert('decay at one half-life returns 0.5',approx(dec.fn(10,{halfLife:10}).v,0.5,1e-9));
+
+const log_=NORMALIZERS.logistic;
+assert('logistic at midpoint returns 0.5',approx(log_.fn(5,{midpoint:5,width:2}).v,0.5));
+
+const tb=NORMALIZERS['target-band'];
+assert('target-band at ideal returns 1',approx(tb.fn(5,{ideal:5,tol:2}).v,1));
+assert('target-band at ideal+tol returns 0',approx(tb.fn(7,{ideal:5,tol:2}).v,0));
+
+const ts=NORMALIZERS['target-soft'];
+assert('target-soft at ideal returns 1',approx(ts.fn(5,{ideal:5,sigma:2}).v,1));
+
+const stp=NORMALIZERS.step;
+assert('step returns the correct band',(()=>{
+const p={breakpoints:[{at:0,v:0},{at:10,v:0.5},{at:20,v:1}]};
+return approx(stp.fn(12,p).v,0.5)&&approx(stp.fn(25,p).v,1)&&approx(stp.fn(-5,p).v,0);
+})());
+
+const ll=NORMALIZERS['log-linear'];
+assert('log-linear at min returns 0',approx(ll.fn(1,{},{min:1,max:100,values:[1,10,100]}).v,0));
+assert('log-linear at max returns 1',approx(ll.fn(100,{},{min:1,max:100,values:[1,10,100]}).v,1));
+assert('log-linear with non-positive input raises a handled error',(()=>{
+try{ll.fn(0,{},{min:1,max:100,values:[1,100]});return false;}
+catch(e){return true;}
+})());
+
+const pct=NORMALIZERS.percentile;
+assert('percentile of lowest value returns 0',approx(pct.fn(1,{},{values:[1,2,3,4]}).v,0));
+assert('percentile of highest value returns 1',approx(pct.fn(4,{},{values:[1,2,3,4]}).v,1));
+assert('percentile averages ranks for ties',approx(pct.fn(2,{},{values:[1,2,2,4]}).v,0.5));
+
+const cat=NORMALIZERS.categorical;
+assert('categorical maps a known label',approx(cat.fn('gold',{map:{gold:1,silver:.5}}).v,1));
+assert('categorical flags an unmapped label',cat.fn('bronze',{map:{gold:1}}).v===null);
+
+const boo=NORMALIZERS.boolean;
+assert('boolean true is 1',approx(boo.fn(true).v,1));
+assert('boolean false is 0',approx(boo.fn(false).v,0));
+
+assert('every registered normalizer has non-empty latex/plain/sheet',
+Object.values(NORMALIZERS).every(n=>{
+const stats={min:1,max:10,values:[1,5,10]};
+const p={lo:0,hi:1,halfLife:10,midpoint:0,width:1,ideal:0,tol:1,sigma:1,breakpoints:[{at:0,v:0}],map:{a:1}};
+return!!n.latex(p,stats)&&!!n.plain(p,stats)&&!!n.sheet(p,stats,'A2');
+})
+);
+
+function fixture3x3(p){
+return{
+schema:1,meta:{id:'fx',name:'fixture',notes:'',created:'',updated:'',source:'user'},
+criteria:[
+{id:'a',label:'A',unit:'',description:'',direction:'max',scale:{kind:'fixed-linear',params:{lo:0,hi:10}},weight:50,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'b',label:'B',unit:'',description:'',direction:'max',scale:{kind:'fixed-linear',params:{lo:0,hi:10}},weight:30,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'c',label:'C',unit:'',description:'',direction:'max',scale:{kind:'fixed-linear',params:{lo:0,hi:10}},weight:20,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}}
+],
+options:[
+{id:'x',label:'X',tags:[],notes:'',values:{a:10,b:5,c:0}},
+{id:'y',label:'Y',tags:[],notes:'',values:{a:0,b:10,c:10}},
+{id:'z',label:'Z',tags:[],notes:'',values:{a:5,b:5,c:5}}
+],
+gates:[],
+aggregate:{kind:'power-mean',p,tiebreak:[]},
+presets:[],view:{sort:'score',pinned:[],seed:1}
+};
+}
+
+assert('power-mean p=1 equals hand-computed weighted sum',(()=>{
+const r=ENGINE.score(fixture3x3(1));
+const x=r.ranked.find(s=>s.option.id==='x');
+return approx(x.total,.5*100+.3*50+.2*0,1e-6);
+})());
+
+assert('power-mean p=0 equals the geometric mean',(()=>{
+const r=ENGINE.score(fixture3x3(0));
+const z=r.ranked.find(s=>s.option.id==='z');
+const expect=Math.pow(.5,.5)*Math.pow(.5,.3)*Math.pow(.5,.2)*100;
+return approx(z.total,expect,1e-4);
+})());
+
+assert('power-mean p=-5 approaches the minimum',(()=>{
+const r=ENGINE.score(fixture3x3(-5));
+const y=r.ranked.find(s=>s.option.id==='y');
+return y.total<30;
+})());
+
+assert('direction flip is applied exactly once',(()=>{
+const model=fixture3x3(1);
+model.criteria[0].direction='min';
+const r=ENGINE.score(model);
+const x=r.ranked.find(s=>s.option.id==='x');
+return approx(x.contributions.a.v,0,1e-6);
+})());
+
+assert('hard gate excludes the option',(()=>{
+const model=fixture3x3(1);
+model.gates=[{id:'g',label:'must be A>=1',severity:'hard',penalty:100,message:'fails',when:{t:'cmp',criterion:'a',op:'>=',value:1}}];
+const r=ENGINE.score(model);
+return r.excluded.some(e=>e.option.id==='y')&&!r.ranked.some(s=>s.option.id==='y');
+})());
+
+assert('soft gate subtracts from the total',(()=>{
+const model=fixture3x3(1);
+model.gates=[{id:'g',label:'prefer A>=1',severity:'soft',penalty:15,message:'soft fail',when:{t:'cmp',criterion:'a',op:'>=',value:1}}];
+const r=ENGINE.score(model);
+const y=r.ranked.find(s=>s.option.id==='y');
+return approx(y.total,(.3*100+.2*100)-15,1e-6);
+})());
+
+['worst','neutral','best','redistribute'].forEach(policy=>{
+assert(`missing policy '${policy}' produces the stated value and one imputations entry`,(()=>{
+const model=fixture3x3(1);
+model.criteria[0].missing=policy;
+model.options[0].values.a=null;
+const r=ENGINE.score(model);
+const entry=r.imputations.find(i=>i.optionId==='x'&&i.criterionId==='a'&&i.policy===policy);
+if(!entry)return false;
+if(policy==='worst')return entry.valueUsed===0;
+if(policy==='neutral')return entry.valueUsed===0.5;
+if(policy==='best')return entry.valueUsed===1;
+return entry.valueUsed===null;
+})());
+});
+
+assert("missing policy 'exclude-option' removes the option and lists it as incomplete",(()=>{
+const model=fixture3x3(1);
+model.criteria[0].missing='exclude-option';
+model.options[0].values.a=null;
+const r=ENGINE.score(model);
+return!r.ranked.some(s=>s.option.id==='x')&&r.incomplete.some(i=>i.option.id==='x'&&i.missing.includes('a'));
+})());
+
+assert('ENGINE.score(EXAMPLES.meridian) ranks Sarema General Hospital first',(()=>{
+const r=ENGINE.score(EXAMPLES.meridian);
+return r.winner&&r.winner.id==='sag';
+})());
+
+assert('ENGINE.score(EXAMPLES.meridian) excludes facilities lacking cardio or lab',(()=>{
+const r=ENGINE.score(EXAMPLES.meridian);
+return r.excluded.some(e=>e.option.id==='bfh');
+})());
+
+assert('WEIGHTS.equal sums to exactly 100',(()=>{
+const w=WEIGHTS.equal([{id:'a',weight:0},{id:'b',weight:0},{id:'c',weight:0}]);
+return approx(w.a+w.b+w.c,100,1e-9);
+})());
+
+assert('WEIGHTS.rankOrderCentroid matches the closed-form n=3 values',(()=>{
+const w=WEIGHTS.rankOrderCentroid(['a','b','c']);
+return approx(w.a,61.11,0.01)&&approx(w.b,27.78,0.01)&&approx(w.c,11.11,0.01);
+})());
+
+assert('WEIGHTS.applyDirect rescales unlocked weights proportionally',(()=>{
+const r=WEIGHTS.applyDirect([{id:'a',weight:33.33,locked:false},{id:'b',weight:33.33,locked:false},{id:'c',weight:33.34,locked:false}],'a',60);
+return r.ok&&approx(r.weights.a,60)&&approx(r.weights.b,20,0.1)&&approx(r.weights.c,20,0.1);
+})());
+
+assert('WEIGHTS.applyDirect refuses when locks make the change impossible',(()=>{
+const r=WEIGHTS.applyDirect([{id:'a',weight:20,locked:true},{id:'b',weight:40,locked:false},{id:'c',weight:40,locked:false}],'b',90);
+return r.ok===false&&!!r.reason;
+})());
+
+assert('WEIGHTS.pairwiseResult on fully consistent judgments has CR=0',(()=>{
+const r=WEIGHTS.pairwiseResult(['a','b','c'],[{i:0,j:1,ratio:2},{i:0,j:2,ratio:4},{i:1,j:2,ratio:2}]);
+return approx(r.CR,0,1e-6);
+})());
+
+assert('WEIGHTS.pairwiseResult flags CR > 0.10 on cyclic judgments',(()=>{
+const r=WEIGHTS.pairwiseResult(['a','b','c'],[{i:0,j:1,ratio:9},{i:0,j:2,ratio:1/9},{i:1,j:2,ratio:9}]);
+return r.CR>0.10&&r.worst.length>0;
+})());
+
+assert('ANALYSIS.flipThresholdExact matches a brute-force sweep to two decimal places',(()=>{
+const model=EXAMPLES.meridian,result=ENGINE.score(model);
+const exact=ANALYSIS.flipThresholdExact(model,result,'distance_km',result.winner.id,result.runnerUp.id);
+let prevSign=null,found=null;
+for(let t=0;t<=100;t+=0.01){
+const clone=deepClone(model);
+const w0=clone.criteria.find(c=>c.id==='distance_km').weight,S0=100-w0;
+const others=clone.criteria.filter(c=>c.id!=='distance_km');
+others.forEach(c=>{c.weight=(100-t)*model.criteria.find(x=>x.id===c.id).weight/S0;});
+clone.criteria.find(c=>c.id==='distance_km').weight=t;
+const r=ENGINE.score(clone);
+const a=r.ranked.find(s=>s.option.id===result.winner.id),b=r.ranked.find(s=>s.option.id===result.runnerUp.id);
+const sign=Math.sign((a?a.total:-1)-(b?b.total:-1));
+if(prevSign!==null&&sign!==0&&prevSign!==0&&sign!==prevSign){found=t;break;}
+if(sign!==0)prevSign=sign;
+}
+return found!==null&&approx(exact.tStar,found,0.02);
+})());
+
+assert('ANALYSIS.monteCarlo reproduces identically on rerun with the same seed',(()=>{
+const model=deepClone(EXAMPLES.meridian);
+model.criteria[0].uncertainty={kind:'pct',value:5};
+model.view.seed=42;
+const a=ANALYSIS.monteCarlo(model,300),b=ANALYSIS.monteCarlo(model,300);
+return JSON.stringify(a.byOption)===JSON.stringify(b.byOption);
+})());
+
+assert('EXPORT model JSON round-trips losslessly through parse',(()=>{
+const json=EXPORT.modelJSON(EXAMPLES.meridian);
+return JSON.stringify(JSON.parse(json))===JSON.stringify(EXAMPLES.meridian);
+})());
+
+assert('EXPORT.spreadsheetCSV formula matches the app\u2019s own normalized value for one cell',(()=>{
+const model=EXAMPLES.meridian,result=ENGINE.score(model);
+const cr=model.criteria.find(c=>c.id==='distance_km');
+const stats=result.stats.perCriterion.distance_km;
+const sagRaw=model.options.find(o=>o.id==='sag').values.distance_km;
+const lambda=cr.scale.params.halfLife/Math.LN2;
+const manual=Math.exp(-sagRaw/lambda);
+const sagV=result.ranked.find(s=>s.option.id==='sag').contributions.distance_km.v;
+return approx(manual,sagV,1e-9);
+})());
+
+assert('EXPORT.spreadsheetCSV reproduces every ranked option\u2019s total to one decimal',(()=>{
+const model=EXAMPLES.meridian,result=ENGINE.score(model);
+const csv=EXPORT.spreadsheetCSV(model,result);
+const lines=csv.split('\n');
+const normHdrIdx=lines.findIndex((l,i)=>l.startsWith('Option,')&&i>0);
+const weightsHdrIdx=lines.findIndex(l=>l.startsWith('# Weights'));
+const weights=lines[weightsHdrIdx+1].split(',').slice(1).map(Number);
+let ok=true,checked=0;
+model.options.forEach(o=>{
+const entry=result.ranked.find(s=>s.option.id===o.id);
+if(!entry)return;
+checked++;
+let total=0;
+model.criteria.forEach((c,ci)=>{
+const stats=result.stats.perCriterion[c.id];
+const norm=NORMALIZERS[c.scale.kind];
+let v;
+try{const r=norm.fn(o.values[c.id],c.scale.params||{},stats);v=(typeof r==='object')?r.v:r;}catch(e){v=0;}
+if(v===null)v=0;
+if(c.direction==='min'&&c.scale.kind!=='decay'&&c.scale.kind!=='target-band')v=1-v;
+total+=v*weights[ci];
+});
+if(!approx(total,entry.total,0.05))ok=false;
+});
+return ok&&checked>0;
+})());
+
+assert('ANALYSIS.rankReversalCheck triggers on a constructed spectator-option case',(()=>{
+const model={schema:1,meta:{id:'rr',name:'rr',notes:'',created:'',updated:'',source:'user'},
+criteria:[
+{id:'x',label:'X',unit:'',description:'',direction:'max',scale:{kind:'linear',params:{}},weight:10,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}},
+{id:'y',label:'Y',unit:'',description:'',direction:'max',scale:{kind:'fixed-linear',params:{lo:0,hi:10}},weight:90,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}}
+],
+options:[
+{id:'a',label:'A',tags:[],notes:'',values:{x:50,y:5}},
+{id:'b',label:'B',tags:[],notes:'',values:{x:40,y:6}},
+{id:'c',label:'C',tags:[],notes:'',values:{x:1000,y:0}}
+],
+gates:[],aggregate:{kind:'power-mean',p:1,tiebreak:[]},presets:[],view:{sort:'score',pinned:[],seed:1}};
+const r=ENGINE.score(model);
+const rr=ANALYSIS.rankReversalCheck(model,r);
+return r.winner.id==='b'&&!!rr&&rr.flips.some(f=>f.removed.id==='c'&&f.newWinner.id==='a');
+})());
+
+const pass=results.filter(r=>r.pass).length;
+const fail=results.length-pass;
+results.forEach(r=>console.log((r.pass?'PASS ':'FAIL ')+r.name));
+console.log(`${pass}/${results.length} assertions passed`);
+if(typeof document!=='undefined'){
+const badge=document.querySelector('#testBadge');
+if(badge)badge.textContent=`${pass}/${results.length} tests passed`;
+}
+return{pass,fail,total:results.length,results};
+}
+return{run};
+})();
+
+function commitCellValue(model,r,c,text){
+const opt=model.options[r];
+if(c===-1){opt.label=text.trim()||opt.label;return;}
+const cr=model.criteria[c];
+const norm=NORMALIZERS[cr.scale.kind];
+const t=text.trim();
+if(t===''){opt.values[cr.id]=null;return;}
+if(norm.needs==='numeric'){
+const n=Number(t);
+if(Number.isFinite(n))opt.values[cr.id]=n;
+else{opt.values[cr.id]=null;toast('\u201c'+t+'\u201d is not a number \u2014 left blank.');}
+}else if(norm.needs==='boolean'){
+if(/^(true|1|yes)$/i.test(t))opt.values[cr.id]=true;
+else if(/^(false|0|no)$/i.test(t))opt.values[cr.id]=false;
+else{opt.values[cr.id]=null;toast('\u201c'+t+'\u201d is not true/false \u2014 left blank.');}
+}else{
+opt.values[cr.id]=t;
+}
+}
+function moveAfterCommit(model,r,c,key,shift){
+const maxC=model.criteria.length-1;
+if(key==='Enter'){
+const nr=r+1;
+return nr<model.options.length?{r:nr,c}:null;
+}
+if(!shift){
+if(c<maxC)return{r,c:c+1};
+return(r+1<model.options.length)?{r:r+1,c:-1}:null;
+}
+if(c>-1)return{r,c:c-1};
+return(r-1>=0)?{r:r-1,c:maxC}:null;
+}
+
+function renderAll(){
+$$('#tabs button').forEach(b=>{b.classList.toggle('on',b.dataset.view===STORE.ui.activeView);});
+$$('.view').forEach(v=>{v.hidden=(v.id!=='v-'+STORE.ui.activeView);});
+const ub=$('#undoBtn'),rb=$('#redoBtn');
+if(ub){ub.disabled=!STORE.past.length;ub.title=STORE.past.length?('Undo: '+STORE.past[STORE.past.length-1].name):'Undo';}
+if(rb){rb.disabled=!STORE.future.length;rb.title=STORE.future.length?('Redo: '+STORE.future[STORE.future.length-1].name):'Redo';}
+if(STORE.ui.activeView==='data')VIEWS.data.render();
+else if(STORE.ui.activeView==='criteria')VIEWS.criteria.render();
+else if(STORE.ui.activeView==='weights')VIEWS.weights.render();
+else if(STORE.ui.activeView==='rank')VIEWS.rank.render();
+else if(STORE.ui.activeView==='stress')VIEWS.stress.render();
+else if(STORE.ui.activeView==='record')VIEWS.record.render();
+}
+function populateExampleSelect(){
+const sel=$('#exampleSel');
+if(!sel)return;
+Object.keys(EXAMPLES).forEach(k=>{
+const opt=document.createElement('option');
+opt.value=k;opt.textContent=EXAMPLES[k].meta.name;
+sel.appendChild(opt);
+});
+}
+
+function wireEvents(){
+document.addEventListener('click',e=>{
+let b;
+if((b=e.target.closest('#tabs button'))){STORE.actUI(ui=>{ui.activeView=b.dataset.view;});}
+else if((b=e.target.closest('#undoBtn'))){STORE.undo();}
+else if((b=e.target.closest('#redoBtn'))){STORE.redo();}
+else if((b=e.target.closest('#themeBtn'))){
+const html=document.documentElement;
+const next=html.dataset.theme==='dark'?'light':'dark';
+html.dataset.theme=next;
+try{localStorage.setItem('rubric.theme',next);}catch(err){}
+}
+else if((b=e.target.closest('.cellbox'))&&b.id!=='cellEdit'){
+const td=b.closest('td');
+if(td&&td.dataset.r!==undefined){
+STORE.actUI(ui=>{ui.editingCell=null;ui.selection={r:+td.dataset.r,c:+td.dataset.c};});
+b.focus();
+}
+}
+else if((b=e.target.closest('[data-act="addOption"]'))){
+STORE.act('Add option',model=>{model.options.push({id:uid('opt'),label:'New option',tags:[],notes:'',values:{}});});
+}
+else if((b=e.target.closest('[data-act="addCriterion"]'))){
+STORE.act('Add criterion',model=>{
+model.criteria.push({id:uid('crit'),label:'New criterion',unit:'',description:'',direction:'max',
+scale:{kind:'linear',params:{}},weight:0,locked:false,missing:'exclude-option',uncertainty:{kind:'none',value:0}});
+});
+}
+else if((b=e.target.closest('[data-rowop]'))){
+const r=+b.dataset.r,op=b.dataset.rowop;
+STORE.act('Row: '+op,model=>{
+if(op==='up'&&r>0){const o=model.options.splice(r,1)[0];model.options.splice(r-1,0,o);}
+else if(op==='down'&&r<model.options.length-1){const o=model.options.splice(r,1)[0];model.options.splice(r+1,0,o);}
+else if(op==='dup'){const o=deepClone(model.options[r]);o.id=uid('opt');o.label=o.label+' copy';model.options.splice(r+1,0,o);}
+else if(op==='del'){model.options.splice(r,1);}
+});
+}
+else if((b=e.target.closest('[data-colop]'))){
+const c=+b.dataset.c,op=b.dataset.colop;
+STORE.act('Column: '+op,model=>{
+if(op==='dup'){
+const src=model.criteria[c];const cr=deepClone(src);cr.id=uid('crit');cr.label=cr.label+' copy';
+model.criteria.splice(c+1,0,cr);
+model.options.forEach(o=>{o.values[cr.id]=o.values[src.id];});
+}else if(op==='del'){
+const removed=model.criteria.splice(c,1)[0];
+model.options.forEach(o=>{delete o.values[removed.id];});
+}
+});
+}
+else if((b=e.target.closest('#pasteCancel'))){VIEWS.data.closeModal();}
+else if((b=e.target.closest('#pasteConfirm'))){VIEWS.data.confirmPaste();}
+else if((b=e.target.closest('[data-pf="direction"]'))){
+const i=+b.dataset.pc;
+pendingPaste.detect[i].direction=b.dataset.pv;
+VIEWS.data.renderPasteModal();
+}
+else if((b=e.target.closest('.dirtoggle button[data-field="direction"]'))){
+const id=b.dataset.crit,val=b.dataset.val;
+STORE.act('Set direction',model=>{model.criteria.find(c=>c.id===id).direction=val;});
+}
+else if((b=e.target.closest('[data-delcrit]'))){
+const id=b.dataset.delcrit;
+STORE.act('Remove criterion',model=>{
+const idx=model.criteria.findIndex(c=>c.id===id);
+if(idx>=0){const removed=model.criteria.splice(idx,1)[0];model.options.forEach(o=>{delete o.values[removed.id];});}
+});
+}
+else if((b=e.target.closest('[data-copycrit]'))){
+const id=b.dataset.copycrit;
+const cr=STORE.model.criteria.find(c=>c.id===id);
+const result=ENGINE.score(STORE.model);
+const stats=result.stats.perCriterion[id];
+const norm=NORMALIZERS[cr.scale.kind];
+copyText(norm.plain(cr.scale.params||{},stats)).then(()=>toast('Formula copied \u2014 '+cr.label)).catch(()=>toast('Copy failed.'));
+}
+else if((b=e.target.closest('#wmethods button[data-wm]'))){
+STORE.actUI(ui=>{ui.weightsMethod=b.dataset.wm;});
+}
+else if((b=e.target.closest('[data-locktoggle]'))){
+const id=b.dataset.locktoggle;
+STORE.act('Toggle lock',model=>{const c=model.criteria.find(x=>x.id===id);c.locked=!c.locked;});
+}
+else if((b=e.target.closest('#applyEqualBtn'))){
+STORE.act('Set weights equal',model=>{
+const w=WEIGHTS.equal(model.criteria);
+model.criteria.forEach(c=>{c.weight=w[c.id];c.locked=false;});
+});
+toast('Weights set equal');
+}
+else if((b=e.target.closest('[data-rocop]'))){
+const id=b.dataset.id,op=b.dataset.rocop;
+STORE.actUI(ui=>{
+const order=ui.rocOrder||STORE.model.criteria.map(c=>c.id);
+const i=order.indexOf(id);
+if(op==='up'&&i>0){const t=order[i-1];order[i-1]=order[i];order[i]=t;}
+if(op==='down'&&i<order.length-1){const t=order[i+1];order[i+1]=order[i];order[i]=t;}
+ui.rocOrder=order;
+});
+}
+else if((b=e.target.closest('#applyRocBtn'))){
+STORE.act('Apply rank-order weights',model=>{
+const w=WEIGHTS.rankOrderCentroid(STORE.ui.rocOrder);
+model.criteria.forEach(c=>{if(w[c.id]!==undefined){c.weight=w[c.id];c.locked=false;}});
+});
+toast('Rank-order weights applied');
+}
+else if((b=e.target.closest('#ahpNext'))){
+STORE.actUI(ui=>{ui.ahpIndex=(ui.ahpIndex||0)+1;});
+}
+else if((b=e.target.closest('#ahpBack'))){
+STORE.actUI(ui=>{ui.ahpIndex=Math.max(0,(ui.ahpIndex||0)-1);});
+}
+else if((b=e.target.closest('#ahpRestart'))){
+STORE.actUI(ui=>{ui.ahpIndex=0;ui.ahpJudgments={};});
+}
+else if((b=e.target.closest('[data-revisit]'))){
+const[i,j]=b.dataset.revisit.split('-').map(Number);
+const ids=STORE.model.criteria.map(c=>c.id);
+const pairs=WEIGHTS.allPairs(ids);
+const idx=pairs.findIndex(p=>p.i===i&&p.j===j);
+STORE.actUI(ui=>{ui.ahpIndex=idx>=0?idx:0;});
+}
+else if((b=e.target.closest('#applyAhpBtn'))){
+const ids=STORE.model.criteria.map(c=>c.id);
+const pairs=WEIGHTS.allPairs(ids);
+const judgments=pairs.map(p=>({i:p.i,j:p.j,ratio:WEIGHTS.sliderToRatio((STORE.ui.ahpJudgments||{})[p.i+'-'+p.j]||0)}));
+const result=WEIGHTS.pairwiseResult(ids,judgments);
+if(result.CR<=0.10){
+STORE.act('Apply pairwise weights',model=>{
+model.criteria.forEach(c=>{if(result.weights[c.id]!==undefined){c.weight=result.weights[c.id];c.locked=false;}});
+});
+toast('Pairwise weights applied');
+}
+}
+else if((b=e.target.closest('#savePresetBtn'))){
+const name=(typeof prompt==='function')?prompt('Name this preset:'):null;
+if(name){
+STORE.act('Save preset',model=>{
+const weights={};model.criteria.forEach(c=>{weights[c.id]=c.weight;});
+model.presets.push({name,weights});
+});
+toast('Preset saved \u2014 '+name);
+}
+}
+else if((b=e.target.closest('[data-applypreset]'))){
+const i=+b.dataset.applypreset;
+STORE.act('Apply preset',model=>{
+const p=model.presets[i];
+if(p)model.criteria.forEach(c=>{if(p.weights[c.id]!==undefined){c.weight=p.weights[c.id];c.locked=false;}});
+});
+}
+else if((b=e.target.closest('[data-delpreset]'))){
+const i=+b.dataset.delpreset;
+STORE.act('Delete preset',model=>{model.presets.splice(i,1);});
+}
+else if((b=e.target.closest('[data-toggleexpand]'))){
+const id=b.dataset.toggleexpand;
+STORE.actUI(ui=>{
+if(!ui.rankExpanded)ui.rankExpanded={};
+ui.rankExpanded[id]=!ui.rankExpanded[id];
+});
+}
+else if((b=e.target.closest('[data-pin]'))){
+const id=b.dataset.pin;
+STORE.act('Pin option',model=>{
+if(!model.view.pinned)model.view.pinned=[];
+const idx=model.view.pinned.indexOf(id);
+if(idx>=0)model.view.pinned.splice(idx,1);
+else{
+model.view.pinned.push(id);
+if(model.view.pinned.length>2)model.view.pinned.shift();
+}
+});
+}
+else if((b=e.target.closest('#runRobustnessBtn'))){
+STORE.actUI(ui=>{ui.robustnessResult=ANALYSIS.weightAgnosticRobustness(STORE.model);});
+}
+else if((b=e.target.closest('#assumeUncBtn'))){
+STORE.act('Assume \u00b15% uncertainty',model=>{model.criteria.forEach(c=>{c.uncertainty={kind:'pct',value:5};});});
+STORE.actUI(ui=>{ui.mcAssumed=true;});
+}
+else if((b=e.target.closest('#runMcBtn'))){
+STORE.actUI(ui=>{ui.monteCarloResult=ANALYSIS.monteCarlo(STORE.model);});
+}
+else if((b=e.target.closest('#copyRecordBtn'))){
+const model=STORE.model,result=ENGINE.score(model);
+const cf=ANALYSIS.closestFlip(model,result),robustness=STORE.ui.robustnessResult;
+const md=EXPORT.decisionRecordMarkdown(model,result,{closestFlip:ANALYSIS.closestFlipSentence(cf,model),robustness:robustness?ANALYSIS.robustnessSentence(robustness.shares,model):null});
+copyText(md).then(()=>toast('Decision record copied')).catch(()=>toast('Copy failed.'));
+}
+else if((b=e.target.closest('#printRecordBtn'))){
+if(typeof window!=='undefined'&&window.print)window.print();
+}
+else if((b=e.target.closest('#downloadModelBtn'))){
+download((STORE.model.meta.id||'model')+'.json',EXPORT.modelJSON(STORE.model),'application/json');
+}
+else if((b=e.target.closest('#downloadSheetBtn'))){
+const result=ENGINE.score(STORE.model);
+download((STORE.model.meta.id||'model')+'-spreadsheet.csv',EXPORT.spreadsheetCSV(STORE.model,result),'text/csv');
+}
+else if((b=e.target.closest('#copyJsonBtn'))){
+copyText(EXPORT.modelJSON(STORE.model)).then(()=>toast('Model JSON copied')).catch(()=>toast('Copy failed.'));
+}
+});
+
+document.addEventListener('change',e=>{
+if(e.target.id==='importModelInput'){
+const file=e.target.files&&e.target.files[0];
+if(!file)return;
+const reader=new FileReader();
+reader.onload=()=>{
+try{
+const parsed=JSON.parse(reader.result);
+if(!parsed||!Array.isArray(parsed.criteria)||!Array.isArray(parsed.options))throw new Error('bad shape');
+STORE.loadModel(parsed);
+toast('Model imported \u2014 '+(parsed.meta&&parsed.meta.name?parsed.meta.name:'untitled'));
+}catch(err){toast('Could not read that file as a model.');}
+};
+reader.readAsText(file);
+e.target.value='';
+return;
+}
+if(e.target.id==='exampleSel'){
+const key=e.target.value;
+if(key&&EXAMPLES[key]){STORE.loadModel(EXAMPLES[key]);toast('Loaded '+EXAMPLES[key].meta.name);}
+e.target.value='';
+return;
+}
+if(e.target.matches('[data-pc][data-pf="type"]')){
+pendingPaste.detect[+e.target.dataset.pc].type=e.target.value;
+return;
+}
+const critField=e.target.closest('[data-crit][data-field]');
+if(critField){
+const id=critField.dataset.crit,field=critField.dataset.field;
+STORE.act('Edit '+field,model=>{
+const cr=model.criteria.find(c=>c.id===id);
+if(field==='normalizer'){cr.scale={kind:critField.value,params:defaultParams(critField.value)};}
+else if(field==='missing'){cr.missing=critField.value;}
+else if(field==='uncKind'){cr.uncertainty.kind=critField.value;}
+else if(field==='uncValue'){cr.uncertainty.value=Number(critField.value)||0;}
+else if(field==='label'){cr.label=critField.value;}
+else if(field==='unit'){cr.unit=critField.value;}
+else if(field==='description'){cr.description=critField.value;}
+});
+return;
+}
+const paramField=e.target.closest('[data-crit][data-param]');
+if(paramField){
+const id=paramField.dataset.crit,key=paramField.dataset.param;
+STORE.act('Edit parameter',model=>{
+const cr=model.criteria.find(c=>c.id===id);
+if(!cr.scale.params)cr.scale.params={};
+if(key==='breakpoints'){
+cr.scale.params.breakpoints=paramField.value.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+const parts=l.split(':');return{at:Number(parts[0]),v:Number(parts[1])};
+}).filter(bp=>Number.isFinite(bp.at)&&Number.isFinite(bp.v));
+}else if(key==='map'){
+const map={};
+paramField.value.split('\n').map(l=>l.trim()).filter(Boolean).forEach(l=>{
+const idx=l.lastIndexOf(':');
+if(idx>0){const k=l.slice(0,idx).trim(),v=Number(l.slice(idx+1).trim());if(k&&Number.isFinite(v))map[k]=v;}
+});
+cr.scale.params.map=map;
+}else{
+cr.scale.params[key]=Number(paramField.value);
+}
+});
+return;
+}
+const directCtl=e.target.closest('[data-directid],[data-directnum]');
+if(directCtl){
+const id=directCtl.dataset.directid||directCtl.dataset.directnum;
+const value=Number(directCtl.value);
+const res=WEIGHTS.applyDirect(STORE.model.criteria,id,value);
+if(res.ok){
+STORE.act('Set weight',model=>{
+model.criteria.forEach(c=>{if(res.weights[c.id]!==undefined)c.weight=res.weights[c.id];});
+});
+}else{
+toast(res.reason);
+VIEWS.weights.render();
+}
+}
+});
+
+document.addEventListener('keydown',e=>{
+if(e.key==='Escape'&&$('#pasteModalBg')){VIEWS.data.closeModal();return;}
+const editInput=e.target.closest&&e.target.closest('#cellEdit');
+if(editInput){
+const td=editInput.closest('td');
+const r=+td.dataset.r,c=+td.dataset.c;
+if(e.key==='Enter'||e.key==='Tab'){
+e.preventDefault();
+const val=editInput.value;
+STORE.act('Edit cell',model=>{commitCellValue(model,r,c,val);});
+const nxt=moveAfterCommit(STORE.model,r,c,e.key,e.shiftKey);
+STORE.actUI(ui=>{ui.editingCell=nxt;});
+}else if(e.key==='Escape'){
+e.preventDefault();
+STORE.actUI(ui=>{ui.editingCell=null;});
+}
+return;
+}
+const box=e.target.closest&&e.target.closest('.cellbox');
+if(box&&box.id!=='cellEdit'){
+const td=box.closest('td');
+if(td&&td.dataset.r!==undefined&&/^Arrow(Up|Down|Left|Right)$/.test(e.key)){
+const r=+td.dataset.r,c=+td.dataset.c,maxC=STORE.model.criteria.length-1;
+let nr=r,nc=c;
+if(e.key==='ArrowUp')nr=Math.max(0,r-1);
+else if(e.key==='ArrowDown')nr=Math.min(STORE.model.options.length-1,r+1);
+else if(e.key==='ArrowLeft')nc=Math.max(-1,c-1);
+else if(e.key==='ArrowRight')nc=Math.min(maxC,c+1);
+e.preventDefault();
+const sel=$('td[data-r="'+nr+'"][data-c="'+nc+'"] .cellbox');
+if(sel)sel.focus();
+return;
+}
+if(td&&td.dataset.r!==undefined&&e.key==='Enter'){
+e.preventDefault();
+STORE.actUI(ui=>{ui.editingCell={r:+td.dataset.r,c:+td.dataset.c};});
+}
+return;
+}
+const tag=(e.target.tagName||'').toLowerCase();
+const typing=tag==='input'||tag==='textarea'||tag==='select';
+if((e.ctrlKey||e.metaKey)&&!typing){
+if(e.key.toLowerCase()==='z'&&!e.shiftKey){e.preventDefault();STORE.undo();return;}
+if((e.key.toLowerCase()==='z'&&e.shiftKey)||e.key.toLowerCase()==='y'){e.preventDefault();STORE.redo();return;}
+}
+if(!typing&&/^[1-6]$/.test(e.key)){
+const views=['data','criteria','weights','rank','stress','record'];
+STORE.actUI(ui=>{ui.activeView=views[+e.key-1];});
+}
+});
+
+document.addEventListener('paste',e=>{
+if(!e.target.closest||!e.target.closest('#gridPasteTarget'))return;
+e.preventDefault();
+const text=(e.clipboardData||window.clipboardData).getData('text/plain');
+VIEWS.data.handlePaste(text);
+});
+
+document.addEventListener('input',e=>{
+if(e.target.id==='ahpSlider'){
+const i=+e.target.dataset.i,j=+e.target.dataset.j,s=+e.target.value;
+if(!STORE.ui.ahpJudgments)STORE.ui.ahpJudgments={};
+STORE.ui.ahpJudgments[i+'-'+j]=s;
+const lbl=$('#ahpSliderLabel');
+if(lbl)lbl.textContent=ahpSliderText(s);
+}
+});
+}
+
+function init(){
+try{const th=localStorage.getItem('rubric.theme');if(th)document.documentElement.dataset.theme=th;}catch(e){}
+populateExampleSelect();
+STORE.subscribe(renderAll);
+wireEvents();
+STORE.load();
+if(typeof location!=='undefined'&&/[?&]test=1\b/.test(location.search)){
+TESTS.run();
+}
+}
+if(typeof document!=='undefined'){
+if(document.readyState!=='loading')init();
+else document.addEventListener('DOMContentLoaded',init);
+}
+
+if(typeof module!=='undefined')module.exports={NORMALIZERS,ENGINE,EXAMPLES,TESTS,STORE,VIEWS,WEIGHTS,ANALYSIS,EXPORT,evalCondition,isMissingVal,sum,clamp,fmt,deepClone,parseTable,inferColType,commitCellValue,init};
+
+</script>
+</body>
+</html>
