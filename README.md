@@ -40,6 +40,8 @@ A verdict tag sums these up: *Holds up* / *Check before trusting* / *Has errors*
 - **Data view**: editable table (number / category / boolean columns, units, ids in Advanced), add/remove rows and columns, CSV paste with type inference.
 - **Export**: JSON model, standalone JavaScript `score(r)` generated from the AST, plain-text formula, CSV of results. Share link (`#m=` base64url), JSON import.
 - Undo/redo (Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z; 100 steps; a slider drag counts as one step), autosave to localStorage, Esc closes the modal and then the inspector.
+- **Themed controls, no browser popups**: every dropdown is an app-styled list (keyboard: arrows, Home/End, type-ahead, Enter, Esc; flips upward near the bottom edge; stays on screen on mobile). `confirm()` is replaced by an in-app dialog. Removing a criterion, rule, parameter, row or column, or loading a template, shows a toast with **Undo**.
+- Favicon set: `favicon.ico`, `favicon.svg`, `favicon-32.png` and `apple-touch-icon.png` (a compass mark in #553f83).
 - Safe expression language: a recursive-descent parser. There is **no `eval` / `new Function`**.
 
 ## Entry points
@@ -47,6 +49,7 @@ A verdict tag sums these up: *Holds up* / *Check before trusting* / *Has errors*
 |---|---|
 | `index.html` | The app |
 | `index.html#m=<base64url JSON>` | Opens a shared model |
+| `ui-check.html` | Drives the real app: dropdown open/pick, keyboard, confirm, cancel, toast undo (17 checks, printed to the console) |
 | `tests.html` | Engine acceptance tests (40 checks, including codegen ≡ engine, Sarema General = 79.3, missing-value policies and seeded simulations) |
 
 ## Templates
@@ -66,6 +69,8 @@ index.html, tests.html
 css/style.css          design tokens (milky lavender, hue 300) + app styles
 js/core.js             util, expr parser, shapes, engine, trace, sensitivity, honesty, flips, codegen
 js/templates.js        starter models
+js/ui.js               themed dropdowns, menus, confirm dialog (wraps native <select> so app code is unchanged)
+js/ui-check.js         UI interaction checks
 js/app.js              state/history, rendering, inspector, data view, export, events
 js/engine-tests.js     acceptance tests
 docs/audit-spec.txt    the original build spec / audit
@@ -73,3 +78,15 @@ docs/audit-spec.txt    the original build spec / audit
 
 ## Data model
 A single JSON `Model` (`version, name, columns, rows, params, gates, criteria, combine`) is the only source of truth. It is stored in `localStorage['meridian.studio.v1']`. No server and no tables API are used.
+
+## Not in v1 (on purpose)
+- Fitting weights from examples the user ranks by hand
+- Comparing two models side by side
+- Cohort simulation
+- A dark theme
+
+## Suggested next steps
+1. Weight helpers adapted from Rubric: rank-order weights (sort criteria, get weights) and pairwise comparison with a consistency check.
+2. Soft rules (a points penalty instead of ruling an option out).
+3. Pairwise "I prefer A over B" checks that point out where the model disagrees with the user's intuition.
+4. A model comparison view.

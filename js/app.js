@@ -8,7 +8,7 @@ window.M = window.M || {};
   const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const S = M.state = { model: null, result: null, sens: {}, gaps: [], flips: [],
-    ui: { view: 'build', advanced: false, inspector: null, selectedRow: null, modal: null, exportTab: 'json', outOpen: false, menu: false } };
+    ui: { view: 'build', advanced: false, inspector: null, selectedRow: null, modal: null, exportTab: 'json', outOpen: false } };
   let past = [], future = [], gestureSnap = null, saveT = null, anaT = null, builtView = null;
 
   /* ---------------- helpers ---------------- */
@@ -19,10 +19,17 @@ window.M = window.M || {};
   const cidx = id => S.model.criteria.findIndex(c => c.id === id) + 1;
   const pct = w => (w == null ? '—' : Math.round(w * 100) + '%');
   const rowLabel = id => (S.result.byId[id] || {}).label || id;
-  function toast(msg) {
-    const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; t.setAttribute('role', 'status');
-    document.body.appendChild(t); setTimeout(() => t.remove(), 2600);
+  // One toast at a time. toastUndo adds an Undo button and stays a little longer.
+  let toastEl = null, toastT = null;
+  function dropToast() { clearTimeout(toastT); if (toastEl) { const t = toastEl; toastEl = null; t.classList.add('out'); setTimeout(() => t.remove(), 180); } }
+  function toast(msg, withUndo) {
+    dropToast();
+    const t = document.createElement('div'); t.className = 'toast' + (withUndo ? ' has-action' : ''); t.setAttribute('role', 'status');
+    t.innerHTML = `<span>${esc(msg)}</span>${withUndo ? '<button type="button" class="toast-btn" data-action="toast-undo">Undo</button>' : ''}`;
+    document.body.appendChild(t); toastEl = t;
+    toastT = setTimeout(dropToast, withUndo ? 5000 : 2600);
   }
+  const toastUndo = msg => toast(msg, true);
   const distinct = cid => [...new Set(S.model.rows.map(r => r.v[cid]).filter(v => v !== null && v !== undefined && v !== '').map(String))];
   const colMax = cid => { const v = S.model.rows.map(r => +r.v[cid]).filter(isFinite); return v.length ? Math.max(...v) : 0; };
   const unitOf = c => { if (c.source.kind !== 'column') return ''; const k = col(c.source.column); return k && k.unit ? ' ' + k.unit : ''; };
@@ -142,6 +149,7 @@ window.M = window.M || {};
     ins.setAttribute('aria-hidden', S.ui.inspector ? 'false' : 'true');
     ins.innerHTML = S.ui.inspector ? inspectorHTML() : '';
     document.getElementById('modal-root').innerHTML = modalHTML();
+    M.ui.enhanceAll();
     if (fk) { const el = document.querySelector(`[data-focus-key="${CSS.escape(fk)}"]`); if (el && el !== document.activeElement) el.focus(); }
   };
   R.live = () => {
@@ -182,9 +190,7 @@ window.M = window.M || {};
       <button class="btn primary" data-action="open-export">Export</button></div>`;
   }
   function templatesMenu(where) {
-    const open = S.ui.menu === where;
-    return `<div class="menu ${where === 'top' ? 'hide-sm' : ''}"><button class="btn" data-action="toggle-menu" data-v="${where}" aria-expanded="${open}">Templates ▾</button>
-      ${open ? `<div class="menu-list" role="menu">${M.templates.list.map(t => `<button role="menuitem" data-action="load-template" data-id="${t.id}">${esc(t.label)}</button>`).join('')}</div>` : ''}</div>`;
+    return `<button class="btn sel-trigger ${where === 'top' ? 'hide-sm' : ''}" data-action="templates-menu" data-focus-key="tpl:${where}" aria-haspopup="menu" aria-expanded="false">Templates<svg class="sel-chev" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`;
   }
 
   /* ---- recipe ---- */
@@ -760,7 +766,7 @@ window.M = window.M || {};
     return { id, label: pick.label, enabled: true, weight: 20, source: { kind: 'column', column: pick.id }, direction: 'higher', range: { auto: true, lo: null, hi: null }, shape };
   }
   const A = {
-    'set-view': el => ui(u => { u.view = el.dataset.v; u.menu = false; }),
+    'set-view': el => ui(u => { u.view = el.dataset.v; }),
     'toggle-advanced': () => { S.ui.advanced = !S.ui.advanced; save(); R.all(); if (S.ui.advanced) runAnalysis(); },
     'undo': () => M.undo(), 'redo': () => M.redo(),
     'open-export': () => ui(u => { u.modal = 'export'; }),
@@ -783,7 +789,7 @@ window.M = window.M || {};
       const c = newCritFor(S.model); if (!c) return toast(S.model.columns.length ? 'Every column is already used. Add a column in Data' : 'Add a column in Data first');
       M.commit('Add criterion', m => { m.criteria.push(c); }); ui(u => { u.inspector = { kind: 'criterion', id: c.id }; });
     },
-    'remove-criterion': (el, id) => M.commit('Remove criterion', m => { m.criteria = m.criteria.filter(c => c.id !== id); }),
+    'remove-criterion': (el, id) => { const c = crit(id); M.commit('Remove criterion', m => { m.criteria = m.criteria.filter(x => x.id !== id); }); toastUndo(`Removed ${c.label}`); },
     'toggle-criterion': (el, id) => M.commit('Toggle criterion', m => { const c = m.criteria.find(x => x.id === id); c.enabled = !c.enabled; }),
     'add-gate': () => {
       const m = S.model; if (m.gates.length >= LIMIT.gates) return toast('Up to 8 rules');
@@ -793,7 +799,7 @@ window.M = window.M || {};
       const ids = new Set(m.gates.map(g => g.id)); let n = 1; while (ids.has('g' + n)) n++;
       M.commit('Add rule', mm => { mm.gates.push({ id: 'g' + n, label: c.label + ' rule', expr: gateExpr(simple), enabled: true, simple }); });
     },
-    'remove-gate': (el, id) => M.commit('Remove rule', m => { m.gates = m.gates.filter(g => g.id !== id); }),
+    'remove-gate': (el, id) => { const g = gate(id); M.commit('Remove rule', m => { m.gates = m.gates.filter(x => x.id !== id); }); toastUndo(`Removed ${g.label || 'rule'}`); },
     'toggle-gate': (el, id) => M.commit('Toggle rule', m => { const g = m.gates.find(x => x.id === id); g.enabled = !g.enabled; }),
     'add-param': () => {
       const m = S.model; if (m.params.length >= LIMIT.params) return toast('Up to 12 parameters');
@@ -801,7 +807,11 @@ window.M = window.M || {};
       M.commit('Add parameter', mm => { mm.params.push({ id, label: 'New parameter', value: 1, min: 0, max: 10, step: 0.1 }); });
       ui(u => { u.inspector = { kind: 'param', id }; });
     },
-    'remove-param': (el, id) => M.commit('Remove parameter', m => { m.params = m.params.filter(p => p.id !== id); }),
+    'remove-param': (el, id) => {
+      const p = param(id), users = [...S.model.gates.map(g => g.expr), ...S.model.criteria.filter(c => c.source.kind === 'expr').map(c => c.source.expr), S.model.combine.expr].filter(s => M.expr.idents(s).some(t => t.name === id)).length;
+      M.commit('Remove parameter', m => { m.params = m.params.filter(x => x.id !== id); });
+      toastUndo(users ? `Removed ${p.label}. ${users} formula${users > 1 ? 's' : ''} now show an error` : `Removed ${p.label}`);
+    },
     'open': el => ui(u => { u.inspector = { kind: el.dataset.kind, id: el.dataset.id }; }),
     'close-inspector': () => ui(u => { if (u.inspector && u.inspector.kind === 'row') u.selectedRow = null; u.inspector = null; }),
     'select-row': (el, id) => ui(u => { u.selectedRow = id; u.inspector = { kind: 'row', id }; }),
@@ -815,39 +825,42 @@ window.M = window.M || {};
     },
     'set-shape': (el, id) => M.commit('Shape', m => { const c = m.criteria.find(x => x.id === id); c.shape.type = el.dataset.v; }),
     'set-direction': (el, id) => M.commit('Direction', m => { m.criteria.find(x => x.id === id).direction = el.dataset.v; }),
-    'toggle-menu': el => ui(u => { u.menu = u.menu === el.dataset.v ? false : el.dataset.v; }),
-    'load-template': (el, id) => {
-      S.ui.menu = false;
-      if (!confirm('Replace the current model with this template? You can undo.')) return R.all();
-      replaceModel(M.templates.get(id));
+    'templates-menu': el => {
+      const hints = { laptop: 'Simple', jobs: 'Every shape', features: 'Formula + parameter', care: 'Ported demo', blank: 'Start empty' };
+      M.ui.list(el, M.templates.list.map(t => ({ label: t.label, value: t.id, hint: hints[t.id] || '' })), async id => {
+        const t = M.templates.list.find(x => x.id === id);
+        const ok = await M.ui.confirm({ title: `Load “${t.label}”?`, body: 'This replaces the current model. You can undo it.', ok: 'Load template' });
+        if (ok) { replaceModel(M.templates.get(id)); toastUndo(`Loaded ${t.label}`); }
+      }, { role: 'menu', label: 'Templates', align: 'end', minWidth: 240 });
     },
     'add-row': () => {
       const m = S.model; if (m.rows.length >= LIMIT.rows) return toast('Up to 1000 rows');
       const ids = new Set(m.rows.map(r => r.id)); let n = m.rows.length + 1; while (ids.has('r' + n)) n++;
       M.commit('Add row', mm => { const v = {}; mm.columns.forEach(c => { v[c.id] = null; }); mm.rows.push({ id: 'r' + n, label: 'New option', v }); });
     },
-    'remove-row': (el, id) => M.commit('Remove row', m => { m.rows = m.rows.filter(r => r.id !== id); }),
+    'remove-row': (el, id) => { const r = S.model.rows.find(x => x.id === id); M.commit('Remove row', m => { m.rows = m.rows.filter(x => x.id !== id); }); toastUndo(`Removed ${r ? r.label : 'row'}`); },
     'add-column': () => {
       const m = S.model; if (m.columns.length >= LIMIT.columns) return toast('Up to 24 columns');
       const id = U.uniqueId('col', new Set([...m.columns.map(c => c.id), ...m.params.map(p => p.id)]));
       M.commit('Add column', mm => { mm.columns.push({ id, label: 'New column', type: 'number', unit: '' }); mm.rows.forEach(r => { r.v[id] = null; }); });
     },
-    'remove-column': (el, id) => {
-      const m = S.model, deps = m.criteria.filter(c => c.source.kind === 'column' && c.source.column === id).length + m.gates.filter(g => g.simple && g.simple.column === id).length;
-      if (deps && !confirm(`This column is used by ${deps} criteria or rules. They will be removed too.`)) return;
+    'remove-column': async (el, id) => {
+      const m = S.model, c = col(id), deps = m.criteria.filter(k => k.source.kind === 'column' && k.source.column === id).length + m.gates.filter(g => g.simple && g.simple.column === id).length;
+      if (deps && !(await M.ui.confirm({ title: `Remove “${c.label}”?`, body: `${deps} ${deps > 1 ? 'criteria or rules use' : 'criterion or rule uses'} this column and will be removed with it. You can undo this.`, ok: 'Remove column', danger: true }))) return;
+      setTimeout(() => toastUndo(`Removed ${c.label}`), 0);
       M.commit('Remove column', mm => {
         mm.columns = mm.columns.filter(c => c.id !== id); mm.rows.forEach(r => { delete r.v[id]; });
         mm.criteria = mm.criteria.filter(c => !(c.source.kind === 'column' && c.source.column === id));
         mm.gates = mm.gates.filter(g => !(g.simple && g.simple.column === id));
       });
     },
-    'paste-csv': () => ui(u => { u.modal = 'csv'; u.menu = false; }),
+    'paste-csv': () => ui(u => { u.modal = 'csv'; }),
+    'toast-undo': () => { M.undo(); dropToast(); },
     'csv-apply': () => { const t = document.getElementById('csv-text').value; if (applyCSV(t)) ui(u => { u.modal = null; }); }
   };
   document.addEventListener('click', e => {
     const el = e.target.closest('[data-action]');
-    if (!el) { if (S.ui.menu) ui(u => { u.menu = false; }); return; }
-    if (S.ui.menu && el.dataset.action !== 'toggle-menu' && el.dataset.action !== 'load-template') S.ui.menu = false;
+    if (!el) return;
     const f = A[el.dataset.action]; if (f) f(el, el.dataset.id, e);
   });
   document.addEventListener('keydown', e => {
@@ -855,8 +868,8 @@ window.M = window.M || {};
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); e.shiftKey ? M.redo() : M.undo(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); M.redo(); }
     else if (e.key === 'Escape') {
-      if (S.ui.menu) ui(u => { u.menu = false; });
-      else if (S.ui.modal) ui(u => { u.modal = null; });
+      if (M.ui.isListOpen() || document.querySelector('#dialog-root .scrim')) return;
+      if (S.ui.modal) ui(u => { u.modal = null; });
       else if (S.ui.inspector) A['close-inspector']();
     }
   });
