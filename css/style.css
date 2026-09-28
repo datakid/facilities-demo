@@ -403,6 +403,13 @@ table.grid{border-collapse:separate;border-spacing:0;min-width:100%;font-size:va
 .hour-col{flex:1;display:flex;align-items:flex-end;background:var(--ht);border-radius:10px;overflow:hidden;transition:transform var(--t-fast),box-shadow var(--t-fast)}
 .hour:hover .hour-col{transform:translateY(-2px);box-shadow:var(--shadow-1)}
 .hour-bar{width:100%;background:var(--hc);border-radius:10px 10px 0 0;opacity:.85;transition:height var(--t-med) var(--ease)}
+.hour-col{position:relative}
+.hour-back{position:absolute;left:0;right:0;top:0;background:repeating-linear-gradient(135deg,var(--bad) 0 3px,transparent 3px 6px);opacity:.55;border-radius:10px 10px 0 0}
+.day-carry{display:flex;align-items:center;gap:8px;font-size:var(--fs-xs);color:var(--ink-2);margin:var(--s2) 0 0}
+.carry-sw{background:repeating-linear-gradient(135deg,var(--bad) 0 3px,transparent 3px 6px);opacity:.7}
+.fnd-prog{margin-top:var(--s4)}
+.fnd-bar{height:8px;background:var(--sunken);border-radius:var(--rp);overflow:hidden}
+.fnd-bar span{display:block;height:100%;background:var(--brand);border-radius:var(--rp);transition:width var(--t-fast)}
 .hour.none .hour-col{background:repeating-linear-gradient(135deg,var(--bad-t) 0 6px,var(--surface) 6px 12px)}
 .hour-t{font-size:10px;color:var(--ink-3);text-align:center}
 .day-segs{list-style:none;margin:var(--s3) 0 0;padding:0;display:flex;flex-direction:column;gap:4px}

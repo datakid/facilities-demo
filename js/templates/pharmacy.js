@@ -17,6 +17,7 @@ window.M = window.M || {};
       P('lam', 'Patients per hour', 30, 4, 60, 1, 'The hour', '/h', 'How many prescriptions arrive in the hour you are planning for.'),
       P('pressure', 'Pressure', 0.8, 0, 1, 0.05, 'The hour', '', '0 is a calm hour. 1 is the worst rush of the week. Each person slows down and slips more as it rises, by their own amounts.'),
       P('surge', 'Unexpected surge', 0, 0, 0.6, 0.05, 'The hour', '', 'Extra demand on top of the normal rate: a clinic next door lets out, a system outage clears, a bus arrives.'),
+      P('backlog', 'Still waiting from the hour before', 0, 0, 60, 1, 'The hour', 'people', 'Patients left in line when the previous hour ended. The day plan fills this in hour by hour, so a busy hour spills into the next one.'),
       P('windows', 'Teller windows', 3, 1, 5, 1, 'The pharmacy', '', 'Counters where a patient can be served. More pharmacists than windows only helps a little.'),
       P('open_days', 'Days open per week', 6, 5, 7, 1, 'The pharmacy', 'days'),
       P('help', 'Value of an extra person at a full counter', 0.3, 0, 1, 0.05, 'The pharmacy', '', '0: a third person at two windows adds nothing. 1: they add a full person. Fetching stock and double-checking is usually 0.2–0.4.'),
@@ -54,7 +55,7 @@ window.M = window.M || {};
       calcs.push(K('a_' + s.id, s.name + ' accuracy now', `ac_${s.id} - pressure * (ac_${s.id} - ap_${s.id})`, { group: g, format: 'pct' }));
     });
     calcs.push(
-      K('lam_eff', 'Patients arriving', 'lam * (1 + surge)', { group: 'Demand', unit: '/h' }),
+      K('lam_eff', 'Patients to serve this hour', 'lam * (1 + surge) + backlog', { group: 'Demand', unit: '/h', note: 'New arrivals, plus the surge, plus anyone still waiting from the hour before.' }),
       K('w_n', 'People at the windows', sumIf(isW, id => 'pres_' + id), { group: 'Windows', unit: 'people', note: 'Counted by presence, so a half-day person counts as a half.' }),
       K('w_sp', 'Window speed (sum)', sumIf(isW, id => 'e_' + id), { group: 'Windows', unit: '×' }),
       K('w_acc', 'Window accuracy', `(${sumIf(isW, id => `a_${id} * e_${id}`)}) / max(w_sp, 0.0001)`, { group: 'Windows', format: 'pct', note: 'Weighted by how many prescriptions each person handles.' }),
@@ -72,6 +73,7 @@ window.M = window.M || {};
       K('mu', 'Patients per hour per window', '60 / m_win * pooled / w_c', { group: 'Windows', unit: '/h' }),
       K('util_win', 'Window load', 'lam_eff / (w_c * mu)', { group: 'Result', format: 'pct', pin: true, note: 'Above 100% the line never clears.' }),
       K('wait_min', 'Average wait', 'wait(lam_eff, mu, w_c) * 60', { group: 'Result', unit: 'min', pin: true, note: 'M/M/c queue. Infinite when the windows can’t keep up.' }),
+      K('left', 'Still waiting at the end of the hour', 'if(util_win < 1, lam_eff * wait_min / 60, lam_eff - w_c * mu)', { group: 'Result', unit: 'people', note: 'Little’s law: people in line = arrivals × wait. If the windows can’t keep up, it is the excess. The day plan carries this into the next hour.' }),
       K('sla', 'Served within the acceptable wait', 'within(lam_eff, mu, w_c, target_min / 60)', { group: 'Result', format: 'pct' }),
       K('back_load', 'Back-office work', 'lam_eff * (has_typ * q_miss * t_type + has_rec * t_record + if(bk_sp > 0, t_switch, 0)) / 60', { group: 'Back office', unit: '×', note: 'Person-hours of typing and recording per hour.' }),
       K('back_util', 'Back-office load', 'if(back_cap > 0, back_load / back_cap, 0)', { group: 'Result', format: 'pct', pin: true, note: 'Typing and recording staff are pooled. Above 100% the records fall behind.' }),
@@ -109,7 +111,7 @@ window.M = window.M || {};
         C('manager', 'Manager free to manage', 15, { kind: 'column', column: 'role_maya' }, { shape: { type: 'map', map: { off: 1, records: 0.75, back: 0.6, typing: 0.55, window: 0.25 } } })],
       combine: { type: 'sum', expr: '' },
       stress: ['lam', 'pressure', 'q_miss'],
-      day: { knob: 'lam', start: 8, values: [10, 14, 18, 22, 24, 20, 16, 14, 18, 26, 30, 28, 20, 12], link: { knob: 'pressure', lo: 0.1, hi: 0.85 } },
+      day: { knob: 'lam', start: 8, values: [10, 14, 18, 22, 24, 20, 16, 14, 18, 26, 30, 28, 20, 12], link: { knob: 'pressure', lo: 0.1, hi: 0.85 }, carry: { knob: 'backlog', calc: 'left' } },
       scenarios: [
         { id: 's1', label: 'Calm morning', values: { lam: 12, pressure: 0.1 } },
         { id: 's2', label: 'Midday', values: { lam: 22, pressure: 0.45 } },

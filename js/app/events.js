@@ -375,7 +375,7 @@ window.M = window.M || {};
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); M.redo(); }
     else if (e.key === 'Escape') {
       if (M.ui.isListOpen() || document.querySelector('#dialog-root .scrim')) return;
-      if (S.ui.modal) ui(u => { u.modal = null; u.block = null; if (u.finder) u.finder.busy = false; });
+      if (S.ui.modal) ui(u => { u.modal = null; u.block = null; if (u.finder) { u.finder.busy = false; u.finder.progress = null; } });
       else if (S.ui.inspector) A['close-inspector']();
     }
   });

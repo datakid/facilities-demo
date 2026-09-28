@@ -18,11 +18,11 @@ window.M = window.M || {};
     const m = S.model, D = m.day && H.param(m.day.knob) ? S.day : null;
     if (!D) return m.params.length ? `<h2>Day plan <span class="h-sub">hour by hour</span></h2><div class="card pad day-empty"><p class="help">Describe how a knob such as arrivals changes through the day, and see which option is best in each hour, where you should switch, and which single plan holds up all day.</p><button class="btn" data-action="open-day">Set up a day</button></div>` : '';
     const k = H.param(m.day.knob), col = palette(D.hours.map(h => h.winner));
-    const max = Math.max(...D.hours.map(h => h.v), 1e-9);
+    const max = Math.max(...D.hours.map(h => h.v), 1e-9), bmax = Math.max(...D.hours.map(h => h.after), 1);
     const cells = D.hours.map((h, i) => {
       const c = col(h.winner), nm = (h.winner ? H.rowLabel(h.winner) : 'No option passes') + (h.best && h.best !== h.winner ? ` (${H.rowLabel(h.best)} is ${fmt(h.res.byId[h.best].score - h.score, 1)} higher, below the switch threshold)` : '');
-      return `<button class="hour ${h.winner ? '' : 'none'}" data-action="apply-hour" data-i="${i}" style="--hc:${c.c};--ht:${c.t}" title="${esc(h.label)}–${esc(h.end)} · ${esc(k.label)} ${esc(fmtN(h.v))} · ${esc(nm)}${h.winner ? ' ' + fmt(h.score, 1) : ''}">
-        <span class="hour-col"><span class="hour-bar" style="height:${Math.max(8, h.v / max * 100)}%"></span></span><span class="hour-t num">${esc(h.label.slice(0, 2))}</span></button>`;
+      return `<button class="hour ${h.winner ? '' : 'none'}" data-action="apply-hour" data-i="${i}" style="--hc:${c.c};--ht:${c.t}" title="${esc(h.label)}–${esc(h.end)} · ${esc(k.label)} ${esc(fmtN(h.v))} · ${esc(nm)}${h.winner ? ' ' + fmt(h.score, 1) : ''}${D.carry ? ` · ${fmtN(+h.start.toFixed(1))} waiting at start, ${fmtN(+h.after.toFixed(1))} at end` : ''}">
+        <span class="hour-col"><span class="hour-bar" style="height:${Math.max(8, h.v / max * 100)}%"></span>${D.carry && h.after > 0.5 ? `<span class="hour-back" style="height:${Math.min(100, h.after / bmax * 45)}%"></span>` : ''}</span><span class="hour-t num">${esc(h.label.slice(0, 2))}</span></button>`;
     }).join('');
     const segs = D.segs.map(s => {
       const c = col(s.winner);
@@ -34,6 +34,7 @@ window.M = window.M || {};
     return `<h2>Day plan <span class="h-sub">${esc(k.label)} by hour, switching for more than ${fmtN(m.day.sticky ?? 3)} points${m.day.link && H.param(m.day.link.knob) ? ', ' + esc(H.param(m.day.link.knob).label.toLowerCase()) + ' follows it' : ''} · ${D.switches > 0 ? D.switches + ' switch' + (D.switches > 1 ? 'es' : '') : 'one plan all day'}</span>
       <span class="h-actions"><button class="link" data-action="open-day">Edit</button><button class="link" data-action="day-to-scen">As scenarios</button></span></h2>
       <div class="card pad"><div class="day-strip" role="group" aria-label="Best option per hour. Click an hour to apply its knobs.">${cells}</div>
+      ${D.carry ? `<p class="day-carry"><span class="sw carry-sw"></span>Striped: people still waiting at the end of the hour, carried into the next. ${D.closing > 0.5 ? `<b class="num">${fmtN(+D.closing.toFixed(1))}</b> still waiting at closing.` : 'The line is clear at closing.'}</p>` : ''}
       <ul class="day-segs">${segs}</ul><p class="day-sum">${sum}</p>
       <div class="day-actions"><button class="btn" data-action="open-finder" data-over="day" data-how="worst">Find a plan for the whole day</button></div></div>`;
   };
@@ -42,7 +43,8 @@ window.M = window.M || {};
     const m = S.model, d = m.day, k = d ? H.param(d.knob) : (m.params.find(p => /lam|arriv|per hour|users|rps/i.test(p.id + ' ' + p.label)) || m.params[0]);
     const vals = d ? d.values : P.shape('two', 12, +k.min + (k.max - k.min) * 0.2, +k.value * 1.1, +k.step);
     return { knob: k.id, start: d ? d.start : 8, n: vals.length, shape: 'two', lo: Math.min(...vals), hi: Math.max(...vals), text: vals.join(', '),
-      link: d && d.link ? d.link.knob : '', llo: d && d.link ? d.link.lo : 0, lhi: d && d.link ? d.link.hi : 1, sticky: d && d.sticky != null ? d.sticky : 3 };
+      link: d && d.link ? d.link.knob : '', llo: d && d.link ? d.link.lo : 0, lhi: d && d.link ? d.link.hi : 1, sticky: d && d.sticky != null ? d.sticky : 3,
+      cknob: d && d.carry ? d.carry.knob : '', ccalc: d && d.carry ? d.carry.calc : '' };
   }
   R.modals.day = () => {
     const D = S.ui.dayEdit, m = S.model;
@@ -62,11 +64,14 @@ window.M = window.M || {};
       <p class="help">For example, pressure goes from 0.1 in the quietest hour to 0.9 in the busiest, in step with arrivals.</p>
       <div class="field"><label>Only switch plans for a gain of more than <input type="number" min="0" max="50" step="0.5" data-pin="d-sticky" value="${D.sticky}" class="inline-num"> points</label>
         <p class="help">Changing who does what mid-shift has a cost. Small gains are ignored so the timeline doesn't flicker between near-ties.</p></div>
+      <div class="field two"><label for="dy-ccalc">Carry into the next hour<select id="dy-ccalc" data-pin="d-ccalc"><option value="">Nothing, hours are independent</option>${m.calcs.map(c => `<option value="${esc(c.id)}" ${c.id === D.ccalc ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label>
+        <label for="dy-cknob">as the knob<select id="dy-cknob" data-pin="d-cknob"><option value="">Choose…</option>${opt('', D.cknob)}</select></label></div>
+      <p class="help">For example, the people still waiting at the end of one hour become the backlog of the next, so a rush spills over instead of vanishing.</p>
       <div class="modal-actions">${m.day ? '<button class="btn danger-ghost" data-action="day-remove">Remove day plan</button><span class="spacer"></span>' : ''}<button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" data-action="day-save">Save day plan</button></div></div></div>`;
   };
 
   function finderDraft(over, how) {
-    const m = S.model, F = { on: {}, text: {}, base: (m.rows[0] || {}).id, over: over || (m.day ? 'day' : m.scenarios.length ? 'scenarios' : 'now'), how: how || 'avg', keep: 5, result: null, added: {}, busy: false };
+    const m = S.model, F = { on: {}, text: {}, base: (m.rows[0] || {}).id, over: over || (m.day ? 'day' : m.scenarios.length ? 'scenarios' : 'now'), how: how || 'avg', keep: 5, method: 'auto', result: null, added: {}, busy: false, progress: null };
     m.columns.forEach(c => {
       const ch = P.choicesFor(m, c);
       F.text[c.id] = ch.map(P.valText).join(', ');
@@ -78,16 +83,34 @@ window.M = window.M || {};
   function finderSpec() {
     const F = S.ui.finder, vary = {};
     S.model.columns.forEach(c => { if (F.on[c.id]) vary[c.id] = P.parseList(c, F.text[c.id]); });
-    return { vary, base: F.base, over: F.over, how: F.how, keep: F.keep };
+    return { vary, base: F.base, over: F.over, how: F.how, keep: F.keep, method: F.method === 'search' ? 'search' : 'auto' };
   }
   function estimate() {
-    const sp = finderSpec(), ks = Object.values(sp.vary);
-    const combos = ks.length ? ks.reduce((a, l) => a * l.length, 1) : 0, runs = P.runSet(S.model, sp.over).length;
-    const bad = combos > P.LIMITS.combos || (combos + S.model.rows.length) * runs > P.LIMITS.work;
-    return `<span class="${bad ? 'bad-text' : ''}"><b class="num">${combos.toLocaleString('en-US')}</b> combination${combos === 1 ? '' : 's'} × <b class="num">${runs}</b> ${runs > 1 ? (sp.over === 'day' ? 'hours' : 'scenarios') : 'run'}</span>`;
+    const sp = finderSpec(), X = P.prep(S.model, sp), runs = X.runs.length;
+    const how = X.exhaustive ? 'every one is tried' : `step-by-step search, up to <b class="num">${X.maxEval.toLocaleString('en-US')}</b> checked`;
+    return `<span><b class="num">${X.total.toLocaleString('en-US')}</b> combination${X.total === 1 ? '' : 's'} × <b class="num">${runs}</b> ${runs > 1 ? (sp.over === 'day' ? 'hours' : 'scenarios') : 'run'}${X.runs.carry ? ' with carry-over' : ''} · ${how}</span>`;
+  }
+  let worker = null, workerOk = typeof Worker !== 'undefined' && location.protocol !== 'file:', job = 0;
+  function runFinder(spec, done, onProg) {
+    const model = JSON.parse(JSON.stringify(S.model)), id = ++job;
+    const local = () => setTimeout(() => { if (id === job) done(P.generate(model, spec)); }, 30);
+    if (!workerOk) return local();
+    try {
+      if (!worker) worker = new Worker('js/core/plan-worker.js');
+      worker.onmessage = e => { if (id !== job) return; if (e.data.progress) onProg(e.data.progress); else done(e.data.done); };
+      worker.onerror = e => { e.preventDefault(); workerOk = false; worker = null; local(); };
+      worker.postMessage({ model, spec });
+    } catch (err) { workerOk = false; worker = null; local(); }
+  }
+  M.plan.warm = () => { if (workerOk && !worker) try { worker = new Worker('js/core/plan-worker.js'); } catch (err) { workerOk = false; } };
+  function progressHTML() {
+    const p = S.ui.finder.progress;
+    if (!p) return '<p class="help">Searching…</p>';
+    return `<div class="fnd-prog"><div class="fnd-bar"><span style="width:${Math.min(100, p.evals / p.max * 100).toFixed(1)}%"></span></div>
+      <p class="help">Checked <b class="num">${p.evals.toLocaleString('en-US')}</b> plans. Best so far: <b>${esc(p.label || '—')}</b> <span class="num">${fmt(p.best, 1)}</span></p></div>`;
   }
   function resultHTML() {
-    const F = S.ui.finder, X = F.result; if (F.busy) return '<p class="help">Searching…</p>';
+    const F = S.ui.finder, X = F.result; if (F.busy) return progressHTML();
     if (!X) return '';
     if (X.error) return `<p class="err">${esc(X.error)}</p>`;
     const judged = X.how === 'worst' ? 'weakest ' + (X.runs > 1 ? X.runLabel.replace(/s$/, '') : 'run') : 'average';
@@ -95,7 +118,10 @@ window.M = window.M || {};
       ${X.runs > 1 ? `<td class="num faint">${r.pass}/${X.runs}</td><td class="faint">${r.worst > 0 ? fmt(r.worst, 1) : '<span class="bad-text">0</span>'}${r.worstRun ? ' · ' + esc(r.worstRun) : ''}</td>` : ''}
       <td>${mine ? '<span class="tag">yours</span>' : F.added[r.id] ? '<span class="tag ok-tag">added</span>' : `<button class="btn small" data-action="finder-add" data-id="${esc(r.id)}">Add</button>`}</td></tr>`;
     const beats = X.mine && X.top[0] && X.top[0].score > X.mine.score + 0.05;
-    return `<p class="fr-meta">Tried <b class="num">${X.tried.toLocaleString('en-US')}</b> new combinations, <b class="num">${X.passing.toLocaleString('en-US')}</b> passed. Ranked by ${judged} score.</p>
+    const meta = X.method === 'search'
+      ? `Searched step by step: <b class="num">${X.tried.toLocaleString('en-US')}</b> of <b class="num">${X.total.toLocaleString('en-US')}</b> combinations checked from <b class="num">${X.starts}</b> starting points in <span class="num">${(X.ms / 1000).toFixed(1)} s</span>${X.timedOut ? ' (time limit reached)' : ''}. The best plan is very likely, but not guaranteed, to be the best overall.`
+      : `Tried all <b class="num">${X.tried.toLocaleString('en-US')}</b> new combinations in <span class="num">${(X.ms / 1000).toFixed(1)} s</span>.`;
+    return `<p class="fr-meta">${meta} <b class="num">${X.passing.toLocaleString('en-US')}</b> passed. Ranked by ${judged} score${X.carry ? ', with the queue carried from hour to hour' : ''}.</p>
       ${X.top.length ? `<div class="fr-wrap"><table class="fr-table"><thead><tr><th></th><th>Plan</th><th>Score</th>${X.runs > 1 ? '<th>Passes</th><th>Weakest</th>' : ''}<th></th></tr></thead><tbody>
         ${X.top.map((r, i) => row(r, i)).join('')}${X.mine ? row(X.mine, 0, true) : ''}</tbody></table></div>
         <p class="help">${beats ? `The best new plan beats your best current option (<b>${esc(X.mine.label)}</b>) by <span class="num">${fmt(X.top[0].score - X.mine.score, 1)}</span> points.` : X.mine ? `None beats your best current option, <b>${esc(X.mine.label)}</b>. Your list already holds the best plan.` : ''}</p>
@@ -109,13 +135,14 @@ window.M = window.M || {};
     const base = m.rows.map(r => `<option value="${esc(r.id)}" ${r.id === F.base ? 'selected' : ''}>${esc(r.label)}</option>`).join('');
     const off = [...(m.scenarios.length ? [] : ['scenarios']), ...(m.day ? [] : ['day'])];
     return `<div class="scrim" data-action="scrim"><div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="fnd-title">
-      <div class="modal-head"><div><span class="kicker">Plan finder</span><h3 id="fnd-title">Try every combination</h3></div><button class="icon-btn" data-action="close-modal" aria-label="Close">${R.ICON.close}</button></div>
-      <p class="help fnd-intro">Tick the columns to vary and list the values to try. Every combination becomes a candidate, is scored with your full equation, and the best ones can be added as options.</p>
+      <div class="modal-head"><div><span class="kicker">Plan finder</span><h3 id="fnd-title">Find the best plan</h3></div><button class="icon-btn" data-action="close-modal" aria-label="Close">${R.ICON.close}</button></div>
+      <p class="help fnd-intro">Tick the columns to vary and list the values to try. Every combination is scored with your full equation. Small spaces are tried in full. Large ones (millions of combinations) are searched step by step: start from your plans and random ones, and keep changing one column at a time while the score improves. The best plans can be added as options.</p>
       <div class="fnd-cols">${cols}</div>
       <div class="fnd-opts">
         <div class="field"><span class="lab">Judge on</span>${seg('finder-over', F.over, [['now', 'Current knobs'], ['scenarios', 'Every scenario'], ['day', 'Every hour']], off)}</div>
         <div class="field"><span class="lab">Rank by</span>${seg('finder-how', F.how, [['avg', 'Average'], ['worst', 'Worst case']])}</div>
         <div class="field"><label for="fnd-base">Other columns from</label><select id="fnd-base" data-pin="f-base">${base}</select></div>
+        <div class="field"><span class="lab">Method</span>${seg('finder-method', F.method, [['auto', 'Automatic'], ['search', 'Always search']])}</div>
         <div class="field keep"><label>Keep top <input type="number" min="1" max="12" step="1" data-pin="f-keep" value="${F.keep}"></label></div></div>
       <div class="fnd-run"><span id="finder-est">${estimate()}</span><button class="btn primary" data-action="finder-run" ${F.busy ? 'disabled' : ''}>Find plans</button></div>
       <div id="finder-result">${resultHTML()}</div></div></div>`;
@@ -174,6 +201,7 @@ window.M = window.M || {};
     'd-text': el => { S.ui.dayEdit.text = el.value; const c = document.getElementById('dy-count'); if (c) c.textContent = P.parseList({ type: 'number' }, el.value).length; },
     'd-link': el => { const D = S.ui.dayEdit, p = H.param(el.value); D.link = el.value; if (p) { D.llo = +p.min; D.lhi = +p.max; } R.all(); },
     'd-sticky': el => { S.ui.dayEdit.sticky = U.clamp(+el.value || 0, 0, 50); },
+    'd-ccalc': el => { S.ui.dayEdit.ccalc = el.value; }, 'd-cknob': el => { S.ui.dayEdit.cknob = el.value; },
     'd-llo': el => { S.ui.dayEdit.llo = +el.value; }, 'd-lhi': el => { S.ui.dayEdit.lhi = +el.value; },
     's-knob': el => { const a = S.ui.scenBuild.axes[+el.dataset.i], p = H.param(el.value); a.knob = el.value; a.text = [p.min, (+p.min + +p.max) / 2, p.max].map(v => +(+v).toFixed(4)).join(', '); R.all(); },
     's-vals': el => { S.ui.scenBuild.axes[+el.dataset.i].text = el.value; },
@@ -201,12 +229,15 @@ window.M = window.M || {};
     R.all(); H.toastUndo(rs.length > 1 ? `Added ${rs.length} plans as options` : `Added ${rs[0].label}`);
   };
   Object.assign(M.app.actions, {
-    'open-finder': el => ui(u => { const over = el && el.dataset.over, how = el && el.dataset.how; if (!u.finder || over) u.finder = finderDraft(over, how); u.finder.result = null; u.modal = 'finder'; }),
+    'open-finder': el => ui(u => { M.plan.warm(); const over = el && el.dataset.over, how = el && el.dataset.how; if (!u.finder || over) u.finder = finderDraft(over, how); u.finder.result = null; u.modal = 'finder'; }),
     'finder-over': el => ui(u => { u.finder.over = el.dataset.v; u.finder.result = null; }),
     'finder-how': el => ui(u => { u.finder.how = el.dataset.v; u.finder.result = null; }),
+    'finder-method': el => ui(u => { u.finder.method = el.dataset.v; u.finder.result = null; }),
     'finder-run': () => {
-      S.ui.finder.busy = true; S.ui.finder.added = {}; R.all();
-      setTimeout(() => { const F = S.ui.finder; if (!F) return; F.result = P.generate(S.model, finderSpec()); F.busy = false; if (S.ui.modal === 'finder') R.all(); }, 30);
+      const F = S.ui.finder, spec = finderSpec();
+      F.busy = true; F.added = {}; F.progress = null; F.result = null; R.all();
+      runFinder(spec, res => { F.result = res; F.busy = false; F.progress = null; if (S.ui.modal === 'finder') R.all(); },
+        p => { F.progress = p; const el = document.getElementById('finder-result'); if (el && F.busy) el.innerHTML = progressHTML(); });
     },
     'finder-add': (el, id) => { const r = S.ui.finder.result.top.find(x => x.id === id); if (r) addRows([r]); },
     'finder-add-all': () => { const rs = S.ui.finder.result.top.filter(r => !S.ui.finder.added[r.id]); if (rs.length) addRows(rs); },
@@ -219,7 +250,8 @@ window.M = window.M || {};
     'day-save': () => {
       const D = S.ui.dayEdit, values = P.parseList({ type: 'number' }, D.text).slice(0, 24);
       if (!values.length) return H.toast('Enter at least one value');
-      M.commit('Day plan', m => { m.day = { knob: D.knob, start: D.start, values, link: D.link && D.link !== D.knob ? { knob: D.link, lo: +D.llo, hi: +D.lhi } : null, sticky: +D.sticky }; });
+      M.commit('Day plan', m => { m.day = { knob: D.knob, start: D.start, values, link: D.link && D.link !== D.knob ? { knob: D.link, lo: +D.llo, hi: +D.lhi } : null, sticky: +D.sticky,
+        carry: D.ccalc && D.cknob && D.cknob !== D.knob ? { knob: D.cknob, calc: D.ccalc } : null }; });
       ui(u => { u.modal = null; u.dayEdit = null; }); H.toastUndo('Saved the day plan');
     },
     'day-remove': () => { M.commit('Remove day', m => { m.day = null; }); ui(u => { u.modal = null; }); H.toastUndo('Removed the day plan'); },

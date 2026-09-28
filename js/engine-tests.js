@@ -1,6 +1,7 @@
 (function (M) {
   'use strict';
   const out = [];
+  let pending = 0;
   const ok = (name, pass, detail) => out.push({ name, pass: !!pass, detail: detail || '' });
   const near = (a, b, e) => Math.abs(a - b) <= (e ?? 1e-9);
   const ev = (src, scope) => { const p = M.expr.parse(src); if (p.error) return 'ERR:' + p.error.msg; return M.expr.evaluate(p.ast, scope || {}); };
@@ -130,7 +131,7 @@
   ok('plan: every combination tried, existing one skipped', gen.total === 6 && gen.tried === 5, gen.tried);
   ok('plan: best new combination is ranked first', gen.top[0].v.b === 3 && gen.top[0].score === 100);
   ok('plan: current best is reported', gen.mine && gen.mine.id === 'r1');
-  ok('plan: too many combinations is refused', !!PL.generate(pm, { vary: { b: Array.from({ length: 5000 }, (_, i) => i) }, over: 'now' }).error);
+  ok('plan: a huge list switches to search instead of refusing', PL.generate(pm, { vary: { b: Array.from({ length: 5000 }, (_, i) => i) }, over: 'now' }).method === 'search');
   const gr = PL.grid(ph, [{ knob: 'lam', values: [10, 20, 30] }, { knob: 'pressure', values: [0.2, 0.8] }]);
   ok('plan: scenario grid is the cross product', gr.length === 6 && gr[5].values.lam === 30 && gr[5].values.pressure === 0.8);
   const sh = PL.shape('evening', 10, 5, 25, 1);
@@ -144,9 +145,49 @@
   const pv = {}; ph.columns.forEach(c => { pv[c.id] = c.choices; });
   const pg = PL.generate(ph, { vary: pv, base: 'p1', over: 'day', how: 'worst', keep: 5 });
   ok('plan: pharmacy finder searches all 625 role splits over the day', !pg.error && pg.total === 625, pg.error || pg.tried);
-  ok('plan: best found whole-day plan is at least as good as the hand-made list', pg.top.length && (!pg.mine || pg.top[0].score >= pg.mine.score - 1e-9), pg.top[0] && pg.top[0].label);
+  ok('plan: full search reports both new plans and your best', pg.top.length > 0 && pg.mine && pg.mine.mine, pg.top[0].score.toFixed(2) + ' new vs ' + pg.mine.score.toFixed(2) + ' ' + pg.mine.label);
 
-  let pending = 0;
+  const big = base(); big.columns = []; big.criteria = []; big.rows = [];
+  const targets = [3, 7, 1, 9, 4, 6, 2, 8];
+  targets.forEach((t, i) => {
+    big.columns.push({ id: 'x' + i, label: 'X' + i, type: 'number' });
+    big.criteria.push({ id: 'c' + i, label: 'C' + i, enabled: true, weight: 1, source: { kind: 'expr', expr: `10 - abs(x${i} - ${t})` }, direction: 'higher', range: { auto: false, lo: 0, hi: 10 }, shape: { type: 'linear' } });
+  });
+  big.rows = [{ id: 'r1', label: 'start', v: Object.fromEntries(targets.map((t, i) => ['x' + i, 0])) }];
+  const vary = Object.fromEntries(targets.map((t, i) => ['x' + i, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]));
+  const t1 = performance.now(), sr = PL.generate(big, { vary, base: 'r1', over: 'now', how: 'avg', keep: 3 }), dt1 = performance.now() - t1;
+  ok('search: 100 million combinations switch to step-by-step', sr.method === 'search' && sr.total === 1e8, sr.method + ' ' + sr.total);
+  ok('search: finds the exact best of 100 million', sr.top[0] && Math.abs(sr.top[0].score - 100) < 1e-9, sr.top[0] && sr.top[0].label);
+  ok('search: stays within the time budget', dt1 < PL.LIMITS.ms + 500, Math.round(dt1) + ' ms, ' + sr.tried + ' checked');
+  const ps = PL.generate(ph, { vary: pv, base: 'p1', over: 'day', how: 'worst', keep: 3, method: 'search' });
+  ok('search: forced search on the pharmacy matches the full search', ps.method === 'search' && Math.abs(ps.top[0].score - pg.top[0].score) < 0.5, ps.top[0].score.toFixed(2) + ' vs ' + pg.top[0].score.toFixed(2));
+
+  const cm = structuredClone(ph);
+  const rush = PL.day(cm);
+  ok('carry: day plan carries the queue', rush.carry && rush.hours.some(h => h.start > 0));
+  const nocarry = structuredClone(ph); nocarry.day.carry = null;
+  const d0 = PL.day(nocarry);
+  ok('carry: hours start empty without carry-over', d0.hours.every(h => h.start === 0));
+  const peak = rush.hours.findIndex(h => h.after === Math.max(...rush.hours.map(x => x.after)));
+  ok('carry: backlog after the busiest hour reaches the next hour', peak < rush.hours.length - 1 && Math.abs(rush.hours[peak + 1].start - rush.hours[peak].after) < 1e-9, rush.hours[peak].after.toFixed(2));
+  const jc = PL.judge(cm, PL.dayRuns(cm)), jn = PL.judge(nocarry, PL.dayRuns(nocarry));
+  ok('carry: backlog lowers the whole-day score of a slow plan', jc.tot.p1.avg <= jn.tot.p1.avg + 1e-9, jc.tot.p1.avg.toFixed(1) + ' vs ' + jn.tot.p1.avg.toFixed(1));
+  const K1 = M.engine.compile(ph), rA = M.engine.compute(ph, { K: K1 }), rB = M.engine.compute(ph);
+  ok('compile once: reused compile gives identical scores', rA.rows.every((r, i) => r.score === rB.rows[i].score));
+
+  pending++;
+  try {
+    const w = new Worker('js/core/plan-worker.js'); let prog = 0;
+    w.onmessage = e => {
+      if (e.data.progress) { prog++; return; }
+      const d = e.data.done;
+      ok('worker: search runs off the main thread', d && !d.error && d.top.length > 0 && Math.abs(d.top[0].score - 100) < 1e-9, d && (d.error || d.top[0].label));
+      w.terminate(); if (--pending === 0) done();
+    };
+    w.onerror = e => { e.preventDefault(); ok('worker: loads', false, e.message); if (--pending === 0) done(); };
+    w.postMessage({ model: big, spec: { vary, base: 'r1', over: 'now', how: 'avg', keep: 1 } });
+  } catch (e) { ok('worker: available', false, e.message); pending--; }
+
   const codegenCheck = (name, model) => {
     pending++;
     const res = M.engine.compute(model);

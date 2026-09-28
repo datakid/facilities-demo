@@ -85,7 +85,17 @@ window.M = window.M || {};
     return out;
   }
 
+  const MEMO = new Map();
   function parse(src) {
+    const key = String(src ?? '');
+    let hit = MEMO.get(key);
+    if (hit) return hit;
+    hit = parseRaw(key);
+    if (MEMO.size > 4000) MEMO.clear();
+    MEMO.set(key, hit);
+    return hit;
+  }
+  function parseRaw(src) {
     try {
       const T = tokenize(String(src ?? '')); let p = 0;
       const isOp = v => T[p].k === 'op' && T[p].v === v;
@@ -143,10 +153,10 @@ window.M = window.M || {};
   }
 
   const numv = v => { if (typeof v === 'string') throw { msg: 'Text can only be compared' }; return v; };
-  function pickFn(key, rest) {
-    const pairs = Math.floor(rest.length / 2);
-    for (let i = 0; i < pairs; i++) if (rest[2 * i]() === key) return rest[2 * i + 1]();
-    if (rest.length % 2 === 1) return rest[rest.length - 1]();
+  function pickFn(key, args, S) {
+    const n = args.length - 1, pairs = Math.floor(n / 2);
+    for (let i = 0; i < pairs; i++) if (evaluate(args[1 + 2 * i], S) === key) return evaluate(args[2 + 2 * i], S);
+    if (n % 2 === 1) return evaluate(args[n], S);
     throw { msg: `No match for "${key}" in pick` };
   }
   function evaluate(n, S) {
@@ -175,7 +185,7 @@ window.M = window.M || {};
       }
       case 'call': {
         if (n.fn === 'if') return numv(evaluate(n.args[0], S)) ? evaluate(n.args[1], S) : evaluate(n.args[2], S);
-        if (n.fn === 'pick') return pickFn(evaluate(n.args[0], S), n.args.slice(1).map(a => () => evaluate(a, S)));
+        if (n.fn === 'pick') return pickFn(evaluate(n.args[0], S), n.args, S);
         const A = n.args.map(a => numv(evaluate(a, S)));
         switch (n.fn) {
           case 'min': return Math.min(...A); case 'max': return Math.max(...A);

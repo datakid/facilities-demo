@@ -10,11 +10,11 @@ window.M = window.M || {};
     const errors = [];
     const colType = {}; model.columns.forEach(c => { colType[c.id] = c.type; });
     const names = new Set([...model.columns.map(c => c.id), ...model.params.map(p => p.id)]);
-    const comp = (src, set, where, id) => {
-      const r = parse(src);
-      if (r.error) { errors.push({ where, id, msg: r.error.msg, pos: r.error.pos }); return null; }
+    const comp = (src, set, where, id, sink) => {
+      const out = sink || errors, r = parse(src);
+      if (r.error) { out.push({ where, id, msg: r.error.msg, pos: r.error.pos }); return null; }
       const e = check(r.ast, set);
-      if (e) { errors.push({ where, id, msg: e.msg, pos: e.pos }); return null; }
+      if (e) { out.push({ where, id, msg: e.msg, pos: e.pos }); return null; }
       return r.ast;
     };
     const CA = (model.calcs || []).map(k => { const ast = comp(k.expr, names, 'calc', k.id); names.add(k.id); return { k, ast }; });
@@ -34,7 +34,7 @@ window.M = window.M || {};
 
   function compute(model, opts) {
     opts = opts || {};
-    const K = compile(model), errors = K.errors, colType = K.colType, C = K.C;
+    const K = opts.K || compile(model), errors = K.errors.slice(), colType = K.colType, C = K.C;
     const P = {}; model.params.forEach(p => { P[p.id] = +p.value; });
     if (opts.P) Object.assign(P, opts.P);
 
@@ -61,6 +61,7 @@ window.M = window.M || {};
 
     const rows = model.rows.map(r => {
       const sc = Object.assign({}, r.v, P), calc = {};
+      if (opts.rowP && opts.rowP[r.id]) Object.assign(sc, opts.rowP[r.id]);
       K.CA.forEach(x => {
         if (!x.ast) { calc[x.k.id] = { v: null, error: 'Formula has an error' }; return; }
         try {
@@ -84,6 +85,7 @@ window.M = window.M || {};
     C.forEach(x => {
       if (x.isMap) return;
       const c = x.c; let lo, hi; const auto = c.range.auto !== false;
+      if (auto && opts.ranges && opts.ranges[c.id]) { ranges[c.id] = opts.ranges[c.id]; return; }
       if (auto) { const vals = rows.map(r => r.crit[c.id].raw).filter(v => typeof v === 'number' && isFinite(v)); lo = vals.length ? Math.min(...vals) : 0; hi = vals.length ? Math.max(...vals) : 0; }
       else { lo = +c.range.lo || 0; hi = +c.range.hi || 0; }
       ranges[c.id] = { lo, hi, auto };
@@ -94,7 +96,7 @@ window.M = window.M || {};
     let ctype = model.combine.type, cast = null, customFallback = false;
     if (ctype === 'custom') {
       const names = new Set([...model.params.map(p => p.id), ...C.map(x => x.c.id), ...C.map(x => 'w_' + x.c.id)]);
-      cast = K.comp(model.combine.expr, names, 'combine', 'combine');
+      cast = K.comp(model.combine.expr, names, 'combine', 'combine', errors);
       if (!cast) { ctype = 'sum'; customFallback = true; }
     }
     let outOfRange = false;
@@ -252,9 +254,9 @@ window.M = window.M || {};
     steps = steps || 24;
     const p = model.params.find(x => x.id === paramId); if (!p) return null;
     const lo = +p.min, hi = +p.max; if (!(hi > lo)) return null;
-    const pts = [];
+    const pts = [], K = compile(model);
     for (let i = 0; i <= steps; i++) {
-      const v = lo + (hi - lo) * i / steps, r = compute(model, { P: { [paramId]: v } });
+      const v = lo + (hi - lo) * i / steps, r = compute(model, { P: { [paramId]: v }, K });
       const w = r.ranked[0] || null;
       pts.push({ v, winner: w, score: w ? r.byId[w].score : 0, left: r.ranked.length });
     }
@@ -268,8 +270,9 @@ window.M = window.M || {};
   }
 
   function scenarios(model) {
+    const K = compile(model);
     return (model.scenarios || []).map(s => {
-      const r = compute(model, { P: s.values || {} });
+      const r = compute(model, { P: s.values || {}, K });
       const w = r.ranked[0] || null;
       return { id: s.id, label: s.label, winner: w, score: w ? r.byId[w].score : 0, top: r.ranked.slice(0, 3), left: r.ranked.length, res: r };
     });
@@ -320,6 +323,6 @@ window.M = window.M || {};
       return s + u;
     }
   };
-  M.engine = { compute, trace, uncertainty, weightFree, reversal, rng, combineS, knobSweep, scenarios };
+  M.engine = { compile, compute, trace, uncertainty, weightFree, reversal, rng, combineS, knobSweep, scenarios };
   M.sensitivity = { sweep, knob: knobSweep };
 })(window.M);

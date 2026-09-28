@@ -66,18 +66,24 @@
 
     M.app.actions['open-finder'](); await wait(60);
     ok('finder pre-selects the role columns', document.querySelectorAll('.fnd-col.on').length === 4);
-    ok('finder estimate shows 625 combinations', q('#finder-est').textContent.includes('625'));
+    ok('finder estimate shows 625 combinations, tried in full', q('#finder-est').textContent.includes('625') && q('#finder-est').textContent.includes('every one'));
     const t0 = performance.now();
     q('[data-action="finder-run"]').click();
-    for (let i = 0; i < 100 && (!M.state.ui.finder.result); i++) await wait(50);
+    for (let i = 0; i < 200 && (!M.state.ui.finder.result); i++) await wait(50);
     const dt = performance.now() - t0;
     ok('finder returns ranked plans', M.state.ui.finder.result && M.state.ui.finder.result.top.length === 5, M.state.ui.finder.result && M.state.ui.finder.result.top[0].label);
-    ok('finder is fast enough (625 × 14 hours)', dt < 5000, Math.round(dt) + ' ms');
+    ok('finder is fast enough (625 × 14 hours)', dt < 5000, Math.round(dt) + ' ms total, engine ' + M.state.ui.finder.result.ms + ' ms');
     const rows0 = M.state.model.rows.length;
     q('[data-action="finder-add-all"]').click(); await wait(100);
     ok('found plans are added as options', M.state.model.rows.length === rows0 + 5);
     M.undo(); await wait(60);
+    q('[data-action="finder-method"][data-v="search"]').click(); await wait(40);
+    ok('forcing search updates the estimate', q('#finder-est').textContent.includes('step-by-step'));
+    q('[data-action="finder-run"]').click();
+    for (let i = 0; i < 200 && (!M.state.ui.finder.result); i++) await wait(50);
+    ok('step-by-step search reports its method', M.state.ui.finder.result && M.state.ui.finder.result.method === 'search' && /step by step/.test(q('.fr-meta').textContent));
     q('[data-action="close-modal"]').click(); await wait(40);
+    ok('day plan shows the carried queue', !!q('.day-carry'));
 
     q('.hour').click(); await wait(80);
     ok('clicking an hour applies its knobs', M.state.model.params.find(p => p.id === 'lam').value === 10);
