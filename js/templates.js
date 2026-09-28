@@ -1,4 +1,3 @@
-/* Meridian Studio — starter models. Each is a plain Model object (see README). */
 window.M = window.M || {};
 (function (M) {
   'use strict';
@@ -35,7 +34,7 @@ window.M = window.M || {};
       params: [],
       gates: [{ id: 'g1', label: 'Under budget', expr: 'price <= 1800', enabled: true, simple: { column: 'price', op: '<=', value: 1800 } }],
       criteria: [
-        crit('price', 'Price', 30, { direction: 'lower' }), crit('battery_h', 'Battery', 25, { noise: 10 }), // DECISION: advertised battery life is fuzzy, so the starter shows the uncertainty feature
+        crit('price', 'Price', 30, { direction: 'lower' }), crit('battery_h', 'Battery', 25, { noise: 10 }),
         crit('weight_kg', 'Weight', 20, { direction: 'lower', shape: { type: 'curve', k: 2 } }),
         crit('screen_nits', 'Screen', 15), crit('warranty_y', 'Warranty', 10)],
       combine: { type: 'sum', expr: '' } };
@@ -86,7 +85,6 @@ window.M = window.M || {};
       combine: { type: 'sum', expr: '' } };
   }
 
-  // Ported verbatim from the original demo (docs/demo.html). Patient fixed in Sarema at x=34, y=30.
   const FACILITIES = [
     { id: 'sag', short: 'Sarema General', type: 'public', kind: 'hospital', x: 29, y: 27, cap: 60, load: 51, m: .95, q: .78, services: ['lab', 'xray', 'mri', 'cardio', 'dialysis', 'ortho', 'mater', 'peds', 'physio'] },
     { id: 'ntg', short: 'Northgate Teaching', type: 'public', kind: 'hospital', x: 88, y: 18, cap: 70, load: 44, m: 1, q: .86, services: ['lab', 'xray', 'mri', 'cardio', 'ortho', 'mater', 'peds', 'physio', 'onco'] },
@@ -124,12 +122,6 @@ window.M = window.M || {};
       SERVICES.forEach(([id]) => { v[id] = f.services.includes(id); });
       return { id: f.id, label: f.short, v };
     });
-    // DECISION (gaps from the demo):
-    //  - Service coverage -> yes/no columns + one rule per needed service (patient: Ada, cardiology + lab).
-    //  - Urgency -> a parameter that shrinks the reach rule by 15% per level, as in the demo.
-    //    The demo's urgency boost to the distance *weight* is not ported: weights stay user-set and visible.
-    //  - Public-first lock, split plans, overrides and the cohort simulation are routing policy, not scoring,
-    //    so they stay out of the equation.
     const fixed = (lo, hi) => ({ auto: false, lo, hi });
     return { version: 1, name: 'Care routing', columns, rows,
       params: [
@@ -150,14 +142,19 @@ window.M = window.M || {};
       combine: { type: 'sum', expr: '' } };
   }
 
+  const T = M.tpl || {};
   M.templates = {
     list: [
-      { id: 'laptop', label: 'Pick a laptop', make: laptop },
-      { id: 'jobs', label: 'Choose a job offer', make: jobs },
-      { id: 'features', label: 'Prioritize features', make: features },
-      { id: 'care', label: 'Care routing', make: care },
-      { id: 'blank', label: 'Blank', make: blank }],
-    get(id) { const t = this.list.find(x => x.id === id); return t ? t.make() : laptop(); },
+      { id: 'pharmacy', label: 'Pharmacy staffing', make: T.pharmacy, cat: 'Operations', tag: 'Queues · roles · peak hours', blurb: 'Split pharmacists across windows, typing and recording. Speed, accuracy, part-time days and a busy manager are all built in.' },
+      { id: 'feed', label: 'News feed backend', make: T.feed, cat: 'Systems', tag: 'Capacity · cache · replicas', blurb: 'Pick an architecture for a social feed: servers, caches, databases, shards, backups, read or write heavy.' },
+      { id: 'venue', label: 'Event crowd control', make: T.venue, cat: 'Operations', tag: 'Safety rules · gate queues', blurb: 'Entry gates, lanes, exits and stewards for a sold-out event. Safety first, comfort second.' },
+      { id: 'cafe', label: 'Coffee shop rush', make: T.cafe, cat: 'Operations', tag: 'Two-step queue', blurb: 'The smallest queue model. Good to learn calculations and knobs.' },
+      { id: 'care', label: 'Care routing', make: care, cat: 'Operations', tag: 'Rules · distance decay', blurb: 'Route a patient to the best facility. Ported from the original demo.' },
+      { id: 'laptop', label: 'Pick a laptop', make: laptop, cat: 'Personal', tag: 'Simple weights', blurb: 'Five criteria and a budget rule. The simplest start.' },
+      { id: 'jobs', label: 'Choose a job offer', make: jobs, cat: 'Personal', tag: 'Every shape', blurb: 'Curves, S-curves, a sweet spot and per-category points.' },
+      { id: 'features', label: 'Prioritize features', make: features, cat: 'Product', tag: 'RICE formula', blurb: 'Reach × impact × confidence ÷ effort, with a confidence floor.' },
+      { id: 'blank', label: 'Blank', make: blank, cat: 'Start', tag: 'Empty', blurb: 'Three rows and one column.' }].filter(t => t.make),
+    get(id) { const t = this.list.find(x => x.id === id); return t ? t.make() : this.list[0].make(); },
     FACILITIES
   };
 })(window.M);

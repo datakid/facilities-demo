@@ -1,16 +1,13 @@
-/* Meridian Studio — UI primitives: themed dropdowns, menus and confirm dialogs.
-   Replaces native <select> popups and window.confirm() with components that match the app. */
 window.M = window.M || {};
 (function (M) {
   'use strict';
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const CHEVRON = '<svg class="sel-chev" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-  /* ---------------- listbox popover (shared by dropdowns and menus) ---------------- */
   const pop = document.createElement('div');
   pop.className = 'sel-pop'; pop.id = 'sel-pop'; pop.tabIndex = -1; pop.hidden = true;
   document.body.appendChild(pop);
-  let cur = null; // { anchor, items, index, onPick, role }
+  let cur = null;
   let typed = '', typedT = null;
 
   function place() {
@@ -90,9 +87,6 @@ window.M = window.M || {};
   window.addEventListener('resize', () => place());
   document.addEventListener('scroll', e => { if (cur && e.target !== pop && !pop.contains(e.target)) place(); }, true);
 
-  /* ---------------- themed <select> ---------------- */
-  // The native <select> stays in the DOM as the value holder (hidden). The button opens the themed list,
-  // and picking an item sets the select and fires a normal 'change' event, so app code is unchanged.
   const selLabel = sel => { const o = sel.options[sel.selectedIndex]; return o ? o.textContent : ''; };
   function enhance(sel) {
     if (sel.dataset.enhanced) return;
@@ -134,7 +128,6 @@ window.M = window.M || {};
   function enhanceAll(root) { (root || document).querySelectorAll('select:not([data-enhanced])').forEach(enhance); }
   new MutationObserver(() => enhanceAll()).observe(document.body, { childList: true, subtree: true });
 
-  /* ---------------- confirm dialog ---------------- */
   const dlgRoot = document.createElement('div'); dlgRoot.id = 'dialog-root'; document.body.appendChild(dlgRoot);
   function confirmDialog(o) {
     o = Object.assign({ title: 'Are you sure?', body: '', ok: 'Continue', cancel: 'Cancel', danger: false }, o);

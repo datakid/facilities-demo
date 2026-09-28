@@ -1,92 +1,83 @@
 # Meridian Studio
 
-A general-purpose sandbox for building **honest scoring equations**: you rank a set of options (laptops, job offers, features, facilities…) with rules plus weighted criteria. Every number can be traced, and the tool **tells you where your equation is weak** instead of claiming it is "perfect".
+A workbench for building **equations you can trust**: planning and ranking models made from knobs, step-by-step calculations, rules and weighted criteria. Every number can be traced, and an honesty check says where the model is weak instead of calling it "perfect".
 
 ```
-Score(row) = Rules(row) × Combine( s₁…sₙ , w₁…wₙ ) × 100
-Rules(row) = 1 if every enabled rule passes, else 0
-sᵢ         = Shape( Direction( Normalize( Raw_i(row) ) ) )  ∈ [0,1]
-wᵢ         = weightᵢ / Σ weights
+Knobs        the situation: arrivals/hour, users, pressure, budget …
+Calculations k₁ = f(knobs, columns), k₂ = g(k₁, …) …   (queues, capacity, cost …)
+Score(row)   = Rules(row) × Combine( s₁…sₙ , w₁…wₙ ) × 100
+sᵢ           = Shape( Direction( Normalize( column | calculation | expression ) ) )
 ```
 
-## What makes it honest (the "gaps" layer)
-The **Honesty check** runs after every change and lists, in plain sentences:
-- **Ties**: the top two are under 2 points apart.
-- **Fragile weights**: moving one share by ≤5 points changes the winner (from a weight sweep of every criterion).
-- **Dead criteria**: turning a criterion off would not change the order.
-- **Double counting**: two criteria that move together (r > 0.9).
-- **No-effect criteria**: every option has the same value.
-- **Missing data**: options scored 0 because a value is missing, and options ruled out because a rule *could not be checked*, not because they failed it.
-- **Dominance**: one criterion carries over 50% of the weight.
-- **Clipping**: values outside a fixed range.
-- **Method caveats**: Weakest link ignores weights, Multiply zeros out anything at the bottom of one criterion, and auto ranges make scores relative.
-- **Formula errors**: shown in place. A broken item is skipped and never crashes the page.
+## What changed in v2
+- **Knobs** (old "parameters"), grouped and always visible: sliders with units and help text.
+- **Calculations layer**: named formulas evaluated in order per option. Each one can use knobs, columns and earlier calculations. Rules and criteria can use them too. Click one to see the values plugged in.
+- **Formula blocks**: 26 ready-made pieces in 6 groups (Queues, Staffing, Capacity, Reliability, Crowds, Money). Inputs are guessed from the names already in the model.
+- **Queue maths built in**: `erlangc`, `wait` (M/M/c), `within` (service level), `runway`, `avail`, plus `pick`, `sum`, `avg`, `ceil`, `floor`, `log2`.
+- **Scenarios**: saved knob settings, each re-scored, with the winner shown per scenario ("Calm morning → …, Evening peak → …").
+- **Stress test**: sweeps a knob from min to max and shows who wins along the way. The honesty check warns when you are close to a switch point.
+- **Key figures**: pinned calculations shown as cards and on each ranking row.
+- New rounded, low-chroma design (same hue-300 palette). Mobile gets a Setup/Results switch and a bottom-sheet inspector.
+- The code is split into small files with no comments, as requested.
 
-- **Weight-free check**: 2,000 random weightings. "Birch Pro 14 wins under 39% of all possible weightings", which tells you whether the data or your weights produce the winner.
-- **Uncertainty**: set a ± error margin on any criterion ("How sure are these numbers?"). A seeded simulation gives each option a chance of coming first and a likely rank range, shown in the ranking.
-- **Rank reversal**: removing an option that isn't the winner changes the winner (because auto ranges are relative), with fixed ranges suggested as the fix.
-- **Missing-value policy for each criterion**: count as worst, middle or best, or rule the option out. The trace, the honesty text and the exported JS all follow the choice.
+## Built-in templates
+| Template | What it models |
+|---|---|
+| **Pharmacy staffing** (default) | 4 staff: Maya (manager), Omar, Lina and Sam (part-time). Each has their own speed and accuracy, normally and in a rush, plus share of the day and days per week. There are **three tasks**: filling at a window, typing missed-item prescriptions, and **recording**. Each task is either done at the window (multitasking: extra minutes per patient, a switching cost, extra slips) or by a dedicated person. Also covered: people vs windows (3 on 2 ≠ 3 on 3, via "value of an extra person"), manager overhead, a surge knob and an M/M/c queue. Nine staffing plans are ranked on wait, on-time share, slips, load on the busiest station, and the manager's free time. Six scenarios, including peak + surprise and Lina off / Sam off. |
+| **News feed backend** | Server type (VM, containers, bare metal, serverless), app nodes, cache (none, Memcached, Redis, DAX), database (Postgres, Cassandra, DynamoDB), read replicas, shards, feed build (pull, push, hybrid fan-out), backup interval and regions. Knobs cover daily users, the read/write mix, peak factor, followers, growth, required runway, data-loss limit and budget. The model finds what runs out first, the growth runway, availability, downtime, latency and cost. |
+| **Event crowd control** | Gates × lanes queue, screening time, exit width → clearance time, density, steward cover. Safety rules come first, comfort and cost second. |
+| **Coffee shop rush** | A two-step queue (register, then bar). The smallest example. |
+| Care routing, Pick a laptop, Choose a job offer, Prioritize features, Blank | Kept from v1. Care routing still gives Sarema General = 79.3. |
 
-A verdict tag sums these up: *Holds up* / *Check before trusting* / *Has errors*.
+### Pharmacy equation, in short
+```
+presence_i  = share_of_day_i × days_i / days_open
+speed_i     = speed_i × (1 − pressure × (1 − kept_in_rush_i)) × presence_i  [× (1 − manager_load) for the manager]
+jug         = (typing not dedicated) + (recording not dedicated)
+min/patient = fill + [q_miss × type if not dedicated] + [record if not dedicated] + jug × switch
+useful      = window speed, reduced if people > windows: × (windows + help × extra) / people
+μ           = 60 / min_per_patient × useful / windows_in_use
+wait        = M/M/c wait(arrivals × (1 + surge), μ, windows_in_use)
+back load   = arrivals × (q_miss × type + record) / 60 ÷ back-office speed
+slips       = window errors + jug × juggling error + missed-item typing errors
+```
 
-**What would change first place** (Add up mode) works out, for the next three options, the single value change that would put each one on top, e.g. "Fjord 14 would pass Birch Pro 14 if Price were 1,220 instead of 1,249".
-
-## Features
-- **Simple mode**: rules as sentences (`Price ≤ 1800`), criteria with weight sliders and live shares, and three combine methods: Add up, Multiply and Weakest link.
-- **Advanced switch** (same screen, adds fields where they belong): expressions, fixed ranges, numeric shape inputs in raw units, parameters, a custom combine formula, robustness strips and per-criterion formula lines.
-- **Inspector**: criterion editor (source, direction, 5 shapes plus per-category points, a live chart with each option as a dot, and weight), rule/parameter/formula editors, and a **row trace**: raw → normalized → direction → shape → × share → combine → final.
-- **Equation** with colour chips. Selecting a row shows its numbers plugged into the equation.
-- **Ranking** with stacked contribution bars, FLIP re-ordering, and a "Ruled out" list with reasons.
-- **Data view**: editable table (number / category / boolean columns, units, ids in Advanced), add/remove rows and columns, CSV paste with type inference.
-- **Export**: JSON model, standalone JavaScript `score(r)` generated from the AST, plain-text formula, CSV of results. Share link (`#m=` base64url), JSON import.
-- Undo/redo (Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z; 100 steps; a slider drag counts as one step), autosave to localStorage, Esc closes the modal and then the inspector.
-- **Themed controls, no browser popups**: every dropdown is an app-styled list (keyboard: arrows, Home/End, type-ahead, Enter, Esc; flips upward near the bottom edge; stays on screen on mobile). `confirm()` is replaced by an in-app dialog. Removing a criterion, rule, parameter, row or column, or loading a template, shows a toast with **Undo**.
-- Favicon set: `favicon.ico`, `favicon.svg`, `favicon-32.png` and `apple-touch-icon.png` (a compass mark in #553f83).
-- Safe expression language: a recursive-descent parser. There is **no `eval` / `new Function`**.
+## Honesty check
+Covers errors, unbounded queues, missing data, rules that couldn't be checked, ties, fragile weights, knob switch points, the winner by scenario, weight-free win share, uncertainty, rank reversal, dead or duplicate criteria and dominance.
 
 ## Entry points
 | Path | Purpose |
 |---|---|
 | `index.html` | The app |
 | `index.html#m=<base64url JSON>` | Opens a shared model |
-| `ui-check.html` | Drives the real app: dropdown open/pick, keyboard, confirm, cancel, toast undo (17 checks, printed to the console) |
-| `tests.html` | Engine acceptance tests (40 checks, including codegen ≡ engine, Sarema General = 79.3, missing-value policies and seeded simulations) |
-
-## Templates
-Pick a laptop (default), Choose a job offer (curve, S-curve, target, category map, boolean rule), Prioritize features (RICE expression + parameter rule), Care routing (ported demo structure), Blank.
-
-> **Care routing:** the 18 facilities are copied exactly from the original demo (`docs/demo.html`), with the patient fixed at Sarema (x=34, y=30). Sarema General scores **79.3**, which matches the demo; `tests.html` checks this. How the demo's extra logic was handled:
-> - **Services** → included: 10 yes/no columns plus the rules "Offers cardiology" and "Offers lab work" (the patient is Ada: cardiology + lab).
-> - **Urgency** → included as a parameter (0–2) that shrinks the reach rule by 15% per level, as in the demo: `distance_km <= reach * (1 - 0.15 * urgency)`.
-> - **Urgency boost to the distance weight** → left out. Weights stay visible and user-set; a hidden weight change would undercut the honesty goal.
-> - **Public-first lock, split plans, overrides, cohort simulation** → left out. These are routing policy rather than scoring, and they match the v1 exclusions in the audit.
->
-> Ideas taken from `docs/rubric.html`: missing-value policies, seeded Monte Carlo uncertainty, the weight-agnostic win share and the rank-reversal check.
+| `tests.html` | 61 engine tests: queue maths, calculations, template checks, codegen = engine for laptop, pharmacy and feed |
+| `ui-check.html` | 18 UI checks driving the real app (results go to the console) |
 
 ## Files
 ```
-index.html, tests.html
-css/style.css          design tokens (milky lavender, hue 300) + app styles
-js/core.js             util, expr parser, shapes, engine, trace, sensitivity, honesty, flips, codegen
-js/templates.js        starter models
-js/ui.js               themed dropdowns, menus, confirm dialog (wraps native <select> so app code is unchanged)
-js/ui-check.js         UI interaction checks
-js/app.js              state/history, rendering, inspector, data view, export, events
-js/engine-tests.js     acceptance tests
-docs/audit-spec.txt    the original build spec / audit
+css/style.css
+js/core/expr.js       parser, evaluator, queue functions, JS runtime for export
+js/core/shapes.js     shape functions
+js/core/engine.js     compute (calcs → rules → criteria → combine), sweeps, scenarios, trace
+js/core/honesty.js    honesty report, "what would change first place"
+js/core/codegen.js    JSON / JS / formula / CSV export
+js/core/blocks.js     formula block library
+js/templates/*.js     pharmacy, news feed, crowd control, coffee shop
+js/templates.js       registry + classic templates
+js/ui.js              themed dropdowns, confirm dialog
+js/app/*.js           store, render, recipe, result, inspector, views, events
+docs/                 original spec, demo and rubric
 ```
 
 ## Data model
-A single JSON `Model` (`version, name, columns, rows, params, gates, criteria, combine`) is the only source of truth. It is stored in `localStorage['meridian.studio.v1']`. No server and no tables API are used.
+One JSON model: `version, name, note, columns, rows, params (knobs), calcs, gates, criteria, combine, scenarios, stress`. It is saved in `localStorage['meridian.studio.v2']`. No server and no table API are used.
 
-## Not in v1 (on purpose)
-- Fitting weights from examples the user ranks by hand
-- Comparing two models side by side
-- Cohort simulation
-- A dark theme
+## Not done yet
+- Automatic optimisation: search every role assignment for the best plan (the plans are listed by hand for now).
+- Time-of-day simulation (hour by hour through a whole day).
+- Fitting weights from examples ranked by hand, and comparing two models side by side.
 
 ## Suggested next steps
-1. Weight helpers adapted from Rubric: rank-order weights (sort criteria, get weights) and pairwise comparison with a consistency check.
-2. Soft rules (a points penalty instead of ruling an option out).
-3. Pairwise "I prefer A over B" checks that point out where the model disagrees with the user's intuition.
-4. A model comparison view.
+1. A "generate plans" button that lists every way to assign roles and keeps the top ones.
+2. A day timeline: arrivals per hour → the best plan for each hour.
+3. Soft rules (a penalty instead of ruling an option out).
