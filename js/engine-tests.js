@@ -120,6 +120,32 @@
   ok('uncertainty: chances of first sum to 1', near(Object.values(un.byRow).reduce((a, b) => a + b.pFirst, 0), 1, 1e-9));
   ok('uncertainty is repeatable (seeded)', JSON.stringify(un) === JSON.stringify(M.engine.uncertainty(lap, lr, 300)));
 
+  const PL = M.plan;
+  ok('plan: parseList by type', JSON.stringify(PL.parseList({ type: 'number' }, '1, 2, x, 2')) === '[1,2]' && PL.parseList({ type: 'boolean' }, 'yes, no').join() === 'true,false');
+  const cols = { a: ['x', 'y'], b: [1, 2, 3] };
+  const pm = base(); pm.columns = [{ id: 'a', label: 'A', type: 'category', choices: cols.a }, { id: 'b', label: 'B', type: 'number' }];
+  pm.rows = [{ id: 'r1', label: 'one', v: { a: 'x', b: 1 } }];
+  pm.criteria = [{ id: 'cb', label: 'B', enabled: true, weight: 1, source: { kind: 'column', column: 'b' }, direction: 'higher', range: { auto: false, lo: 0, hi: 3 }, shape: { type: 'linear' } }];
+  const gen = PL.generate(pm, { vary: cols, base: 'r1', over: 'now', how: 'avg', keep: 12 });
+  ok('plan: every combination tried, existing one skipped', gen.total === 6 && gen.tried === 5, gen.tried);
+  ok('plan: best new combination is ranked first', gen.top[0].v.b === 3 && gen.top[0].score === 100);
+  ok('plan: current best is reported', gen.mine && gen.mine.id === 'r1');
+  ok('plan: too many combinations is refused', !!PL.generate(pm, { vary: { b: Array.from({ length: 5000 }, (_, i) => i) }, over: 'now' }).error);
+  const gr = PL.grid(ph, [{ knob: 'lam', values: [10, 20, 30] }, { knob: 'pressure', values: [0.2, 0.8] }]);
+  ok('plan: scenario grid is the cross product', gr.length === 6 && gr[5].values.lam === 30 && gr[5].values.pressure === 0.8);
+  const sh = PL.shape('evening', 10, 5, 25, 1);
+  ok('plan: evening shape peaks late and respects step', sh.indexOf(Math.max(...sh)) >= 7 && sh.every(v => Number.isInteger(v) && v >= 5 && v <= 25), sh.join(','));
+  const dy = PL.day(ph);
+  ok('plan: pharmacy day has 14 hours with a winner or a gap each', dy.hours.length === 14 && dy.segs.reduce((a, s) => a + s.n, 0) === 14);
+  ok('plan: linked pressure follows arrivals', near(dy.hours[0].values.pressure, 0.1) && near(dy.hours[10].values.pressure, 0.85));
+  const loose = structuredClone(ph); loose.day.sticky = 0;
+  ok('plan: switch threshold reduces flicker', PL.day(loose).switches > dy.switches, PL.day(loose).switches + ' vs ' + dy.switches);
+  ok('plan: calm hour winner differs from peak hour winner', dy.hours[0].best !== dy.hours[10].best, dy.hours[0].best + ' / ' + dy.hours[10].best);
+  const pv = {}; ph.columns.forEach(c => { pv[c.id] = c.choices; });
+  const pg = PL.generate(ph, { vary: pv, base: 'p1', over: 'day', how: 'worst', keep: 5 });
+  ok('plan: pharmacy finder searches all 625 role splits over the day', !pg.error && pg.total === 625, pg.error || pg.tried);
+  ok('plan: best found whole-day plan is at least as good as the hand-made list', pg.top.length && (!pg.mine || pg.top[0].score >= pg.mine.score - 1e-9), pg.top[0] && pg.top[0].label);
+
   let pending = 0;
   const codegenCheck = (name, model) => {
     pending++;

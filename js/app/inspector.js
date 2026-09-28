@@ -200,7 +200,8 @@ window.M = window.M || {};
   R.inspectorHTML = () => {
     const i = S.ui.inspector;
     let title = '', kicker = '', body = '';
-    if (i.kind === 'criterion') { const c = H.crit(i.id); title = c.label; kicker = 'Criterion'; body = inspCrit(c); }
+    if (R.inspectors && R.inspectors[i.kind]) ({ title, kicker, body } = R.inspectors[i.kind](i.id));
+    else if (i.kind === 'criterion') { const c = H.crit(i.id); title = c.label; kicker = 'Criterion'; body = inspCrit(c); }
     else if (i.kind === 'gate') { const g = H.gate(i.id); title = g.label || 'Rule'; kicker = 'Rule'; body = inspGate(g); }
     else if (i.kind === 'param') { const p = H.param(i.id); title = p.label; kicker = 'Knob · ' + p.group; body = inspParam(p); }
     else if (i.kind === 'calc') { const k = H.calc(i.id); title = k.label; kicker = 'Calculation' + (k.group ? ' · ' + k.group : ''); body = inspCalc(k); }

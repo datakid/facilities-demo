@@ -3,10 +3,10 @@ window.M = window.M || {};
   'use strict';
   const U = M.util, esc = U.esc;
   const KEY = 'meridian.studio.v2';
-  const LIMIT = { rows: 1000, columns: 24, params: 60, gates: 12, criteria: 8, calcs: 60, scenarios: 10 };
+  const LIMIT = { rows: 1000, columns: 24, params: 60, gates: 12, criteria: 8, calcs: 60, scenarios: 24 };
 
   const S = M.state = {
-    model: null, result: null, sens: {}, knobs: {}, scen: [], gaps: [], flips: [], extra: {}, explore: null,
+    model: null, result: null, sens: {}, knobs: {}, scen: [], day: null, gaps: [], flips: [], extra: {}, explore: null,
     ui: { view: 'build', advanced: false, inspector: null, selectedRow: null, modal: null, exportTab: 'json', outOpen: false, open: {}, block: null, pane: 'recipe' }
   };
   let past = [], future = [], gestureSnap = null, saveT = null, anaT = null;
@@ -46,7 +46,8 @@ window.M = window.M || {};
   function normalize(m) {
     m.params = m.params || []; m.gates = m.gates || []; m.calcs = m.calcs || []; m.scenarios = m.scenarios || []; m.stress = m.stress || [];
     m.combine = m.combine || { type: 'sum', expr: '' };
-    m.name = m.name || 'Untitled model'; m.note = m.note || '';
+    m.name = m.name || 'Untitled model'; m.note = m.note || ''; m.day = m.day || null;
+    m.columns.forEach(c => { if (c.choices && !c.choices.length) delete c.choices; });
     m.params.forEach(p => { p.unit = p.unit || ''; p.group = p.group || 'Knobs'; p.help = p.help || ''; if (p.step === undefined) p.step = 1; });
     m.calcs.forEach(k => { k.unit = k.unit || ''; k.format = k.format || 'num'; k.group = k.group || ''; k.pin = !!k.pin; k.note = k.note || ''; });
     m.gates.forEach(g => { if (g.enabled === undefined) g.enabled = true; if (g.simple === undefined) g.simple = null; });
@@ -69,7 +70,7 @@ window.M = window.M || {};
     const i = S.ui.inspector;
     if (i) {
       const ok = i.kind === 'combine' || (i.kind === 'criterion' && H.crit(i.id)) || (i.kind === 'gate' && H.gate(i.id)) || (i.kind === 'param' && H.param(i.id))
-        || (i.kind === 'calc' && H.calc(i.id)) || (i.kind === 'row' && S.model.rows.some(r => r.id === i.id));
+        || (i.kind === 'calc' && H.calc(i.id)) || (i.kind === 'scenario' && S.model.scenarios.some(s => s.id === i.id)) || (i.kind === 'row' && S.model.rows.some(r => r.id === i.id));
       if (!ok) S.ui.inspector = null;
     }
     if (S.ui.selectedRow && !S.model.rows.some(r => r.id === S.ui.selectedRow)) S.ui.selectedRow = null;
@@ -108,6 +109,7 @@ window.M = window.M || {};
     m.stress.filter(id => H.param(id)).forEach(id => { knobs[id] = M.sensitivity.knob(m, id, m.rows.length > 200 ? 12 : 24); });
     S.knobs = knobs;
     S.scen = M.engine.scenarios(m);
+    S.day = M.plan.day(m);
     const big = m.rows.length > 300;
     S.extra = {
       weightFree: M.engine.weightFree(m, res, big ? 500 : 2000),

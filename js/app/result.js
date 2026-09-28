@@ -83,7 +83,7 @@ window.M = window.M || {};
       return `<button class="rank-row ${S.ui.selectedRow === id ? 'sel' : ''} ${r.rank === 1 ? 'first' : ''}" data-action="select-row" data-id="${esc(id)}" data-row-id="${esc(id)}" aria-pressed="${S.ui.selectedRow === id}">
         <span class="rk">${r.rank}</span><span class="rank-main"><span class="nm">${esc(r.label)}</span><span class="bar" aria-hidden="true">${bar}</span>${rowFigs(r)}</span><span class="sc">${fmt(r.score, 1)}<span class="chance" data-chance="${esc(id)}">${esc(R.chanceText(id))}</span></span></button>`;
     }).join('');
-    let h = `<div class="block"><h2>Ranking <span class="h-sub">${res.ranked.length} of ${res.rows.length} options</span></h2><div class="ranking card" id="ranking">${rows || '<p class="empty">Nothing is ranked.</p>'}</div></div>`;
+    let h = `<div class="block"><h2>Ranking <span class="h-sub">${res.ranked.length} of ${res.rows.length} options</span><span class="h-actions"><button class="link" data-action="open-finder">Find plans</button></span></h2><div class="ranking card" id="ranking">${rows || '<p class="empty">Nothing is ranked.</p>'}</div></div>`;
     if (res.out.length) {
       h += `<details class="out block" ${S.ui.outOpen ? 'open' : ''} id="out-details"><summary>Ruled out · <span class="num">${res.out.length}</span></summary><div class="card">
         ${res.out.map(id => { const r = res.byId[id]; const e = r.gates.find(g => !g.pass && g.error); return `<button class="out-row" data-action="select-row" data-id="${esc(id)}"><span>${esc(r.label)}</span><span class="tag ${e ? 'warn' : 'bad'}">${esc(e ? 'could not check: ' + e.error : r.failReason)}</span></button>`; }).join('')}</div></details>`;
@@ -97,13 +97,13 @@ window.M = window.M || {};
     const cells = sc.map(s => {
       const w = s.winner, wr = w && s.res.byId[w];
       const figs = wr ? pins.map(k => `<span>${esc(k.label)} <b class="num">${esc(M.format.calc(k, (wr.calc[k.id] || {}).v))}</b></span>`).join('') : '';
-      return `<button class="scen-card ${w && w === res.ranked[0] ? 'same' : ''}" data-action="apply-scenario" data-id="${esc(s.id)}" title="Apply these knobs">
+      return `<button class="scen-card ${w && w === res.ranked[0] ? 'same' : ''}" data-action="open" data-kind="scenario" data-id="${esc(s.id)}" title="Open this scenario">
         <span class="scen-title">${esc(s.label)}</span>
         <span class="scen-win">${w ? esc(wr.label) : '<span class="muted">No option passes</span>'}</span>
         <span class="scen-meta">${w ? `<span class="num">${fmt(s.score, 1)}</span> · ${s.left} pass` : ''}</span>${figs ? `<span class="scen-figs">${figs}</span>` : ''}</button>`;
     }).join('');
     const wins = new Set(sc.map(s => s.winner));
-    return `<h2>Scenarios <span class="h-sub">${wins.size === 1 && sc[0].winner ? 'same winner everywhere' : 'best option in each situation'}</span></h2><div class="scen-grid">${cells}</div>`;
+    return `<h2>Scenarios <span class="h-sub">${wins.size === 1 && sc[0].winner ? 'same winner everywhere' : 'best option in each situation'}</span><span class="h-actions"><button class="link" data-action="open-scen-build">Build</button><button class="link" data-action="open-finder" data-over="scenarios" data-how="worst">Find a plan for all</button></span></h2><div class="scen-grid">${cells}</div>`;
   };
 
   R.stressHTML = () => {
@@ -156,6 +156,7 @@ window.M = window.M || {};
       h += figuresHTML();
       h += `<div class="block card pad" id="analysis-gaps">${R.gapsHTML()}</div>`;
       h += rankingHTML();
+      h += `<div class="block" id="analysis-day">${R.dayHTML ? R.dayHTML() : ''}</div>`;
       h += `<div class="block" id="analysis-scen">${R.scenariosHTML()}</div>`;
       h += `<div class="block" id="analysis-stress">${R.stressHTML()}</div>`;
       h += `<div class="block" id="analysis-flips">${R.flipsHTML()}</div>`;

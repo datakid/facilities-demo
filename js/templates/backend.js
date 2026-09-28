@@ -184,6 +184,7 @@ window.M = window.M || {};
         C('c_cost', 'Wage bill', 40, { kind: 'column', column: 'wage' }, { direction: 'lower' })],
       combine: { type: 'sum', expr: '' },
       stress: ['lam'],
+      day: { knob: 'lam', start: 6, values: [30, 80, 110, 90, 60, 50, 70, 55, 40, 45, 60, 35, 20], link: null },
       scenarios: [
         { id: 's1', label: 'Quiet', values: { lam: 25 } }, { id: 's2', label: 'Morning rush', values: { lam: 70 } },
         { id: 's3', label: 'Commuter peak', values: { lam: 110 } }]

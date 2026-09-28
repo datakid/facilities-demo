@@ -73,6 +73,7 @@ window.M = window.M || {};
     set('analysis-flips', R.flipsHTML());
     set('analysis-robust', R.robustHTML());
     set('analysis-scen', R.scenariosHTML());
+    set('analysis-day', R.dayHTML());
     set('analysis-stress', R.stressHTML());
     document.querySelectorAll('[data-chance]').forEach(el => { el.textContent = R.chanceText(el.dataset.chance); });
   };

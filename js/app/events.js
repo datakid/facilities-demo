@@ -314,7 +314,7 @@ window.M = window.M || {};
       H.toastUndo(users ? `Removed ${p.label}. ${users} formula${users > 1 ? 's' : ''} now show an error` : `Removed ${p.label}`);
     },
     'add-scenario': () => {
-      const m = S.model; if (m.scenarios.length >= LIMIT.scenarios) return H.toast('Up to 10 scenarios');
+      const m = S.model; if (m.scenarios.length >= LIMIT.scenarios) return H.toast(`Up to ${LIMIT.scenarios} scenarios`);
       const ids = new Set(m.scenarios.map(s => s.id)); let n = 1; while (ids.has('s' + n)) n++;
       const values = {}; m.params.forEach(p => { values[p.id] = +p.value; });
       M.commit('Save scenario', mm => { mm.scenarios.push({ id: 's' + n, label: 'Scenario ' + n, values }); });
@@ -375,7 +375,7 @@ window.M = window.M || {};
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); M.redo(); }
     else if (e.key === 'Escape') {
       if (M.ui.isListOpen() || document.querySelector('#dialog-root .scrim')) return;
-      if (S.ui.modal) ui(u => { u.modal = null; u.block = null; });
+      if (S.ui.modal) ui(u => { u.modal = null; u.block = null; if (u.finder) u.finder.busy = false; });
       else if (S.ui.inspector) A['close-inspector']();
     }
   });

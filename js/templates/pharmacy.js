@@ -109,6 +109,7 @@ window.M = window.M || {};
         C('manager', 'Manager free to manage', 15, { kind: 'column', column: 'role_maya' }, { shape: { type: 'map', map: { off: 1, records: 0.75, back: 0.6, typing: 0.55, window: 0.25 } } })],
       combine: { type: 'sum', expr: '' },
       stress: ['lam', 'pressure', 'q_miss'],
+      day: { knob: 'lam', start: 8, values: [10, 14, 18, 22, 24, 20, 16, 14, 18, 26, 30, 28, 20, 12], link: { knob: 'pressure', lo: 0.1, hi: 0.85 } },
       scenarios: [
         { id: 's1', label: 'Calm morning', values: { lam: 12, pressure: 0.1 } },
         { id: 's2', label: 'Midday', values: { lam: 22, pressure: 0.45 } },

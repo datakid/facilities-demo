@@ -49,6 +49,39 @@
     await wait(400);
     ok('stress strips render', document.querySelectorAll('#analysis-stress .strip').length === 3);
     ok('scenario cards render', document.querySelectorAll('.scen-card').length === 6);
+    ok('day plan strip renders 14 hours', document.querySelectorAll('.day-strip .hour').length === 14);
+
+    q('.scen-card').click(); await wait(60);
+    ok('scenario opens in the inspector', M.state.ui.inspector && M.state.ui.inspector.kind === 'scenario' && document.querySelectorAll('.sv-row').length === 2);
+    q('[data-action="close-inspector"]').click(); await wait(60);
+
+    M.app.actions['open-scen-build'](); await wait(60);
+    const ax = q('[data-pin="s-vals"]'); ax.value = '10, 20, 30'; ax.dispatchEvent(new Event('change', { bubbles: true })); await wait(40);
+    q('[data-action="scen-axis-add"]').click(); await wait(40);
+    ok('scenario builder previews the grid', /\b\d+\b scenario/.test(q('.sb-preview').textContent));
+    const n0 = M.state.model.scenarios.length, want = +q('.sb-preview b').textContent;
+    q('[data-action="scen-build"]').click(); await wait(80);
+    ok('scenario builder adds the grid', M.state.model.scenarios.length === n0 + want, n0 + ' + ' + want);
+    M.undo(); await wait(60);
+
+    M.app.actions['open-finder'](); await wait(60);
+    ok('finder pre-selects the role columns', document.querySelectorAll('.fnd-col.on').length === 4);
+    ok('finder estimate shows 625 combinations', q('#finder-est').textContent.includes('625'));
+    const t0 = performance.now();
+    q('[data-action="finder-run"]').click();
+    for (let i = 0; i < 100 && (!M.state.ui.finder.result); i++) await wait(50);
+    const dt = performance.now() - t0;
+    ok('finder returns ranked plans', M.state.ui.finder.result && M.state.ui.finder.result.top.length === 5, M.state.ui.finder.result && M.state.ui.finder.result.top[0].label);
+    ok('finder is fast enough (625 × 14 hours)', dt < 5000, Math.round(dt) + ' ms');
+    const rows0 = M.state.model.rows.length;
+    q('[data-action="finder-add-all"]').click(); await wait(100);
+    ok('found plans are added as options', M.state.model.rows.length === rows0 + 5);
+    M.undo(); await wait(60);
+    q('[data-action="close-modal"]').click(); await wait(40);
+
+    q('.hour').click(); await wait(80);
+    ok('clicking an hour applies its knobs', M.state.model.params.find(p => p.id === 'lam').value === 10);
+    M.undo(); await wait(60);
   } catch (e) { ok('script ran without errors', false, e.message + ' ' + e.stack); }
   const fail = res.filter(r => !r[1]);
   res.forEach(r => console.log((r[1] ? 'PASS ' : 'FAIL ') + r[0] + (r[2] ? ' — ' + r[2] : '')));

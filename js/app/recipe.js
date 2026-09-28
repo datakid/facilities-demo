@@ -139,16 +139,21 @@ window.M = window.M || {};
       <p class="help">${help}${ct === 'custom' ? ` <button class="link" data-action="open" data-kind="combine" data-id="combine">Edit formula</button>` : ''}</p></section>`;
 
     if (m.params.length) {
-      h += `<section class="sec" id="scen-section">${secHead('Scenarios', 'knob settings to compare', '<button class="link" data-action="add-scenario">Save current</button>')}`;
-      if (!m.scenarios.length) h += '<p class="help">Save the knobs as a scenario ("Evening peak", "Launch day") to compare winners side by side.</p>';
-      m.scenarios.forEach(s => {
+      h += `<section class="sec" id="scen-section">${secHead('Scenarios', 'knob settings to compare', '<span class="sec-actions"><button class="link" data-action="open-scen-build">Build</button><button class="link" data-action="add-scenario">Save current</button></span>')}`;
+      if (!m.scenarios.length) h += '<p class="help">Save the knobs as a scenario ("Evening peak", "Launch day"), or build a grid of them from knob values, to compare winners side by side.</p>';
+      const many = m.scenarios.length > 6, open = !many || isOpen('s:list', false);
+      if (many) h += `<div class="grp">${groupHead('s:list', 'All scenarios', m.scenarios.length, open)}`;
+      if (open) h += `<div class="${many ? 'grp-body' : ''}">${m.scenarios.map(s => {
         const keys = Object.keys(s.values || {});
-        h += `<div class="scen-row"><input type="text" class="scen-name" data-in="scen-label" data-id="${esc(s.id)}" value="${esc(s.label)}" aria-label="Scenario name">
-          <span class="faint scen-keys" title="${esc(keys.map(k => k + ' = ' + s.values[k]).join(', '))}">${keys.length ? keys.length + ' knob' + (keys.length > 1 ? 's' : '') : 'current'}</span>
+        return `<div class="scen-row"><button class="scen-open" data-action="open" data-kind="scenario" data-id="${esc(s.id)}"><span class="ellipsis">${esc(s.label)}</span>
+          <span class="faint scen-keys">${keys.length ? keys.length + ' knob' + (keys.length > 1 ? 's' : '') : 'current'}</span></button>
           <button class="link" data-action="apply-scenario" data-id="${esc(s.id)}">Apply</button>
           <button class="x" data-action="remove-scenario" data-id="${esc(s.id)}" aria-label="Remove scenario">×</button></div>`;
-      });
+      }).join('')}</div>`;
+      if (many) h += '</div>';
       h += '</section>';
+      h += `<section class="sec" id="day-section">${secHead('Day plan', m.day ? `${m.day.values.length} hours from ${M.plan.hh(m.day.start)}` : 'how a knob moves through the day', `<button class="link" data-action="open-day">${m.day ? 'Edit' : 'Set up'}</button>`)}
+        <button class="btn finder-cta" data-action="open-finder">Find plans: try every combination</button></section>`;
     }
     return h;
   };

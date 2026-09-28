@@ -79,6 +79,7 @@ window.M = window.M || {};
 
   R.modalHTML = () => {
     const md = S.ui.modal; if (!md) return '';
+    if (R.modals && R.modals[md]) return R.modals[md]();
     if (md === 'gallery') return galleryHTML();
     if (md === 'blocks') return blocksHTML();
     if (md === 'csv') return `<div class="scrim" data-action="scrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="csv-title"><div class="modal-head"><h3 id="csv-title">Paste CSV</h3></div>

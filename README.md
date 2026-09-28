@@ -20,6 +20,12 @@ sᵢ           = Shape( Direction( Normalize( column | calculation | expression 
 - New rounded, low-chroma design (same hue-300 palette). Mobile gets a Setup/Results switch and a bottom-sheet inspector.
 - The code is split into small files with no comments, as requested.
 
+## v2.1: Plan finder, day plan, scenario builder
+- **Plan finder** (`js/core/plan.js` → `generate`). Tick the columns to vary and list the values to try; every combination becomes a candidate row. Candidates are scored with the full equation (calculations, rules, criteria) on the current knobs, on every scenario, or on every hour of the day, and ranked by **average** or **worst case**. Duplicates of existing rows are skipped. The finder compares its best result with your best current option, and **Add** puts found plans into the data. There are hard limits of 4,096 combinations and 60,000 option-runs, and the estimate is shown before you run. Pharmacy: all 625 role splits × 14 hours take about 0.7 s.
+- **Day plan** (`model.day`). One knob changes by hour (typed in or filled from a shape: flat, morning, midday, evening, two peaks). A second knob can follow it (for example, pressure 0.1 → 0.85 from the quietest hour to the busiest). The strip shows the best option per hour and when to switch; it only switches for a gain above a threshold (3 points by default) so near-ties don't flicker. It also names the single plan that holds up best all day. Click an hour to apply its knobs. **As scenarios** turns the hours into scenarios.
+- **Scenario builder**. Pick up to 3 knobs × value lists; every combination becomes a scenario (keep or replace existing ones, limit 24). Each scenario opens in the inspector, where you can rename it, edit or remove its knob values, set more knobs, duplicate it, apply it or remove it.
+- Architecture: one pure core module (`plan.js`: generate, grid, shape, day, judge) and one UI module (`app/plan.js`). They plug into small registries (`R.modals`, `R.inspectors`, `M.app.actions`), so no existing module grew beyond a hook.
+
 ## Built-in templates
 | Template | What it models |
 |---|---|
@@ -50,8 +56,8 @@ Covers errors, unbounded queues, missing data, rules that couldn't be checked, t
 |---|---|
 | `index.html` | The app |
 | `index.html#m=<base64url JSON>` | Opens a shared model |
-| `tests.html` | 61 engine tests: queue maths, calculations, template checks, codegen = engine for laptop, pharmacy and feed |
-| `ui-check.html` | 18 UI checks driving the real app (results go to the console) |
+| `tests.html` | 74 engine tests: queue maths, calculations, templates, plan finder, day plan, scenario grid, codegen = engine for laptop, pharmacy and feed |
+| `ui-check.html` | 28 UI checks driving the real app, including finder timing (results go to the console) |
 
 ## Files
 ```
@@ -62,6 +68,7 @@ js/core/engine.js     compute (calcs → rules → criteria → combine), sweeps
 js/core/honesty.js    honesty report, "what would change first place"
 js/core/codegen.js    JSON / JS / formula / CSV export
 js/core/blocks.js     formula block library
+js/core/plan.js       plan finder, scenario grid, day shapes, day timeline
 js/templates/*.js     pharmacy, news feed, crowd control, coffee shop
 js/templates.js       registry + classic templates
 js/ui.js              themed dropdowns, confirm dialog
@@ -70,14 +77,14 @@ docs/                 original spec, demo and rubric
 ```
 
 ## Data model
-One JSON model: `version, name, note, columns, rows, params (knobs), calcs, gates, criteria, combine, scenarios, stress`. It is saved in `localStorage['meridian.studio.v2']`. No server and no table API are used.
+One JSON model: `version, name, note, columns (optional choices), rows, params (knobs), calcs, gates, criteria, combine, scenarios, stress, day {knob, start, values[], link {knob, lo, hi}, sticky}`. It is saved in `localStorage['meridian.studio.v2']`. No server and no table API are used.
 
 ## Not done yet
-- Automatic optimisation: search every role assignment for the best plan (the plans are listed by hand for now).
-- Time-of-day simulation (hour by hour through a whole day).
+- Smarter search for very large spaces (hill-climbing when there are more than 4,096 combinations).
+- A queue that carries over from one hour to the next (each hour is treated as steady state).
 - Fitting weights from examples ranked by hand, and comparing two models side by side.
 
 ## Suggested next steps
-1. A "generate plans" button that lists every way to assign roles and keeps the top ones.
-2. A day timeline: arrivals per hour → the best plan for each hour.
+1. Local search (swap one column at a time) for spaces too big to try exhaustively.
+2. Carry-over queues between hours for a truer day simulation.
 3. Soft rules (a penalty instead of ruling an option out).
