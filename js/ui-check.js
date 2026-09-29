@@ -3,23 +3,76 @@
   const res = [];
   const ok = (n, p, d) => { res.push([n, !!p, d || '']); };
   const q = s => document.querySelector(s);
-  await wait(400);
+  const fire = (el, t) => el.dispatchEvent(new Event(t, { bubbles: true }));
+  const S = M.state;
+  await wait(500);
   try {
-    ok('starts on the pharmacy template', M.state.model.name === 'Pharmacy staffing plan', M.state.model.name);
+    ok('starts on the pharmacy template', S.model.name === 'Pharmacy staffing plan', S.model.name);
     ok('no native select is visible', [...document.querySelectorAll('select')].every(s => s.classList.contains('sel-native')));
     ok('inspector is hidden when closed', getComputedStyle(q('#inspector')).visibility === 'hidden');
     ok('key figures are shown', document.querySelectorAll('.fig').length >= 3);
     ok('ranking has rows', document.querySelectorAll('.rank-row').length > 0);
+    ok('scenario bar lists baseline + 6 scenarios', document.querySelectorAll('.sc-chip:not(.add)').length === 7);
+    ok('equation ledger shows every criterion', document.querySelectorAll('.lg-row').length === 5);
+    for (let i = 0; i < 200 && !S.impact; i++) await wait(50);
+    await wait(80);
+    ok('impact analysis arrives', !!S.impact && S.impact.list.length === S.model.params.length);
+    ok('knob rows show impact bars', document.querySelectorAll('.knob-imp').length > 0);
 
     const slider = q('input[data-in="param-value"][data-id="lam"]');
-    const before = M.state.result.byId.p1.calc.lam_eff.v;
-    slider.value = 40; slider.dispatchEvent(new Event('input', { bubbles: true })); slider.dispatchEvent(new Event('change', { bubbles: true })); await wait(80);
-    ok('moving a knob recomputes calculations', M.state.result.byId.p1.calc.lam_eff.v === 40 && before !== 40);
-    M.undo(); await wait(60);
-    ok('undo restores the knob', M.state.model.params.find(p => p.id === 'lam').value === 30);
+    const rankEl = q('#ranking'), firstRow = q('.rank-row'), ledgerEl = q('#ledger');
+    const before = S.result.byId.p1.calc.lam_eff.v;
+    let muts = 0; const mo = new MutationObserver(l => { l.forEach(x => { x.removedNodes.forEach(n => { if (n === slider || (n.contains && n.contains(slider))) muts++; }); }); });
+    mo.observe(document.body, { childList: true, subtree: true });
+    const raf = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    slider.value = 31; fire(slider, 'input'); await raf();
+    ok('ranking and ledger are patched, not replaced', q('#ranking') === rankEl && q('#ledger') === ledgerEl && document.contains(firstRow));
+    const f0 = performance.now();
+    for (const v of [32, 35, 38, 40]) { slider.value = v; fire(slider, 'input'); await raf(); }
+    ok('one drag frame stays under 50 ms', (performance.now() - f0) / 4 < 50, ((performance.now() - f0) / 4).toFixed(1) + ' ms per step');
+    ok('dragging recomputes live', S.result.byId.p1.calc.lam_eff.v === 40 && before !== 40);
+    ok('slider element survives the drag (no DOM refresh)', q('input[data-in="param-value"][data-id="lam"]') === slider && muts === 0);
+    ok('deltas show during the drag', document.querySelectorAll('.dl.up,.dl.dn').length > 0);
+    fire(slider, 'change'); await wait(80);
+    mo.disconnect();
+    ok('draft bar appears after moving a knob', !!q('.draft') && /1\s*knob/.test(q('.draft').textContent));
+    ok('changed knob is marked with a baseline tick', !!q('.knob.chg .mk.base'));
+    q('[data-action="draft-discard"]').click(); await wait(80);
+    ok('discard restores the knob', S.model.params.find(p => p.id === 'lam').value === 30 && !q('.draft'));
 
+    const exact = q('input[data-in="param-exact"][data-id="lam"]');
+    exact.value = '44'; fire(exact, 'change'); await wait(80);
+    ok('typing an exact value sets the knob', S.model.params.find(p => p.id === 'lam').value === 44);
+    const n0 = S.model.scenarios.length;
+    q('[data-action="draft-new"]').click(); await wait(100);
+    const ns = S.model.scenarios[S.model.scenarios.length - 1];
+    ok('save as new stores only the changed knobs', S.model.scenarios.length === n0 + 1 && Object.keys(ns.values).length === 1 && ns.values.lam === 44, JSON.stringify(ns.values));
+    ok('the new scenario is active and named after its change', S.model.active === ns.id && /Patients per hour 44/.test(ns.label), ns.label);
+    ok('scenario opens in the inspector', S.ui.inspector && S.ui.inspector.kind === 'scenario' && document.querySelectorAll('.sv-row').length === 1);
+    q('.sc-chip[data-id=""]').click(); await wait(80);
+    ok('baseline chip restores baseline knobs', S.model.active === null && S.model.params.find(p => p.id === 'lam').value === 30);
+    M.undo(); await wait(60); M.undo(); await wait(60); M.undo(); await wait(60);
+    ok('undo back to the start', S.model.scenarios.length === n0 && S.model.params.find(p => p.id === 'lam').value === 30, S.model.scenarios.length + ' / ' + S.model.params.find(p => p.id === 'lam').value);
+    q('[data-action="close-inspector"]') && q('[data-action="close-inspector"]').click(); await wait(60);
+
+    const s3 = S.model.scenarios.find(s => s.id === 's3');
+    M.peek({ key: 's:s3', id: 's3', label: s3.label, values: M.h.scenValues(s3) }); await wait(60);
+    ok('hover preview shows a banner without changing the model', !!q('.peek-bar') && S.model.active === null && S.model.params.find(p => p.id === 'lam').value === 30);
+    M.peek(null); await wait(60);
+    ok('preview clears', !q('.peek-bar'));
+    q('.sc-chip[data-id="s3"]').click(); await wait(80);
+    ok('clicking a scenario uses it', S.model.active === 's3' && S.model.params.find(p => p.id === 'pressure').value === 0.8 && S.model.params.find(p => p.id === 'lam').value === 30);
+    const sl = q('input[data-in="param-value"][data-id="surge"]'); sl.value = 0.2; fire(sl, 'input'); fire(sl, 'change'); await wait(80);
+    q('[data-action="draft-save"]').click(); await wait(80);
+    ok('update writes into the active scenario, not the baseline', S.model.scenarios.find(s => s.id === 's3').values.surge === 0.2 && S.model.params.find(p => p.id === 'surge').base === 0);
+    M.undo(); await wait(40); M.undo(); await wait(40); M.undo(); await wait(40);
+    ok('scenario matrix renders every scenario', document.querySelectorAll('.mx thead .mx-h').length === 7);
+
+    q('.calc-row') || (q('[data-action="set-tab"][data-v="equation"]').click(), await wait(60));
+    q('[data-action="set-tab"][data-v="equation"]').click(); await wait(60);
     q('.calc-row').click(); await wait(60);
-    ok('clicking a calculation opens it', M.state.ui.inspector && M.state.ui.inspector.kind === 'calc' && getComputedStyle(q('#inspector')).visibility === 'visible');
+    ok('clicking a calculation opens it with live values', S.ui.inspector && S.ui.inspector.kind === 'calc' && document.querySelectorAll('#inspector .tk-v').length > 0);
+    ok('calculation shows its drivers', document.querySelectorAll('#inspector .drv').length > 0);
     q('[data-action="close-inspector"]').click(); await wait(300);
 
     q('[data-action="open-blocks"]').click(); await wait(60);
@@ -27,41 +80,35 @@
     q('[data-action="pick-block"][data-id="util"]').click(); await wait(60);
     const inputs = [...document.querySelectorAll('[data-in="block-in"]')].map(i => i.value);
     ok('block inputs are guessed from names', inputs[0] === 'lam', inputs.join(','));
-    const lamIn = q('[data-in="block-in"][data-k="lam"]'); lamIn.value = 'lam_eff'; lamIn.dispatchEvent(new Event('input', { bubbles: true }));
-    const muIn = q('[data-in="block-in"][data-k="mu"]'); muIn.value = 'mu'; muIn.dispatchEvent(new Event('input', { bubbles: true }));
-    const cIn = q('[data-in="block-in"][data-k="c"]'); cIn.value = 'w_c'; cIn.dispatchEvent(new Event('input', { bubbles: true })); await wait(30);
+    const set = (k, v) => { const i = q(`[data-in="block-in"][data-k="${k}"]`); i.value = v; fire(i, 'input'); };
+    set('lam', 'lam_eff'); set('mu', 'mu'); set('c', 'w_c'); await wait(30);
     q('[data-action="add-block"]').click(); await wait(80);
-    const added = M.state.model.calcs[M.state.model.calcs.length - 1];
-    ok('block adds a working calculation', added.expr === 'lam_eff / (w_c * mu)' && Math.abs(M.state.result.byId.p1.calc[added.id].v - M.state.result.byId.p1.calc.util_win.v) < 1e-9, added.expr);
-    M.undo(); await wait(60);
+    const added = S.model.calcs[S.model.calcs.length - 1];
+    ok('block adds a working calculation', added.expr === 'lam_eff / (w_c * mu)' && Math.abs(S.result.byId.p1.calc[added.id].v - S.result.byId.p1.calc.util_win.v) < 1e-9, added.expr);
+    q('[data-action="insert"][data-v="lam"]') && q('[data-action="insert"][data-v="lam"]').click(); await wait(60);
+    M.undo(); await wait(40); M.undo(); await wait(40);
+    q('[data-action="close-inspector"]') && q('[data-action="close-inspector"]').click();
+    q('[data-action="set-tab"][data-v="situation"]').click(); await wait(60);
 
     q('[data-action="open-gallery"]').click(); await wait(60);
     ok('template gallery opens', document.querySelectorAll('.tpl-card').length >= 8);
     q('[data-action="load-template"][data-id="feed"]').click(); await wait(100);
     q('#dialog-root [data-dlg="1"]').click(); await wait(200);
-    ok('loads the news feed template', M.state.model.name === 'News feed backend');
+    ok('loads the news feed template', S.model.name === 'News feed backend');
     const t = q('.toast .toast-btn'); ok('toast offers Undo', !!t); t.click(); await wait(150);
-    ok('undo restores the pharmacy', M.state.model.name === 'Pharmacy staffing plan');
-
-    M.app.actions['add-scenario'](); await wait(80);
-    ok('saving a scenario stores every knob', Object.keys(M.state.model.scenarios[M.state.model.scenarios.length - 1].values).length === M.state.model.params.length);
-    M.undo(); await wait(60);
-    await wait(400);
+    ok('undo restores the pharmacy', S.model.name === 'Pharmacy staffing plan');
+    await wait(500);
     ok('stress strips render', document.querySelectorAll('#analysis-stress .strip').length === 3);
-    ok('scenario cards render', document.querySelectorAll('.scen-card').length === 6);
+    ok('needle rows render', document.querySelectorAll('.nd-row').length > 0);
     ok('day plan strip renders 14 hours', document.querySelectorAll('.day-strip .hour').length === 14);
 
-    q('.scen-card').click(); await wait(60);
-    ok('scenario opens in the inspector', M.state.ui.inspector && M.state.ui.inspector.kind === 'scenario' && document.querySelectorAll('.sv-row').length === 2);
-    q('[data-action="close-inspector"]').click(); await wait(60);
-
     M.app.actions['open-scen-build'](); await wait(60);
-    const ax = q('[data-pin="s-vals"]'); ax.value = '10, 20, 30'; ax.dispatchEvent(new Event('change', { bubbles: true })); await wait(40);
+    const ax = q('[data-pin="s-vals"]'); ax.value = '10, 20, 30'; fire(ax, 'change'); await wait(40);
     q('[data-action="scen-axis-add"]').click(); await wait(40);
-    ok('scenario builder previews the grid', /\b\d+\b scenario/.test(q('.sb-preview').textContent));
-    const n0 = M.state.model.scenarios.length, want = +q('.sb-preview b').textContent;
+    ok('scenario builder previews leaders', document.querySelectorAll('.sbp li').length > 0 && /scenario/.test(q('.sb-preview').textContent));
+    const b0 = S.model.scenarios.length, want = +q('.sb-preview b').textContent;
     q('[data-action="scen-build"]').click(); await wait(80);
-    ok('scenario builder adds the grid', M.state.model.scenarios.length === n0 + want, n0 + ' + ' + want);
+    ok('scenario builder adds the grid', S.model.scenarios.length === b0 + want, b0 + ' + ' + want);
     M.undo(); await wait(60);
 
     M.app.actions['open-finder'](); await wait(60);
@@ -69,24 +116,18 @@
     ok('finder estimate shows 625 combinations, tried in full', q('#finder-est').textContent.includes('625') && q('#finder-est').textContent.includes('every one'));
     const t0 = performance.now();
     q('[data-action="finder-run"]').click();
-    for (let i = 0; i < 200 && (!M.state.ui.finder.result); i++) await wait(50);
+    for (let i = 0; i < 200 && (!S.ui.finder.result); i++) await wait(50);
     const dt = performance.now() - t0;
-    ok('finder returns ranked plans', M.state.ui.finder.result && M.state.ui.finder.result.top.length === 5, M.state.ui.finder.result && M.state.ui.finder.result.top[0].label);
-    ok('finder is fast enough (625 × 14 hours)', dt < 5000, Math.round(dt) + ' ms total, engine ' + M.state.ui.finder.result.ms + ' ms');
-    const rows0 = M.state.model.rows.length;
+    ok('finder returns ranked plans', S.ui.finder.result && S.ui.finder.result.top.length === 5, S.ui.finder.result && S.ui.finder.result.top[0].label);
+    ok('finder is fast enough (625 × 14 hours)', dt < 5000, Math.round(dt) + ' ms total, engine ' + S.ui.finder.result.ms + ' ms');
+    const rows0 = S.model.rows.length;
     q('[data-action="finder-add-all"]').click(); await wait(100);
-    ok('found plans are added as options', M.state.model.rows.length === rows0 + 5);
+    ok('found plans are added as options', S.model.rows.length === rows0 + 5);
     M.undo(); await wait(60);
-    q('[data-action="finder-method"][data-v="search"]').click(); await wait(40);
-    ok('forcing search updates the estimate', q('#finder-est').textContent.includes('step-by-step'));
-    q('[data-action="finder-run"]').click();
-    for (let i = 0; i < 200 && (!M.state.ui.finder.result); i++) await wait(50);
-    ok('step-by-step search reports its method', M.state.ui.finder.result && M.state.ui.finder.result.method === 'search' && /step by step/.test(q('.fr-meta').textContent));
     q('[data-action="close-modal"]').click(); await wait(40);
     ok('day plan shows the carried queue', !!q('.day-carry'));
-
     q('.hour').click(); await wait(80);
-    ok('clicking an hour applies its knobs', M.state.model.params.find(p => p.id === 'lam').value === 10);
+    ok('clicking an hour applies its knobs as a draft', S.model.params.find(p => p.id === 'lam').value === 10 && !!q('.draft'));
     M.undo(); await wait(60);
   } catch (e) { ok('script ran without errors', false, e.message + ' ' + e.stack); }
   const fail = res.filter(r => !r[1]);

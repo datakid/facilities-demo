@@ -68,7 +68,10 @@ window.M = window.M || {};
     return runs;
   }
   function runSet(model, over) {
-    if (over === 'scenarios' && model.scenarios.length) return model.scenarios.map(s => ({ id: s.id, label: s.label, values: s.values || {} }));
+    if (over === 'scenarios' && model.scenarios.length) {
+      const B = {}; model.params.forEach(p => { B[p.id] = +(p.base ?? p.value); });
+      return model.scenarios.map(s => ({ id: s.id, label: s.label, values: Object.assign({}, B, s.values || {}) }));
+    }
     if (over === 'day') { const r = dayRuns(model); if (r.length) return r; }
     return [{ id: 'now', label: 'Current knobs', values: {} }];
   }

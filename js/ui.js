@@ -88,38 +88,45 @@ window.M = window.M || {};
   document.addEventListener('scroll', e => { if (cur && e.target !== pop && !pop.contains(e.target)) place(); }, true);
 
   const selLabel = sel => { const o = sel.options[sel.selectedIndex]; return o ? o.textContent : ''; };
+  const selName = sel => {
+    if (sel.id) { const lab = document.querySelector(`label[for="${CSS.escape(sel.id)}"]`); if (lab) return lab.textContent.trim(); }
+    return sel.getAttribute('aria-label') || '';
+  };
+  function sync(sel) {
+    const btn = sel._btn; if (!btn) return;
+    const val = selLabel(sel), name = selName(sel), cls = ('sel-btn ' + sel.className.replace('sel-native', '')).trim().replace(/\s+/g, ' ');
+    const sv = btn.firstChild; if (sv.textContent !== val) sv.textContent = val;
+    const al = name ? `${name}: ${val}` : val; if (btn.getAttribute('aria-label') !== al) btn.setAttribute('aria-label', al);
+    if (btn.disabled !== sel.disabled) btn.disabled = sel.disabled;
+    if (btn.className !== cls) btn.className = cls;
+  }
   function enhance(sel) {
     if (sel.dataset.enhanced) return;
     sel.dataset.enhanced = '1';
     const btn = document.createElement('button');
     btn.type = 'button';
+    btn.setAttribute('data-gen', '');
     btn.className = ('sel-btn ' + sel.className).trim();
     if (sel.style.cssText) btn.style.cssText = sel.style.cssText;
     btn.setAttribute('aria-haspopup', 'listbox'); btn.setAttribute('aria-expanded', 'false');
     btn.disabled = sel.disabled;
-    btn.dataset.focusKey = sel.dataset.focusKey || 'sel:' + [sel.dataset.in, sel.dataset.id, sel.dataset.col, sel.dataset.cat].filter(Boolean).join(':');
-    delete sel.dataset.focusKey;
-    let name = sel.getAttribute('aria-label') || '';
-    if (sel.id) {
-      const lab = document.querySelector(`label[for="${CSS.escape(sel.id)}"]`);
-      btn.id = sel.id; sel.removeAttribute('id');
-      if (lab) name = lab.textContent.trim();
-    }
-    const val = selLabel(sel);
+    btn.dataset.focusKey = sel.dataset.focusKey || 'sel:' + [sel.dataset.in, sel.dataset.pin, sel.dataset.id, sel.dataset.col, sel.dataset.cat, sel.dataset.i].filter(Boolean).join(':');
+    if (sel.id) btn.id = 'sb-' + sel.id;
+    const val = selLabel(sel), name = selName(sel);
     btn.innerHTML = `<span class="sel-val">${esc(val)}</span>${CHEVRON}`;
     btn.setAttribute('aria-label', name ? `${name}: ${val}` : val);
     btn.title = val.length > 18 ? val : '';
     sel.classList.add('sel-native'); sel.tabIndex = -1; sel.setAttribute('aria-hidden', 'true');
+    sel._btn = btn;
     sel.after(btn);
     btn.addEventListener('click', () => {
       const items = Array.from(sel.options).map((o, i) => ({ label: o.textContent, value: i, selected: i === sel.selectedIndex, disabled: o.disabled, hint: o.dataset.hint || '' }));
       open(btn, items, i => {
         if (i === sel.selectedIndex) return;
         sel.selectedIndex = i;
-        const v = selLabel(sel);
-        btn.querySelector('.sel-val').textContent = v; btn.setAttribute('aria-label', name ? `${name}: ${v}` : v);
+        sync(sel);
         sel.dispatchEvent(new Event('change', { bubbles: true }));
-      }, { label: name });
+      }, { label: selName(sel) });
     });
     btn.addEventListener('keydown', e => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); btn.click(); }
@@ -154,5 +161,5 @@ window.M = window.M || {};
     });
   }
 
-  M.ui = { enhance, enhanceAll, list: open, closeList: close, confirm: confirmDialog, isListOpen: () => !!cur };
+  M.ui = { enhance, enhanceAll, sync, list: open, closeList: close, confirm: confirmDialog, isListOpen: () => !!cur };
 })(window.M);

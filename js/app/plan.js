@@ -8,10 +8,8 @@ window.M = window.M || {};
   const nextId = (list, pre) => { const ids = new Set(list.map(x => x.id)); let n = 1; while (ids.has(pre + n)) n++; return pre + n; };
   const seg = (action, cur, opts, disabled) => `<div class="seg" role="group">${opts.map(([v, l]) => `<button data-action="${action}" data-v="${v}" aria-pressed="${cur === v}" ${disabled && disabled.includes(v) ? 'disabled' : ''}>${l}</button>`).join('')}</div>`;
 
-  function palette(ids) {
-    const map = {}; let n = 0;
-    ids.forEach(id => { if (id && !(id in map)) map[id] = (n++ % 8) + 1; });
-    return id => id ? { t: `var(--t${map[id]})`, k: `var(--k${map[id]})`, c: `var(--c${map[id]})` } : { t: 'var(--bad-t)', k: 'var(--bad-k)', c: 'var(--bad)' };
+  function palette() {
+    return id => { const n = id ? H.rowColor(id) : 0; return n ? { t: `var(--t${n})`, k: `var(--k${n})`, c: `var(--c${n})` } : { t: 'var(--bad-t)', k: 'var(--bad-k)', c: 'var(--bad)' }; };
   }
 
   R.dayHTML = () => {
@@ -21,12 +19,12 @@ window.M = window.M || {};
     const max = Math.max(...D.hours.map(h => h.v), 1e-9), bmax = Math.max(...D.hours.map(h => h.after), 1);
     const cells = D.hours.map((h, i) => {
       const c = col(h.winner), nm = (h.winner ? H.rowLabel(h.winner) : 'No option passes') + (h.best && h.best !== h.winner ? ` (${H.rowLabel(h.best)} is ${fmt(h.res.byId[h.best].score - h.score, 1)} higher, below the switch threshold)` : '');
-      return `<button class="hour ${h.winner ? '' : 'none'}" data-action="apply-hour" data-i="${i}" style="--hc:${c.c};--ht:${c.t}" title="${esc(h.label)}–${esc(h.end)} · ${esc(k.label)} ${esc(fmtN(h.v))} · ${esc(nm)}${h.winner ? ' ' + fmt(h.score, 1) : ''}${D.carry ? ` · ${fmtN(+h.start.toFixed(1))} waiting at start, ${fmtN(+h.after.toFixed(1))} at end` : ''}">
+      return `<button class="hour ${h.winner ? '' : 'none'}" data-key="hr:${i}" data-action="apply-hour" data-i="${i}" style="--hc:${c.c};--ht:${c.t}" title="${esc(h.label)}–${esc(h.end)} · ${esc(k.label)} ${esc(fmtN(h.v))} · ${esc(nm)}${h.winner ? ' ' + fmt(h.score, 1) : ''}${D.carry ? ` · ${fmtN(+h.start.toFixed(1))} waiting at start, ${fmtN(+h.after.toFixed(1))} at end` : ''}">
         <span class="hour-col"><span class="hour-bar" style="height:${Math.max(8, h.v / max * 100)}%"></span>${D.carry && h.after > 0.5 ? `<span class="hour-back" style="height:${Math.min(100, h.after / bmax * 45)}%"></span>` : ''}</span><span class="hour-t num">${esc(h.label.slice(0, 2))}</span></button>`;
     }).join('');
     const segs = D.segs.map(s => {
       const c = col(s.winner);
-      return `<li><span class="sw" style="background:${c.c}"></span><span class="num seg-time">${esc(s.from.label)}–${esc(s.to.end)}</span><span class="seg-name">${s.winner ? esc(H.rowLabel(s.winner)) : '<span class="bad-text">No option passes</span>'}</span>${s.winner ? `<span class="num faint">${fmt(s.sum / s.n, 1)}</span>` : ''}</li>`;
+      return `<li data-key="ds:${esc(s.from.id)}"><span class="sw" style="background:${c.c}"></span><span class="num seg-time">${esc(s.from.label)}–${esc(s.to.end)}</span><span class="seg-name">${s.winner ? esc(H.rowLabel(s.winner)) : '<span class="bad-text">No option passes</span>'}</span>${s.winner ? `<span class="num faint">${fmt(s.sum / s.n, 1)}</span>` : ''}</li>`;
     }).join('');
     const st = D.steady;
     const sum = st ? `If you keep one plan all day, <b>${esc(st.label)}</b> holds up best: its weakest hour (${esc(st.worstLabel)}) still scores <span class="num">${fmt(st.worst, 1)}</span>, average <span class="num">${fmt(st.avg, 1)}</span>.`
@@ -148,10 +146,10 @@ window.M = window.M || {};
       <div id="finder-result">${resultHTML()}</div></div></div>`;
   };
 
+  const spread = p => { const b = +p.base, lo = +p.min, hi = +p.max, st = +p.step || 1, r = v => +(Math.round(v / st) * st).toFixed(6); return [...new Set([r(lo + (b - lo) * 0.5), r(b), r(b + (hi - b) * 0.5)])]; };
   function scenDraft() {
-    const m = S.model, pick = (m.day && H.param(m.day.knob)) || m.params[0];
-    const vals = p => [p.min, (+p.min + +p.max) / 2, p.max].map(v => +(+v).toFixed(4));
-    return { axes: [{ knob: pick.id, text: vals(pick).join(', ') }], mode: 'add' };
+    const m = S.model, I = S.impact, pick = (I && I.list[0] && H.param(I.list[0].id)) || (m.day && H.param(m.day.knob)) || m.params[0];
+    return { axes: [{ knob: pick.id, text: spread(pick).join(', ') }], mode: 'add' };
   }
   function scenGrid() {
     const B = S.ui.scenBuild;
@@ -160,32 +158,40 @@ window.M = window.M || {};
   R.modals.scenbuild = () => {
     const B = S.ui.scenBuild, m = S.model, g = scenGrid(), room = H.LIMIT.scenarios - (B.mode === 'add' ? m.scenarios.length : 0);
     const opt = sel => m.params.map(p => `<option value="${esc(p.id)}" ${p.id === sel ? 'selected' : ''}>${esc(p.label)}</option>`).join('');
-    const axes = B.axes.map((a, i) => `<div class="axis"><select data-pin="s-knob" data-i="${i}" aria-label="Knob ${i + 1}">${opt(a.knob)}</select>
+    const axes = B.axes.map((a, i) => { const p = H.param(a.knob); return `<div class="axis" data-key="ax:${i}"><select data-pin="s-knob" data-i="${i}" aria-label="Knob ${i + 1}">${opt(a.knob)}</select>
       <input type="text" class="mono" data-pin="s-vals" data-i="${i}" value="${esc(a.text)}" aria-label="Values for knob ${i + 1}" placeholder="10, 20, 30">
-      ${B.axes.length > 1 ? `<button class="x" data-action="scen-axis-rm" data-i="${i}" aria-label="Remove knob">×</button>` : ''}</div>`).join('');
+      ${B.axes.length > 1 ? `<button class="x" data-action="scen-axis-rm" data-i="${i}" aria-label="Remove knob">×</button>` : '<span></span>'}
+      ${p ? `<div class="ax-q"><span class="faint">range ${fmtN(+p.min)}–${fmtN(+p.max)}${p.unit ? ' ' + esc(p.unit) : ''} · now ${fmtN(+p.base)}</span><button class="link" data-action="ax-fill" data-i="${i}" data-v="lmh">low · base · high</button><button class="link" data-action="ax-fill" data-i="${i}" data-v="ends">min · max</button><button class="link" data-action="ax-fill" data-i="${i}" data-v="five">5 steps</button></div>` : ''}</div>`; }).join('');
+    const peek = g.slice(0, 12).map(s => { const r = M.engine.compute(m, { P: Object.assign(H.scenValues(null), s.values) }), w = r.ranked[0]; return `<li><span>${esc(s.label)}</span><span class="sbp-w">${w ? `<i class="sw" style="background:var(--c${H.rowColor(w)})"></i>${esc(r.byId[w].label)} <span class="num faint">${fmt(r.byId[w].score, 0)}</span>` : '<span class="bad-text">none pass</span>'}</span></li>`; }).join('');
     return `<div class="scrim" data-action="scrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="sb-title">
       <div class="modal-head"><div><span class="kicker">Scenario builder</span><h3 id="sb-title">Build scenarios from knob values</h3></div><button class="icon-btn" data-action="close-modal" aria-label="Close">${R.ICON.close}</button></div>
-      <p class="help">Pick up to three knobs and the values to try. Every combination becomes a scenario, for example 3 arrival levels × 2 pressure levels = 6 scenarios. Knobs you don't list keep their current value.</p>
+      <p class="help">Pick up to three knobs and the values to try. Every combination becomes a scenario. Knobs you don't list keep their baseline value.</p>
       <div class="axes">${axes}</div>${B.axes.length < 3 ? '<button class="link" data-action="scen-axis-add">Add a knob</button>' : ''}
       <div class="field sb-mode"><span class="lab">Existing scenarios</span>${seg('scen-mode', B.mode, [['add', 'Keep and add'], ['replace', 'Replace']])}</div>
-      <div class="sb-preview"><b class="num">${g.length}</b> scenario${g.length === 1 ? '' : 's'}${g.length > room ? ` <span class="bad-text">· only ${Math.max(0, room)} fit (limit ${H.LIMIT.scenarios})</span>` : ''}<ul>${g.slice(0, 8).map(s => `<li>${esc(s.label)}</li>`).join('')}${g.length > 8 ? `<li class="faint">and ${g.length - 8} more</li>` : ''}</ul></div>
+      <div class="sb-preview"><b class="num">${g.length}</b> scenario${g.length === 1 ? '' : 's'}, with the leader of each${g.length > room ? ` <span class="bad-text">· only ${Math.max(0, room)} fit (limit ${H.LIMIT.scenarios})</span>` : ''}<ul class="sbp">${peek}${g.length > 12 ? `<li class="faint">and ${g.length - 12} more</li>` : ''}</ul></div>
       <div class="modal-actions"><button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" data-action="scen-build" ${g.length && g.length <= room ? '' : 'disabled'}>Create ${g.length} scenario${g.length === 1 ? '' : 's'}</button></div></div></div>`;
   };
 
   R.inspectors.scenario = id => {
-    const s = S.model.scenarios.find(x => x.id === id), m = S.model;
+    const s = S.model.scenarios.find(x => x.id === id), m = S.model, on = m.active === id;
     const keys = Object.keys(s.values || {}).filter(k => H.param(k));
-    const r = (S.scen || []).find(x => x.id === id);
-    let h = r ? `<div class="calc-hero"><span class="muted">Winner</span><span class="big-score scen-big">${r.winner ? esc(r.res.byId[r.winner].label) : 'No option passes'}</span>${r.winner ? `<span class="note"><span class="num">${fmt(r.score, 1)}</span> · ${r.left} of ${m.rows.length} pass</span>` : ''}</div>` : '';
+    const r = (S.live || []).find(x => !x.now && x.id === id) || (S.scen || []).find(x => x.id === id);
+    const b = (S.live || []).find(x => !x.now && x.id === '');
+    let h = '';
+    if (r) {
+      const w = r.winner, bw = b && b.winner, d = w && b && b.res.byId[w] ? r.res.byId[w].score - b.res.byId[w].score : null;
+      h += `<div class="calc-hero"><span class="muted">Leader</span><span class="big-score scen-big">${w ? esc(r.res.byId[w].label) : 'No option passes'}</span>${w ? `<span class="note"><span class="num">${fmt(r.score, 1)}</span>${d != null ? ' ' + R.delta(d) + ' vs baseline' : ''} · ${r.left} of ${m.rows.length} pass${bw && bw !== w ? ` · baseline leader: ${esc(H.rowLabel(bw))}` : ''}</span>` : ''}</div>`;
+    }
+    h += `<div class="insp-actions top">${on ? '<span class="tag ok-tag">In use</span>' : `<button class="btn primary" data-action="use-scen" data-id="${esc(id)}">Use this scenario</button>`}<button class="btn" data-action="scen-dup" data-id="${esc(id)}">Duplicate</button>
+      <button class="btn danger-ghost" data-action="remove-scenario" data-id="${esc(id)}">Remove</button></div>`;
     h += `<div class="field"><label for="si-label">Name</label><input id="si-label" type="text" data-pin="sc-label" data-id="${esc(id)}" value="${esc(s.label)}"></div>`;
-    h += `<div class="field"><span class="lab">Knobs set by this scenario</span>${keys.length ? keys.map(k => { const p = H.param(k); return `<div class="sv-row"><span class="ellipsis">${esc(p.label)}</span>
-      <input type="number" step="any" data-pin="sc-val" data-id="${esc(id)}" data-k="${esc(k)}" value="${s.values[k]}" aria-label="${esc(p.label)}"><span class="faint sv-unit">${esc(p.unit)}</span>
-      <button class="x" data-action="scen-key-rm" data-id="${esc(id)}" data-k="${esc(k)}" aria-label="Stop setting ${esc(p.label)}">×</button></div>`; }).join('') : '<p class="help">None. It uses the current knobs.</p>'}</div>`;
+    h += `<div class="field"><span class="lab">Differs from baseline in</span>${keys.length ? keys.map(k => { const p = H.param(k); return `<div class="sv-row" data-key="sv:${esc(k)}"><span class="ellipsis" title="${esc(p.group)}">${esc(p.label)}</span>
+      <span class="faint num sv-base">${esc(fmtN(+p.base))} →</span><input type="text" inputmode="decimal" class="num" data-pin="sc-val" data-id="${esc(id)}" data-k="${esc(k)}" value="${esc(fmtN(+s.values[k]))}" aria-label="${esc(p.label)}"><span class="faint sv-unit">${esc(p.unit)}</span>
+      <button class="x" data-action="scen-key-rm" data-id="${esc(id)}" data-k="${esc(k)}" aria-label="Use the baseline for ${esc(p.label)}">×</button></div>`; }).join('') : '<p class="help">Nothing yet: it matches the baseline.</p>'}
+      <p class="help">${on ? 'This scenario is in use. Move any knob on the left, then press Update to store it here.' : 'Use it to edit with the sliders, or type values here.'}</p></div>`;
     const free = m.params.filter(p => !keys.includes(p.id));
     if (free.length) h += `<div class="field"><label for="si-add">Also set</label><select id="si-add" data-pin="sc-add" data-id="${esc(id)}"><option value="">Choose a knob…</option>${free.map(p => `<option value="${esc(p.id)}">${esc(p.label)} (${esc(p.group)})</option>`).join('')}</select></div>`;
-    h += `<div class="insp-actions"><button class="btn" data-action="apply-scenario" data-id="${esc(id)}">Apply to knobs</button><button class="btn" data-action="scen-dup" data-id="${esc(id)}">Duplicate</button>
-      <button class="btn danger-ghost" data-action="remove-scenario" data-id="${esc(id)}">Remove</button></div>`;
-    return { title: s.label, kicker: 'Scenario', body: h };
+    return { title: s.label, kicker: on ? 'Scenario · in use' : 'Scenario', body: h };
   };
 
   const scen = id => S.model.scenarios.find(x => x.id === id);
@@ -203,11 +209,18 @@ window.M = window.M || {};
     'd-sticky': el => { S.ui.dayEdit.sticky = U.clamp(+el.value || 0, 0, 50); },
     'd-ccalc': el => { S.ui.dayEdit.ccalc = el.value; }, 'd-cknob': el => { S.ui.dayEdit.cknob = el.value; },
     'd-llo': el => { S.ui.dayEdit.llo = +el.value; }, 'd-lhi': el => { S.ui.dayEdit.lhi = +el.value; },
-    's-knob': el => { const a = S.ui.scenBuild.axes[+el.dataset.i], p = H.param(el.value); a.knob = el.value; a.text = [p.min, (+p.min + +p.max) / 2, p.max].map(v => +(+v).toFixed(4)).join(', '); R.all(); },
+    's-knob': el => { const a = S.ui.scenBuild.axes[+el.dataset.i], p = H.param(el.value); a.knob = el.value; a.text = spread(p).join(', '); R.all(); },
     's-vals': el => { S.ui.scenBuild.axes[+el.dataset.i].text = el.value; },
     'sc-label': el => M.commit('Rename scenario', m => { m.scenarios.find(x => x.id === el.dataset.id).label = el.value.trim() || 'Scenario'; }),
-    'sc-val': el => { const v = parseFloat(el.value); if (!isFinite(v)) return R.all(); M.commit('Scenario value', m => { m.scenarios.find(x => x.id === el.dataset.id).values[el.dataset.k] = v; }); },
-    'sc-add': el => { if (!el.value) return; const p = H.param(el.value); M.commit('Scenario knob', m => { const s = m.scenarios.find(x => x.id === el.dataset.id); s.values = s.values || {}; s.values[p.id] = +p.value; }); }
+    'sc-val': el => {
+      const v = parseFloat(String(el.value).replace(/,/g, '')); if (!isFinite(v)) return R.all();
+      M.commit('Scenario value', m => { const s = m.scenarios.find(x => x.id === el.dataset.id), p = m.params.find(x => x.id === el.dataset.k); s.values[el.dataset.k] = v; if (p) H.fit(p, v); if (m.active === s.id && p) p.value = v; });
+    },
+    'sc-add': el => {
+      if (!el.value) return; const p = H.param(el.value);
+      const st = +p.step || 1, v = +((+p.base + (+p.base + st <= +p.max ? st : -st)).toFixed(6));
+      M.commit('Scenario knob', m => { const s = m.scenarios.find(x => x.id === el.dataset.id); s.values = s.values || {}; s.values[p.id] = v; if (m.active === s.id) m.params.find(x => x.id === p.id).value = v; });
+    }
   };
   const LIVE = new Set(['f-vals', 'd-text', 's-vals']);
   document.addEventListener('input', e => {
@@ -257,17 +270,26 @@ window.M = window.M || {};
     'day-remove': () => { M.commit('Remove day', m => { m.day = null; }); ui(u => { u.modal = null; }); H.toastUndo('Removed the day plan'); },
     'apply-hour': el => {
       const h = S.day && S.day.hours[+el.dataset.i]; if (!h) return;
-      M.commit('Apply hour', m => { Object.entries(h.values).forEach(([k, v]) => { const p = m.params.find(x => x.id === k); if (p) { p.value = v; if (v < p.min) p.min = v; if (v > p.max) p.max = v; } }); });
-      H.toastUndo(`Knobs set to ${h.label}`);
+      M.commit('Apply hour', m => { Object.entries(h.values).forEach(([k, v]) => H.setKnob(m, k, +v)); });
+      H.toastUndo(`Knobs set to ${h.label}. Save as new to keep it`);
     },
     'day-to-scen': () => {
       const runs = P.dayRuns(S.model);
       if (runs.length > H.LIMIT.scenarios) return H.toast(`Up to ${H.LIMIT.scenarios} scenarios`);
-      M.commit('Hours as scenarios', m => { m.scenarios = runs.map((r, i) => ({ id: 's' + (i + 1), label: `${r.label}–${r.end}`, values: r.values })); });
+      M.commit('Hours as scenarios', m => { m.scenarios = runs.map((r, i) => ({ id: 's' + (i + 1), label: `${r.label}–${r.end}`, values: r.values })); H.useScenario(m, null); });
       H.toastUndo(`Replaced scenarios with ${runs.length} hours`);
     },
+    'ax-fill': el => ui(u => {
+      const a = u.scenBuild.axes[+el.dataset.i], p = H.param(a.knob); if (!p) return;
+      const st = +p.step || 1, r = v => +(Math.round(v / st) * st).toFixed(6), lo = +p.min, hi = +p.max;
+      a.text = (el.dataset.v === 'ends' ? [lo, hi] : el.dataset.v === 'five' ? [0, 0.25, 0.5, 0.75, 1].map(t => r(lo + t * (hi - lo))) : spread(p)).filter((v, i, x) => x.indexOf(v) === i).join(', ');
+    }),
     'open-scen-build': () => { if (!S.model.params.length) return H.toast('Add a knob first'); ui(u => { u.scenBuild = scenDraft(); u.modal = 'scenbuild'; }); },
-    'scen-axis-add': () => ui(u => { const used = u.scenBuild.axes.map(a => a.knob), p = S.model.params.find(x => !used.includes(x.id)) || S.model.params[0]; u.scenBuild.axes.push({ knob: p.id, text: [p.min, p.max].join(', ') }); }),
+    'scen-axis-add': () => ui(u => {
+      const used = u.scenBuild.axes.map(a => a.knob), I = S.impact;
+      const p = (I && I.list.map(x => H.param(x.id)).find(x => x && !used.includes(x.id))) || S.model.params.find(x => !used.includes(x.id)) || S.model.params[0];
+      u.scenBuild.axes.push({ knob: p.id, text: spread(p).join(', ') });
+    }),
     'scen-axis-rm': el => ui(u => { u.scenBuild.axes.splice(+el.dataset.i, 1); }),
     'scen-mode': el => ui(u => { u.scenBuild.mode = el.dataset.v; }),
     'scen-build': () => {
@@ -278,11 +300,11 @@ window.M = window.M || {};
       });
       ui(u => { u.modal = null; u.scenBuild = null; }); H.toastUndo(`Created ${g.length} scenario${g.length > 1 ? 's' : ''}`);
     },
-    'scen-key-rm': el => M.commit('Scenario knob', m => { delete m.scenarios.find(x => x.id === el.dataset.id).values[el.dataset.k]; }),
+    'scen-key-rm': el => M.commit('Scenario knob', m => { const s = m.scenarios.find(x => x.id === el.dataset.id); delete s.values[el.dataset.k]; if (m.active === s.id) { const p = m.params.find(x => x.id === el.dataset.k); if (p) p.value = +p.base; } }),
     'scen-dup': (el, id) => {
       if (S.model.scenarios.length >= H.LIMIT.scenarios) return H.toast(`Up to ${H.LIMIT.scenarios} scenarios`);
       const s = scen(id), nid = nextId(S.model.scenarios, 's');
-      M.commit('Duplicate scenario', m => { m.scenarios.push({ id: nid, label: s.label + ' (copy)', values: structuredClone(s.values || {}) }); });
+      M.commit('Duplicate scenario', m => { m.scenarios.push({ id: nid, label: s.label + ' (copy)', values: structuredClone(s.values || {}) }); H.useScenario(m, nid); });
       ui(u => { u.inspector = { kind: 'scenario', id: nid }; });
     }
   });

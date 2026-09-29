@@ -32,6 +32,21 @@ sᵢ           = Shape( Direction( Normalize( column | calculation | expression 
 - **Queue carry-over** (`model.day.carry = { knob, calc }`). The value of a calculation at the end of one hour becomes a knob in the next, separately for each option. Pharmacy: `left` (people still waiting = arrivals × wait, or the excess when overloaded) goes into `backlog`, which adds to the next hour's patients. The day strip shows the carried queue as red stripes and reports the queue at closing. The finder and the day summary judge whole-day plans with the carry-over included, so a plan that lets the line build up is penalised in later hours.
 - **Speed**: parsed formulas are cached; the model is compiled once per search, day, stress test or scenario set; `pick()` no longer creates closures. The full 625 × 14-hour pharmacy search takes about 0.46 s in the engine.
 
+## v3: Live equations, scenarios you switch between, no page refresh
+- **No DOM refresh.** `js/dom.js` patches the page in place: it only touches nodes that changed and matches rows by `data-key`. The slider you are dragging, the element with focus, open `<details>` and scroll position all survive. Updates are batched into one per animation frame (`M.store.frame`). Checked by `ui-check.html`: about 33 ms per drag step on the pharmacy.
+- **Robustness checks run off the main thread** (`js/core/analysis.js`, `js/core/analysis-worker.js`): honesty check, weight sweeps, stress tests, scenarios, day plan and impact. Falls back to the main thread on `file://`. The weight sweep reuses per-criterion scores (`engine.sweepFast`), which is much faster and gives the same results (tested).
+- **Scenario workflow.** Each knob has a `base` value; scenarios store only the knobs that differ from the baseline, and `model.active` is the scenario in use.
+  - The scenario bar is a row of chips: Baseline, each scenario (coloured by its leader), and + New. Click a chip to use it; `[` and `]` step through them.
+  - Hover a chip, a matrix column or a sparkline to **preview** without changing anything (a dark "Previewing" banner appears).
+  - Moving any knob creates a **draft**: "N knobs off baseline" with **Update / Set as baseline**, **Save as new** (auto-named, e.g. "Patients per hour 44 /h") and **Discard**.
+  - The **scenario matrix** shows every option × scenario, plus an unsaved "Now" column, the leader highlighted, and worst · avg with the safest all-round plan.
+  - The grid builder has low · base · high / min · max / 5 steps presets and previews each resulting scenario's leader.
+- **Knobs.** Type an exact value inline (↑/↓ steps it, Shift for ×10), reset button, a baseline tick and orange tipping-point ticks on the track, and an impact bar ("±12, leader changes at 34"). Search and order-by-impact appear when a model has more than 8 knobs.
+- **Live equation.** Under the equation, a breakdown for the selected option shows, per criterion, input → 0–1 score → share → points, with change badges. The badges compare against your last edit, the baseline/scenario, or nothing (Δ vs switch). The ranking shows ▲/▼ rank moves and score changes; key figures and calculations show changes in green or red depending on whether the change helps.
+- **What moves the needle:** each knob swept from min to max, sorted by how much it swings the leader's score. Each row has a sparkline (red where someone else leads) and the point where the leader flips. Hover a sparkline to preview a value, click to set it.
+- **Inspector.** Formulas are shown with the current value next to each name. Insert menus for knobs, calculations, columns and functions. Calculations list **what drives them** (each knob's effect from its min to its max). Each knob shows a response curve for the top options (click to set) and what it feeds into.
+- Setup is split into **Situation** (scenarios + knobs) and **Equation** (calculations, rules, criteria, combine) tabs. A flow line (knobs → calculations → rules → criteria → score) sits above them.
+
 ## Built-in templates
 | Template | What it models |
 |---|---|
@@ -62,8 +77,8 @@ Covers errors, unbounded queues, missing data, rules that couldn't be checked, t
 |---|---|
 | `index.html` | The app |
 | `index.html#m=<base64url JSON>` | Opens a shared model |
-| `tests.html` | 84 engine tests (search, carry-over, worker, compile reuse, plus): queue maths, calculations, templates, plan finder, day plan, scenario grid, codegen = engine for laptop, pharmacy and feed |
-| `ui-check.html` | 31 UI checks driving the real app, including finder timing, forced search and carry-over (results go to the console) |
+| `tests.html` | 94 engine tests (v3 adds fast sweep = full sweep, impact, drivers, baseline-relative scenarios, knob curve) (search, carry-over, worker, compile reuse, plus): queue maths, calculations, templates, plan finder, day plan, scenario grid, codegen = engine for laptop, pharmacy and feed |
+| `ui-check.html` | 49 UI checks (v3: no DOM replacement while dragging, frame time, draft/save/discard, preview, active scenario updates) driving the real app, including finder timing, forced search and carry-over (results go to the console) |
 
 ## Files
 ```
@@ -76,6 +91,9 @@ js/core/codegen.js    JSON / JS / formula / CSV export
 js/core/blocks.js     formula block library
 js/core/plan.js       plan finder (full and step-by-step), scenario grid, day shapes, day timeline with carry-over
 js/core/plan-worker.js  Web Worker wrapper for the finder
+js/core/analysis.js   impact (what moves the needle), knob curves, calc drivers, full analysis run
+js/core/analysis-worker.js  Web Worker wrapper for the analysis
+js/dom.js             in-place DOM patcher (keyed, keeps focus and live inputs)
 js/templates/*.js     pharmacy, news feed, crowd control, coffee shop
 js/templates.js       registry + classic templates
 js/ui.js              themed dropdowns, confirm dialog
@@ -84,7 +102,7 @@ docs/                 original spec, demo and rubric
 ```
 
 ## Data model
-One JSON model: `version, name, note, columns (optional choices), rows, params (knobs), calcs, gates, criteria, combine, scenarios, stress, day {knob, start, values[], link {knob, lo, hi}, sticky, carry {knob, calc}}`. It is saved in `localStorage['meridian.studio.v2']`. No server and no table API are used.
+One JSON model: `version, name, note, active (scenario id or null), columns (optional choices), rows, params (knobs, each with value and base), calcs, gates, criteria, combine, scenarios, stress, day {knob, start, values[], link {knob, lo, hi}, sticky, carry {knob, calc}}`. It is saved in `localStorage['meridian.studio.v2']`. No server and no table API are used.
 
 ## Not done yet
 - Within each hour the queue is still steady state (M/M/c); only the backlog carries between hours. Minute-by-minute simulation is not modelled.

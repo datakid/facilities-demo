@@ -175,6 +175,30 @@
   const K1 = M.engine.compile(ph), rA = M.engine.compute(ph, { K: K1 }), rB = M.engine.compute(ph);
   ok('compile once: reused compile gives identical scores', rA.rows.every((r, i) => r.score === rB.rows[i].score));
 
+  const slowSweep = (model, critId) => {
+    const m = structuredClone(model), en = m.criteria.filter(c => c.enabled), me = en.find(c => c.id === critId), others = en.filter(c => c !== me);
+    const orig = others.map(c => +c.weight || 0), osum = orig.reduce((a, b) => a + b, 0), runs = [];
+    for (let v = 0; v <= 100; v++) { me.weight = v; others.forEach((c, i) => { c.weight = osum > 0 ? orig[i] / osum * (100 - v) : (100 - v) / others.length; }); const w = M.engine.compute(m).ranked[0] || null; const last = runs[runs.length - 1]; if (last && last.winner === w) last.to = v; else runs.push({ from: v, to: v, winner: w }); }
+    return runs;
+  };
+  ok('fast weight sweep matches a full recompute (laptop)', lap.criteria.every(c => JSON.stringify(M.sensitivity.fast(lap, lr, c.id).runs) === JSON.stringify(slowSweep(lap, c.id))));
+  ok('fast weight sweep matches a full recompute (pharmacy)', ph.criteria.every(c => JSON.stringify(M.sensitivity.fast(ph, pr, c.id).runs) === JSON.stringify(slowSweep(ph, c.id))));
+  const AN = M.analysis, phb = structuredClone(ph); phb.params.forEach(p => { p.base = p.value; });
+  const imp = AN.impact(phb, pr, M.engine.compile(phb));
+  ok('impact: one entry per knob, biggest swing first', imp.list.length === ph.params.length && imp.list.every((x, i) => i === 0 || imp.list[i - 1].swing >= x.swing - 1e-9));
+  ok('impact: patients per hour moves the pharmacy leader', imp.byId.lam.swing > 5 && (imp.byId.lam.above || imp.byId.lam.below), imp.byId.lam.swing.toFixed(1));
+  ok('impact: an unused knob has no swing', (() => { const m2 = structuredClone(phb); m2.params.push({ id: 'zz_unused', label: 'Unused', value: 1, base: 1, min: 0, max: 5, step: 1, group: 'X' }); const i2 = AN.impact(m2, M.engine.compute(m2), M.engine.compile(m2)); return i2.byId.zz_unused.swing === 0; })());
+  const dv = AN.drivers(phb, 'wait_min', 'p5');
+  ok('drivers: wait depends on arrivals and ranks it high', dv && dv.list.some(x => x.id === 'lam') && dv.list.findIndex(x => x.id === 'lam') < 4, dv && dv.list.slice(0, 4).map(x => x.id).join(','));
+  ok('drivers: a calc never lists a knob it cannot reach', !dv.list.some(x => x.id === 'target_min' || x.id === 'jug_err'));
+  const sb = structuredClone(phb); sb.params.find(p => p.id === 'lam').value = 55;
+  const s1 = M.engine.scenarios(sb).find(s => s.id === 's5');
+  ok('scenarios resolve against the baseline, not the live knobs', s1.res.P.lam === 22 && M.engine.scenarios(sb).find(s => s.id === 's6').res.P.surge === 0);
+  const cv = AN.curve(phb, 'lam', 10);
+  ok('knob curve samples every option across the range', cv.pts.length === 11 && Object.keys(cv.pts[0].sc).length === ph.rows.length);
+  const full = AN.run(phb);
+  ok('analysis run returns honesty, impact and scenarios', full.gaps.length > 0 && full.impact && full.scen.length === 6 && full.day, full.ms + ' ms');
+
   pending++;
   try {
     const w = new Worker('js/core/plan-worker.js'); let prog = 0;

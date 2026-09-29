@@ -85,10 +85,10 @@ window.M = window.M || {};
       g.simple.value = c.type === 'number' ? num(el.value) : c.type === 'boolean' ? +el.value : el.value;
       g.expr = R.gateExpr(g.simple);
     },
-    'param-value': (m, el) => { m.params.find(p => p.id === el.dataset.id).value = +el.value; },
+    'param-value': (m, el) => { H.setKnob(m, el.dataset.id, +el.value); },
     'param-exact': (m, el) => {
-      const p = m.params.find(x => x.id === el.dataset.id), v = parseFloat(el.value); if (!isFinite(v)) return false;
-      p.value = v; if (v < p.min) p.min = v; if (v > p.max) p.max = v;
+      const v = parseFloat(String(el.value).replace(/,/g, '')); if (!isFinite(v)) return false;
+      H.setKnob(m, el.dataset.id, v);
     },
     'param-stress': (m, el) => { const id = el.dataset.id; m.stress = m.stress.filter(x => x !== id); if (el.checked) m.stress.push(id); },
     'param-group': (m, el) => { m.params.find(p => p.id === el.dataset.id).group = el.value.trim() || 'Knobs'; },
@@ -142,7 +142,7 @@ window.M = window.M || {};
       m.calcs.find(k => k.id === old).id = neu; renameIn(m, old, neu, 'calc');
       if (S.ui.inspector && S.ui.inspector.id === old) S.ui.inspector.id = neu;
     },
-    'scen-label': (m, el) => { m.scenarios.find(s => s.id === el.dataset.id).label = el.value.trim() || 'Scenario'; },
+
     'combine-expr': (m, el) => { m.combine.expr = el.value; },
     'cell': (m, el) => {
       const r = m.rows.find(x => x.id === el.dataset.id), c = m.columns.find(x => x.id === el.dataset.col), s = el.value.trim();
@@ -170,7 +170,7 @@ window.M = window.M || {};
     }
   };
   const COMMIT_ONLY = new Set(['cell', 'row-label', 'col-label', 'col-id', 'col-unit', 'param-id', 'col-type', 'crit-source', 'range-auto', 'gate-col', 'gate-op',
-    'param-exact', 'param-group', 'param-unit', 'calc-label', 'calc-unit', 'calc-group', 'calc-id', 'scen-label', 'param-label']);
+    'param-exact', 'param-group', 'param-unit', 'calc-label', 'calc-unit', 'calc-group', 'calc-id', 'param-label', 'param-min', 'param-max', 'param-step']);
 
   function blockLive() {
     const b = S.ui.block && M.blocks.get(S.ui.block.id); if (!b) return;
@@ -183,20 +183,90 @@ window.M = window.M || {};
     if (k === 'block-in') { S.ui.block.vals[el.dataset.k] = el.value; blockLive(); return; }
     if (k === 'block-label') { S.ui.block.label = el.value; return; }
     if (k === 'block-id') { S.ui.block.outId = el.value.trim(); blockLive(); return; }
+    if (k === 'knob-q') { S.ui.knobQ = el.value; M.store.frame(); return; }
     if (!k || !IN[k]) return;
     if (el.tagName === 'SELECT' || el.type === 'checkbox' || COMMIT_ONLY.has(k)) return;
     if (el.type === 'range') el.style.setProperty('--pct', ((el.value - el.min) / ((el.max - el.min) || 1) * 100) + '%');
     if (k === 'model-name') return;
+    M.peek(null);
     M.preview(m => IN[k](m, el));
   });
   document.addEventListener('change', e => {
     const el = e.target, k = el.dataset && el.dataset.in;
     if (k === 'block-id' || k === 'block-in') { R.all(); return; }
+    if (k === 'knob-q') return;
     if (!k || !IN[k]) return;
     if (el.tagName === 'SELECT' || el.type === 'checkbox' || COMMIT_ONLY.has(k) || k === 'model-name') M.commit(k, m => IN[k](m, el));
     else { M.preview(m => IN[k](m, el)); M.endGesture(); }
   });
   document.addEventListener('toggle', e => { if (e.target.id === 'out-details') S.ui.outOpen = e.target.open; }, true);
+
+  const scenPeek = id => {
+    const live = (S.live || []).find(x => !x.now && x.id === id);
+    if (id === '') return { key: 's:', id: '', label: 'Baseline', values: H.scenValues(null), res: live && live.res };
+    const s = H.scen(id); if (!s) return null;
+    return { key: 's:' + id, id, label: s.label, values: H.scenValues(s), res: live && live.res };
+  };
+  let peekT = null, peekEl = null;
+  const canHover = e => e.pointerType === 'mouse' && !M.inGesture();
+  document.addEventListener('pointerover', e => {
+    if (!canHover(e)) return;
+    const el = e.target.closest('[data-peek]'); if (!el || el === peekEl) return;
+    peekEl = el; clearTimeout(peekT);
+    const id = el.dataset.peek, act = S.model.active || '';
+    if (id === act && !H.diffs().length) { M.peek(null); return; }
+    peekT = setTimeout(() => { const p = scenPeek(id); if (p) M.peek(p); }, S.peek ? 30 : 140);
+  });
+  document.addEventListener('pointerout', e => {
+    const el = e.target.closest('[data-peek]'); if (!el || (e.relatedTarget && el.contains(e.relatedTarget))) return;
+    const to = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('[data-peek]');
+    if (to) return;
+    peekEl = null; clearTimeout(peekT); peekT = setTimeout(() => M.peek(null), 60);
+  });
+
+  function scrubInfo(e) {
+    const sp = e.target.closest('[data-spark],[data-curve]'); if (!sp) return null;
+    const id = sp.dataset.spark || sp.dataset.curve, p = H.param(id); if (!p) return null;
+    const r = sp.getBoundingClientRect();
+    let lo = +p.min, hi = +p.max, x0 = r.left, w = r.width;
+    if (sp.dataset.curve) {
+      const W = +sp.dataset.w, k = r.width / W; lo = +sp.dataset.lo; hi = +sp.dataset.hi;
+      x0 = r.left + +sp.dataset.pl * k; w = r.width - (+sp.dataset.pl + +sp.dataset.pr) * k;
+    } else if (S.knobs[id]) { lo = S.knobs[id].lo; hi = S.knobs[id].hi; }
+    else if (S.impact && S.impact.byId[id]) { lo = S.impact.byId[id].lo; hi = S.impact.byId[id].hi; }
+    const t = U.clamp((e.clientX - x0) / (w || 1), 0, 1), st = +p.step || 1;
+    let v = lo + t * (hi - lo); v = +(Math.round(v / st) * st).toFixed(6); v = U.clamp(v, lo, hi);
+    return { p, v, el: sp };
+  }
+  let scrubQ = null, scrubF = false;
+  document.addEventListener('pointermove', e => {
+    if (e.pointerType !== 'mouse' || M.inGesture()) return;
+    const s = scrubInfo(e);
+    if (!s) { if (S.peek && String(S.peek.key).startsWith('k:')) M.peek(null); return; }
+    scrubQ = s; if (scrubF) return; scrubF = true;
+    requestAnimationFrame(() => {
+      scrubF = false; const q = scrubQ; if (!q) return;
+      const P = Object.assign({}, S.result.P, { [q.p.id]: q.v });
+      M.peek({ key: 'k:' + q.p.id + ':' + q.v, id: null, label: `${q.p.label} = ${U.fmtN(q.v)}${q.p.unit ? ' ' + q.p.unit : ''}`, values: P });
+    });
+  });
+  document.documentElement.addEventListener('pointerleave', () => { M.peek(null); });
+  document.addEventListener('click', e => {
+    const s = scrubInfo(e); if (!s) return;
+    M.peek(null);
+    M.commit('Set knob', m => { H.setKnob(m, s.p.id, s.v); });
+  });
+
+  document.addEventListener('keydown', e => {
+    const el = e.target;
+    if (!el.dataset || el.dataset.in !== 'param-exact' || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    e.preventDefault();
+    const p = H.param(el.dataset.id); if (!p) return;
+    const st = (+p.step || 1) * (e.shiftKey ? 10 : 1), v = +((+p.value + (e.key === 'ArrowUp' ? st : -st)).toFixed(6));
+    el.value = U.fmtN(v);
+    M.preview(m => { H.setKnob(m, p.id, v); });
+    clearTimeout(el._t); el._t = setTimeout(() => M.endGesture(), 450);
+  });
 
   function download(name, text, type) {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name;
@@ -313,22 +383,57 @@ window.M = window.M || {};
       M.commit('Remove knob', m => { m.params = m.params.filter(x => x.id !== id); m.stress = m.stress.filter(x => x !== id); });
       H.toastUndo(users ? `Removed ${p.label}. ${users} formula${users > 1 ? 's' : ''} now show an error` : `Removed ${p.label}`);
     },
-    'add-scenario': () => {
+    'add-scenario': () => A['scen-new'](),
+    'scen-new': () => {
       const m = S.model; if (m.scenarios.length >= LIMIT.scenarios) return H.toast(`Up to ${LIMIT.scenarios} scenarios`);
       const ids = new Set(m.scenarios.map(s => s.id)); let n = 1; while (ids.has('s' + n)) n++;
-      const values = {}; m.params.forEach(p => { values[p.id] = +p.value; });
-      M.commit('Save scenario', mm => { mm.scenarios.push({ id: 's' + n, label: 'Scenario ' + n, values }); });
-      H.toast('Saved the current knobs as a scenario. Rename it on the left');
+      const id = 's' + n, values = H.overrides(m), label = Object.keys(values).length ? H.draftLabel(m) : 'Scenario ' + n;
+      M.peek(null);
+      M.commit('New scenario', mm => { mm.scenarios.push({ id, label, values }); mm.active = id; });
+      ui(u => { u.inspector = { kind: 'scenario', id }; });
+      H.toastUndo(Object.keys(values).length ? `Saved “${label}”` : 'New scenario. Move knobs, then Update');
     },
-    'apply-scenario': (el, id) => {
-      const s = S.model.scenarios.find(x => x.id === id); if (!s) return;
-      M.commit('Apply scenario', m => { Object.entries(s.values || {}).forEach(([k, v]) => { const p = m.params.find(x => x.id === k); if (p) { p.value = v; if (v < p.min) p.min = v; if (v > p.max) p.max = v; } }); });
-      H.toastUndo(`Applied ${s.label}`);
+    'draft-new': () => A['scen-new'](),
+    'draft-save': () => {
+      const a = H.active();
+      M.commit('Save knobs', m => { H.saveDraft(m); });
+      H.toastUndo(a ? `Updated ${a.label}` : 'Baseline updated');
     },
-    'remove-scenario': (el, id) => { const s = S.model.scenarios.find(x => x.id === id); M.commit('Remove scenario', m => { m.scenarios = m.scenarios.filter(x => x.id !== id); }); H.toastUndo(`Removed ${s.label}`); },
+    'draft-discard': () => { M.peek(null); M.commit('Discard changes', m => { H.useScenario(m, m.active); }); H.toastUndo('Changes discarded'); },
+    'use-scen': (el, id) => {
+      id = id || ''; M.peek(null);
+      const cur = S.model.active || '', lost = H.diffs().length;
+      if (id === cur && !lost) { if (id) ui(u => { u.inspector = { kind: 'scenario', id }; }); return; }
+      const s = id ? H.scen(id) : null;
+      M.commit('Use scenario', m => { H.useScenario(m, id || null); });
+      if (lost) H.toastUndo(id !== cur ? `Switched to ${s ? s.label : 'Baseline'}. Unsaved knob changes were dropped` : 'Changes discarded');
+    },
+    'apply-scenario': (el, id) => A['use-scen'](el, id),
+    'remove-scenario': (el, id) => {
+      const s = H.scen(id);
+      M.commit('Remove scenario', m => { m.scenarios = m.scenarios.filter(x => x.id !== id); if (m.active === id) H.useScenario(m, null); });
+      H.toastUndo(`Removed ${s.label}`);
+    },
+    'knob-reset': (el, id) => { const p = H.param(id); if (!p) return; M.commit('Reset knob', m => { H.setKnob(m, id, H.target(m.params.find(x => x.id === id), m)); }); },
+    'knob-step': el => { const p = H.param(el.dataset.id); if (!p) return; const v = +((+p.value + (+el.dataset.d) * (+p.step || 1)).toFixed(6)); M.commit('Step knob', m => { H.setKnob(m, p.id, v); }); },
+    'knob-sort': el => ui(u => { u.knobSort = el.dataset.v; }),
+    'set-tab': el => ui(u => { u.tab = el.dataset.v; u.pane = 'recipe'; }),
+    'set-cmp': el => { S.ui.cmp = el.dataset.v; M.store.save(); R.all(); },
+    'toggle-ui': el => ui(u => { u[el.dataset.k] = !u[el.dataset.k]; }),
+    'insert': el => {
+      const ta = document.getElementById(el.dataset.t); if (!ta) return;
+      const v = el.dataset.v, a = ta.selectionStart ?? ta.value.length, b = ta.selectionEnd ?? a;
+      const pre = ta.value.slice(0, a), post = ta.value.slice(b);
+      const pad = pre && !/[\s(,]$/.test(pre) ? ' ' : '';
+      ta.value = pre + pad + v + (v.endsWith('(') ? ')' : '') + post;
+      const at = (pre + pad + v).length; ta.focus(); ta.setSelectionRange(at, at);
+      const d = el.closest('details'); if (d) d.open = false;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.dispatchEvent(new Event('change', { bubbles: true }));
+    },
     'open': el => ui(u => { u.inspector = { kind: el.dataset.kind, id: el.dataset.id }; }),
     'close-inspector': () => ui(u => { if (u.inspector && u.inspector.kind === 'row') u.selectedRow = null; u.inspector = null; }),
-    'select-row': (el, id) => ui(u => { u.selectedRow = id; u.inspector = { kind: 'row', id }; }),
+    'select-row': (el, id) => ui(u => { if (u.selectedRow === id && u.inspector && u.inspector.kind === 'row') { u.selectedRow = null; u.inspector = null; } else { u.selectedRow = id; u.inspector = { kind: 'row', id }; } }),
     'set-combine': el => {
       const v = el.dataset.v;
       M.commit('Combine', m => {
@@ -373,8 +478,14 @@ window.M = window.M || {};
     const tgt = e.target, typing = tgt.matches && tgt.matches('input[type=text],input[type=number],textarea');
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); e.shiftKey ? M.redo() : M.undo(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); M.redo(); }
+    else if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === '[' || e.key === ']') && S.model.params.length) {
+      e.preventDefault();
+      const ids = [''].concat(S.model.scenarios.map(s => s.id)), i = ids.indexOf(S.model.active || '');
+      A['use-scen'](null, ids[(i + (e.key === ']' ? 1 : -1) + ids.length) % ids.length]);
+    }
     else if (e.key === 'Escape') {
       if (M.ui.isListOpen() || document.querySelector('#dialog-root .scrim')) return;
+      if (S.peek) { M.peek(null); return; }
       if (S.ui.modal) ui(u => { u.modal = null; u.block = null; if (u.finder) { u.finder.busy = false; u.finder.progress = null; } });
       else if (S.ui.inspector) A['close-inspector']();
     }

@@ -230,25 +230,46 @@ window.M = window.M || {};
     return out;
   }
 
-  function sweep(model, critId, step) {
+  function mix(res, sv, W, ids) {
+    if (!ids.length) return 0;
+    const ct = res.ctype;
+    if (ct === 'product') return ids.reduce((a, id) => a * Math.pow(sv[id], W[id]), 1);
+    if (ct === 'min') return Math.min(...ids.map(id => sv[id]));
+    if (ct === 'custom' && res.cast) {
+      const sc = Object.assign({}, res.P); res.used.forEach(id => { sc[id] = sv[id] ?? 0; sc['w_' + id] = W[id] ?? 0; });
+      try { const v = evaluate(res.cast, sc); return isNum(v) && isFinite(v) ? v : 0; } catch (e) { return 0; }
+    }
+    return ids.reduce((a, id) => a + W[id] * sv[id], 0);
+  }
+  function sweepFast(model, res, critId, step) {
     step = step || 1;
-    const m = structuredClone(model);
-    const en = m.criteria.filter(c => c.enabled);
+    const en = model.criteria.filter(c => c.enabled && res.used.includes(c.id));
     const me = en.find(c => c.id === critId); if (!me) return null;
     const others = en.filter(c => c !== me);
-    const orig = others.map(c => +c.weight || 0), osum = orig.reduce((a, b) => a + b, 0);
-    const total = en.reduce((a, c) => a + (+c.weight || 0), 0);
-    const current = total > 0 ? (+me.weight || 0) / total * 100 : 0;
+    const wOf = c => Math.max(0, +c.weight || 0);
+    const orig = others.map(wOf), osum = orig.reduce((a, b) => a + b, 0);
+    const total = en.reduce((a, c) => a + wOf(c), 0);
+    const current = total > 0 ? wOf(me) / total * 100 : 0;
+    const rows = res.ranked.map(id => res.byId[id]);
+    const sv = rows.map(r => { const o = {}; res.used.forEach(id => { o[id] = r.crit[id].s; }); return o; });
     const runs = [];
     for (let v = 0; v <= 100; v += step) {
-      me.weight = v;
-      others.forEach((c, i) => { c.weight = osum > 0 ? orig[i] / osum * (100 - v) : (100 - v) / others.length; });
-      const w = compute(m).ranked[0] || null;
-      const last = runs[runs.length - 1];
+      const W = {}; W[me.id] = v;
+      others.forEach((c, i) => { W[c.id] = osum > 0 ? orig[i] / osum * (100 - v) : (100 - v) / others.length; });
+      const tot = en.reduce((a, c) => a + W[c.id], 0);
+      en.forEach(c => { W[c.id] = tot > 0 ? W[c.id] / tot : 0; });
+      const ids = en.map(c => c.id).filter(id => W[id] > 0);
+      let best = null, bs = -Infinity;
+      rows.forEach((r, i) => {
+        const s = tot > 0 ? mix(res, sv[i], W, ids) : 0;
+        if (s > bs + 1e-12 || (Math.abs(s - bs) <= 1e-12 && best && r.label.localeCompare(best.label) < 0)) { bs = s; best = r; }
+      });
+      const w = best ? best.id : null, last = runs[runs.length - 1];
       if (last && last.winner === w) last.to = v; else runs.push({ from: v, to: v, winner: w });
     }
     return { runs, current };
   }
+  function sweep(model, critId, step) { return sweepFast(model, compute(model), critId, step); }
 
   function knobSweep(model, paramId, steps) {
     steps = steps || 24;
@@ -270,9 +291,10 @@ window.M = window.M || {};
   }
 
   function scenarios(model) {
-    const K = compile(model);
+    const K = compile(model), B = {};
+    model.params.forEach(p => { B[p.id] = +(p.base ?? p.value); });
     return (model.scenarios || []).map(s => {
-      const r = compute(model, { P: s.values || {}, K });
+      const r = compute(model, { P: Object.assign({}, B, s.values || {}), K });
       const w = r.ranked[0] || null;
       return { id: s.id, label: s.label, winner: w, score: w ? r.byId[w].score : 0, top: r.ranked.slice(0, 3), left: r.ranked.length, res: r };
     });
@@ -323,6 +345,6 @@ window.M = window.M || {};
       return s + u;
     }
   };
-  M.engine = { compile, compute, trace, uncertainty, weightFree, reversal, rng, combineS, knobSweep, scenarios };
-  M.sensitivity = { sweep, knob: knobSweep };
+  M.engine = { compile, compute, trace, uncertainty, weightFree, reversal, rng, combineS, knobSweep, scenarios, sweepFast, mix };
+  M.sensitivity = { sweep, fast: sweepFast, knob: knobSweep };
 })(window.M);
