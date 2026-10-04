@@ -45,6 +45,8 @@ window.M = window.M || {};
     clearTimeout(insT);
     insT = setTimeout(() => {
       S.sit = E.situations(S.model, S.res.prep);
+      S.day = S.model.day && M.plan ? M.plan.dayRun(S.model, S.res.prep) : null;
+      R.day && R.day();
       S.ins = M.insights.build(S.model, S.res);
       R.checks && R.checks(); R.verdictOnly && R.verdictOnly(); R.situations && R.situations();
     }, 160);

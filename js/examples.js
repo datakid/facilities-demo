@@ -64,6 +64,7 @@ window.M = window.M || {};
       rows: rows(columns, [['Dark mode', 9000, 0.5, 90, 2, false], ['CSV import', 2500, 2, 80, 3, true], ['SSO login', 800, 3, 70, 6, true], ['Mobile app', 12000, 2, 50, 20, true], ['Onboarding tour', 6000, 1, 80, 3, false], ['Usage alerts', 3500, 1, 60, 1.5, false], ['API v2', 1500, 2, 90, 10, true]]),
       knobs: [K('capacity', 'Team capacity', 12, 2, 30, 1, 'wk', 'The biggest job the team can take this quarter')],
       rules: [R('g1', 'Fits the quarter', 'Effort <= [Team capacity]')],
+      pairs: [{ a: 'r2', b: 'r1' }, { a: 'r6', b: 'r5' }],
       criteria: [W('rice', 'rice', 8, { curve: 'gentle' }), W('strategic', 'strategic', 3), W('confidence', 'confidence', 2)],
       guide: { level: 'Formulas', teaches: 'Rebuilding a known equation, squashing big numbers', steps: [
         S('formulas', 'col:rice', 'Known equations fit right in', 'RICE = Reach × Impact × Confidence ÷ Effort. It is typed exactly like that. You can use × ÷ or * /.'),
@@ -83,12 +84,14 @@ window.M = window.M || {};
       columns,
       rows: rows(columns, [['Elm St loft', 1650, 62, 18, true, 'Lively', 4], ['Harbour 3B', 1400, 48, 35, false, 'Quiet', 3], ['Park Row', 1950, 75, 12, true, 'Central', 5], ['Mill Lane', 1200, 55, 55, true, 'Quiet', 3], ['Kings Ct', 1550, 58, 22, false, 'Central', 2], ['Rose Yard', 1700, 70, 28, true, 'Quiet', 5]]),
       knobs: [K('max_rent', 'Max rent', 1800, 1000, 2500, 50, '$')],
-      rules: [R('g1', 'Affordable', 'Rent <= [Max rent]')],
-      criteria: [W('per_m2', 'per_m2', 6, { want: 'less' }), W('size', 'size', 5, { curve: 'gentle' }), W('commute', 'commute', 7, { want: 'less', curve: 'enough', at: 25 }), W('area', 'area', 4, { points: { Quiet: 8, Lively: 5, Central: 9 } }), W('light', 'light', 4), W('balcony', 'balcony', 2)],
+      rules: [R('g1', 'Affordable', 'Rent <= [Max rent]'), Object.assign(R('g2', 'Ideally a balcony', 'Balcony'), { soft: true, penalty: 6 })],
+      criteria: [W('per_m2', 'per_m2', 6, { want: 'less' }), W('size', 'size', 5, { curve: 'gentle' }), W('commute', 'commute', 7, { want: 'less', curve: 'enough', at: 25 }), W('area', 'area', 4, { points: { Quiet: 8, Lively: 5, Central: 9 } }), W('light', 'light', 4)],
       guide: { level: 'Start here', teaches: 'Balanced vs add-up, good-enough commute', steps: [
         S('matters', 'method', 'Add up or balanced', 'This one uses Balanced: a very weak spot drags the score down more. Add up lets strengths make up for weaknesses.', 'Switch to Add up and see whether Mill Lane, cheap but far away, climbs.'),
         S('matters', 'crit:commute', 'Anything under 25 minutes is fine', 'Commute uses “good enough”: 25 minutes or less earns full points.', 'Change the line to 15 minutes.'),
-        S('matters', 'crit:area', 'Your taste in points', 'Neighbourhood answers are worth what you say they are.')
+        S('matters', 'crit:area', 'Your taste in points', 'Neighbourhood answers are worth what you say they are.'),
+        S('rules', 'rule:g2', 'Soft must-haves', 'A balcony is nice, not a deal-breaker. This must-have takes 6 points off instead of ruling a flat out.', 'Switch it to “Rule it out” and see who disappears.'),
+        S('matters', 'tools', 'Not sure about importances?', 'Teach it my taste: say which flat you would pick over another, and it suggests importances that agree with you.', 'Open Teach it my taste.')
       ] }
     };
   };
@@ -132,7 +135,8 @@ window.M = window.M || {};
         S('formulas', 'col:wait', 'Real queue maths', 'wait(arrivals, served per till, tills) is the standard M/M/c queue used by call centres and banks. if() caps the wait at 60 minutes when the tills are overloaded and the line never clears.'),
         S('rules', 'rule:g1', 'Safety first', 'Plans that run the tills above 90% are ruled out before scoring.'),
         S('formulas', 'knob:cph', 'Plan for the rush', 'Drag Customers per hour up to 120 and watch the plan that wins shift towards more tills.'),
-        S('options', 'table', 'Try your own plan', 'Add an option, type how many tills and floor staff, and its wait and cost are worked out for you.', 'Click Add option.')
+        S('options', 'table', 'Try your own plan', 'Add an option, type how many tills and floor staff, and its wait and cost are worked out for you.', 'Click Add option.'),
+        S('matters', 'tools', 'Let it find the plan', 'Find the best option tries every number of tills and floor staff, and shows the best ones you haven’t thought of.', 'Open Find the best option and press Find.')
       ] }
     };
   };

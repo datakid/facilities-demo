@@ -110,6 +110,7 @@ window.M = window.M || {};
         { id: 's4', label: 'Peak + surprise', values: { lam: 30, pressure: 1, surge: 0.1 } },
         { id: 's5', label: 'Lina off (midday)', values: { lam: 22, pressure: 0.45, day_lina: 0 } },
         { id: 's6', label: 'Sam off (midday)', values: { lam: 22, pressure: 0.45, day_sam: 0 } }],
+      day: { knob: 'lam', start: 8, values: [10, 14, 18, 22, 24, 20, 16, 14, 18, 26, 30, 28, 20, 12], link: { knob: 'pressure', lo: 0.1, hi: 0.85 }, carry: { col: 'left', knob: 'backlog' }, sticky: 3 },
       guide: { level: 'Advanced', teaches: 'Queues, role splits, situations, big formula chains', steps: [
         S('matters', 'results', 'Nine ways to split four people', 'Each option gives Maya, Omar, Lina and Sam a role: at a window, typing, recording, both (back) or off. Right now {winner} is best for this hour.'),
         S('matters', 'situations', 'One plan per part of the day', 'Situations are saved settings: a calm morning, the evening peak, someone off sick. Each chip shows who wins there.', 'Click Calm morning, then Evening peak.'),
@@ -117,6 +118,8 @@ window.M = window.M || {};
         S('formulas', 'col:wait_min', 'A real queue model', 'Average wait uses wait(arrivals, served per window, windows), the M/M/c queue. Below the formula you see it with the numbers plugged in.'),
         S('rules', 'rule:g2', 'Overloaded plans are out', 'If the windows can’t keep up, the line grows forever, so the plan is ruled out instead of scored.'),
         S('matters', 'crit:manager', 'Words can earn points', 'Maya is the manager. Plans that keep her free to manage earn more points.'),
+        S('matters', 'day', 'A plan for the whole day', 'The day plan scores every hour from 08:00. Patients still waiting at the end of an hour carry into the next (the striped bits), so a plan that lets the line build up pays for it later.', 'Click the busiest hour to load its settings.'),
+        S('matters', 'tools', 'Let it find the split', 'Find the best option tries all 625 role splits on the whole day, including ones not in your list.', 'Open Find the best option, judge on Whole day, press Find.'),
         S('options', 'table', 'Try your own split', 'Change any role in the table, or add a plan. Everything downstream is worked out for you.', 'Set Sam to typing in the first plan.')
       ] }
     };
@@ -268,7 +271,8 @@ window.M = window.M || {};
       name: 'Coffee shop rush', question: 'How do we staff the morning rush?', method: 'add',
       about: 'The smallest queue model: order, then drink. The slower step sets the wait.',
       columns, rows: data, knobs,
-      rules: [R('g1', 'Keeps up', 'total < 60')],
+      rules: [R('g1', 'Keeps up', 'total < 60'), Object.assign(R('g2', 'Drinks within 5 minutes', 'total <= 5'), { soft: true, penalty: 12 })],
+      day: { knob: 'lam', start: 6, values: [30, 80, 110, 90, 60, 50, 70, 55, 40, 45, 60, 35, 20], link: null, carry: null, sticky: 3 },
       criteria: [W('c_wait', 'total', 6, { want: 'less', range: fixed(0, 15) }), W('c_cost', 'wage', 4, { want: 'less' })],
       scenarios: [{ id: 's1', label: 'Quiet', values: { lam: 25 } }, { id: 's2', label: 'Morning rush', values: { lam: 70 } }, { id: 's3', label: 'Commuter peak', values: { lam: 110 } }],
       guide: { level: 'Formulas', teaches: 'Two-step queue, the bottleneck, wait()', steps: [

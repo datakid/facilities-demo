@@ -1,10 +1,32 @@
 window.M = window.M || {};
 (function (M) {
   'use strict';
-  const E = M.engine, compute = E.compute, compile = E.compile, fmtN = M.util.fmtN;
-  const LIMITS = { combos: 4096, work: 60000, search: 240000, ms: 4000 };
+  const U = M.util, E = M.engine;
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
-  const g = (t, c, w) => Math.exp(-(((t - c) / w) ** 2));
+  const LIMIT = { full: 4096, runs: 60000, search: 200000, ms: 3500 };
+
+  function contexts(model, judge) {
+    const base = Object.assign({}, model.base || {});
+    if (judge === 'situations' && (model.scenarios || []).length) return model.scenarios.map(s => ({ id: s.id, label: s.label, K: Object.assign({}, base, s.values || {}) }));
+    if (judge === 'day' && model.day && model.day.values.length) return dayContexts(model);
+    return [{ id: 'now', label: 'Current settings', K: Object.fromEntries(model.knobs.map(k => [k.id, k.value])) }];
+  }
+
+  function matrix(model, prep) {
+    prep = prep || E.prepare(model);
+    const cols = [{ id: 'now', label: 'Now', K: Object.fromEntries(model.knobs.map(k => [k.id, k.value])) }, { id: 'base', label: 'Baseline', K: Object.assign({}, model.base) }]
+      .concat((model.scenarios || []).map(s => ({ id: s.id, label: s.label, K: Object.assign({}, model.base, s.values || {}) })));
+    const res = cols.map(c => E.compute(model, { prep, K: c.K }));
+    const rows = model.rows.map(r => {
+      const cells = res.map(x => { const y = x.byId[r.id]; return { score: y.pass ? y.score : null, rank: y.rank, lead: x.ranked[0] === r.id }; });
+      const sc = cells.slice(1).map(c => c.score ?? 0);
+      return { id: r.id, label: r.label, cells, worst: Math.min(...sc), avg: sc.reduce((a, b) => a + b, 0) / sc.length, wins: cells.slice(1).filter(c => c.lead).length, outIn: cells.slice(1).filter(c => c.score == null).length };
+    });
+    const safest = rows.slice().sort((a, b) => b.worst - a.worst || b.avg - a.avg)[0] || null;
+    const bestAvg = rows.slice().sort((a, b) => b.avg - a.avg || b.worst - a.worst)[0] || null;
+    return { cols: cols.map((c, i) => ({ id: c.id, label: c.label, leader: res[i].ranked[0] || null })), rows, safest: safest && safest.worst > 0 ? safest.id : null, bestAvg: bestAvg && bestAvg.avg > 0 ? bestAvg.id : null };
+  }
+
   const SHAPES = {
     flat: { label: 'Flat', f: () => 0.5 },
     morning: { label: 'Morning peak', f: t => g(t, 0.22, 0.2) },
@@ -12,226 +34,212 @@ window.M = window.M || {};
     evening: { label: 'Evening peak', f: t => g(t, 0.8, 0.18) },
     two: { label: 'Two peaks', f: t => Math.max(g(t, 0.25, 0.14), g(t, 0.8, 0.13)) }
   };
+  function g(t, c, w) { return Math.exp(-(((t - c) / w) ** 2)); }
+  function shape(model, kind, hours) {
+    const d = model.day, k = model.knobs.find(x => x.id === d.knob); if (!k) return [];
+    const lo = k.min + (k.max - k.min) * 0.15, hi = k.min + (k.max - k.min) * 0.75;
+    const n = hours || d.values.length || 12, f = (SHAPES[kind] || SHAPES.flat).f;
+    return Array.from({ length: n }, (_, i) => { const v = lo + (hi - lo) * f(n === 1 ? 0.5 : i / (n - 1)); return +(Math.round(v / k.step) * k.step).toFixed(6); });
+  }
   const hh = h => String(((h % 24) + 24) % 24).padStart(2, '0') + ':00';
-  const shortLabel = s => String(s).replace(/\s*\(.*?\)\s*/g, ' ').trim();
-  const valText = v => v === true ? 'yes' : v === false ? 'no' : String(v);
-  const finite = v => typeof v === 'number' && isFinite(v);
 
-  function choicesFor(model, col) {
-    if (col.choices && col.choices.length) return col.choices.slice();
-    if (col.type === 'boolean') return [true, false];
-    const seen = [];
-    model.rows.forEach(r => { const v = r.v[col.id]; if (v !== null && v !== undefined && v !== '' && !seen.some(x => String(x) === String(v))) seen.push(v); });
-    return col.type === 'number' ? seen.sort((a, b) => a - b) : seen;
-  }
-  function parseList(col, text) {
-    const parts = String(text || '').split(',').map(s => s.trim()).filter(Boolean);
-    const out = parts.map(s => col.type === 'number' ? (isFinite(+s) ? +s : null) : col.type === 'boolean' ? /^(true|yes|1|y)$/i.test(s) : s).filter(v => v !== null);
-    return out.filter((v, i) => out.findIndex(x => String(x) === String(v)) === i);
-  }
-  function* combos(lists, keys) {
-    const idx = keys.map(() => 0);
-    while (true) {
-      const o = {}; keys.forEach((k, i) => { o[k] = lists[k][idx[i]]; });
-      yield o;
-      let i = keys.length - 1;
-      while (i >= 0 && ++idx[i] === lists[keys[i]].length) { idx[i] = 0; i--; }
-      if (i < 0) return;
-    }
-  }
-  function label(model, pick) {
-    const keys = Object.keys(pick), counts = {};
-    keys.forEach(k => { const s = valText(pick[k]); counts[s] = (counts[s] || 0) + 1; });
-    const common = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-    const rest = keys.length > 2 && common[1] > 1;
-    const colOf = k => model.columns.find(c => c.id === k) || { label: k };
-    const parts = keys.filter(k => !(rest && valText(pick[k]) === common[0])).map(k => `${shortLabel(colOf(k).label)} ${valText(pick[k])}`);
-    if (rest) parts.push(`rest ${common[0]}`);
-    return parts.join(' · ') || `all ${common[0]}`;
-  }
-
-  function carryOf(model) {
-    const c = model.day && model.day.carry;
-    return c && model.params.some(p => p.id === c.knob) && (model.calcs || []).some(k => k.id === c.calc) ? c : null;
-  }
-  function dayRuns(model) {
-    const d = model.day;
-    if (!d || !d.values || !d.values.length || !model.params.some(p => p.id === d.knob)) return [];
-    const lo = Math.min(...d.values), hi = Math.max(...d.values);
-    const link = d.link && model.params.some(p => p.id === d.link.knob) ? d.link : null;
-    const runs = d.values.map((v, i) => {
-      const values = { [d.knob]: v };
-      if (link) values[link.knob] = +(link.lo + (hi > lo ? (v - lo) / (hi - lo) : 0.5) * (link.hi - link.lo)).toFixed(4);
-      return { id: 'h' + i, label: hh(d.start + i), end: hh(d.start + i + 1), values };
+  function dayContexts(model) {
+    const d = model.day, base = Object.assign({}, model.base || {}, Object.fromEntries(model.knobs.map(k => [k.id, k.value])));
+    const vmin = Math.min(...d.values), vmax = Math.max(...d.values);
+    return d.values.map((v, i) => {
+      const K = Object.assign({}, base, { [d.knob]: v });
+      if (d.link && model.knobs.some(k => k.id === d.link.knob)) K[d.link.knob] = +(d.link.lo + (d.link.hi - d.link.lo) * (vmax === vmin ? 0.5 : (v - vmin) / (vmax - vmin))).toFixed(4);
+      return { id: 'h' + i, label: hh(d.start + i), K };
     });
-    runs.carry = carryOf(model);
-    return runs;
   }
-  function runSet(model, over) {
-    if (over === 'scenarios' && model.scenarios.length) {
-      const B = {}; model.params.forEach(p => { B[p.id] = +(p.base ?? p.value); });
-      return model.scenarios.map(s => ({ id: s.id, label: s.label, values: Object.assign({}, B, s.values || {}) }));
-    }
-    if (over === 'day') { const r = dayRuns(model); if (r.length) return r; }
-    return [{ id: 'now', label: 'Current knobs', values: {} }];
-  }
-  const leftOf = (r, carry) => { const c = r.calc[carry.calc]; return c && finite(c.v) ? Math.max(0, c.v) : 0; };
 
-  function judge(model, runs, o) {
-    o = o || {};
-    const K = o.K || compile(model), carry = runs.carry, tot = {}, per = [];
-    model.rows.forEach(r => { tot[r.id] = { sum: 0, sSum: 0, worst: Infinity, pass: 0, worstRun: null, left: 0 }; });
-    let rowP = null;
-    runs.forEach((run, i) => {
-      const res = compute(model, { P: run.values, K, rowP, ranges: o.ranges && o.ranges[i] });
-      res.rows.forEach(r => {
-        const t = tot[r.id], s = r.pass ? r.score : 0;
-        t.sum += s; t.sSum += finite(r.S) ? r.S * 100 : 0; if (r.pass) t.pass++;
-        if (s < t.worst) { t.worst = s; t.worstRun = run.id; }
-      });
-      if (carry) { rowP = {}; res.rows.forEach(r => { const l = leftOf(r, carry); rowP[r.id] = { [carry.knob]: l }; tot[r.id].left = l; }); }
-      if (o.keep) per.push({ run, res });
+  function dayRun(model, prep, rows, fixedR) {
+    prep = prep || E.prepare(model);
+    const d = model.day; if (!d || !d.values.length) return null;
+    const ctx = dayContexts(model);
+    const carry = d.carry && model.knobs.some(k => k.id === d.carry.knob) && model.columns.some(c => c.id === d.carry.col) ? d.carry : null;
+    const list = rows || model.rows;
+    let RK = null;
+    const hours = ctx.map(c => {
+      const r = E.compute(model, { prep, K: c.K, RK, rows: list, R: fixedR });
+      if (carry) { RK = {}; r.rows.forEach(x => { const v = x.vals[carry.col]; RK[x.id] = { [carry.knob]: typeof v === 'number' && isFinite(v) ? Math.max(0, v) : 0 }; }); }
+      return { id: c.id, label: c.label, K: c.K, res: r, winner: r.ranked[0] || null, carried: carry ? Object.fromEntries(r.rows.map(x => [x.id, (x.vals[carry.knob] ?? 0)])) : null };
     });
-    const n = runs.length || 1;
-    Object.values(tot).forEach(t => { t.avg = t.sum / n; t.mS = t.sSum / n; });
-    return { tot, per };
+    const per = list.map(r => {
+      const sc = hours.map(h => { const x = h.res.byId[r.id]; return x.pass ? x.score : 0; });
+      return { id: r.id, label: r.label, scores: sc, avg: sc.reduce((a, b) => a + b, 0) / sc.length, worst: Math.min(...sc), fails: sc.filter(s => s === 0).length, endQueue: carry ? (hours[hours.length - 1].res.byId[r.id].vals[carry.col] ?? 0) : null };
+    });
+    const allDay = per.slice().sort((a, b) => b.avg - a.avg || b.worst - a.worst)[0] || null;
+    const sticky = d.sticky ?? 3, plan = [];
+    let cur = null;
+    hours.forEach((h, i) => {
+      const best = h.winner; if (!best) { cur = null; plan.push(null); return; }
+      if (cur == null) cur = best;
+      else if (cur !== best) {
+        const a = h.res.byId[cur], b = h.res.byId[best];
+        if (!a.pass || b.score - a.score >= sticky) cur = best;
+      }
+      plan.push(cur); void i;
+    });
+    const switches = [];
+    plan.forEach((p, i) => { if (i === 0 || p !== plan[i - 1]) switches.push({ at: hours[i].label, i, row: p }); });
+    return { hours, per, allDay: allDay ? allDay.id : null, plan, switches, carry };
   }
 
-  function prep(model, spec) {
-    const lists = {};
-    model.columns.forEach(c => { const l = spec.vary[c.id]; if (l && l.length) lists[c.id] = l; });
-    const keys = Object.keys(lists);
-    const total = keys.reduce((a, k) => a * lists[k].length, keys.length ? 1 : 0);
-    const runs = runSet(model, spec.over);
-    const exhaustive = spec.method !== 'search' && total <= LIMITS.combos && (total + model.rows.length) * runs.length <= LIMITS.work;
-    return { lists, keys, total, runs, exhaustive, maxEval: Math.max(100, Math.floor(LIMITS.search / runs.length)) };
+  function product(spec) {
+    const keys = Object.keys(spec).filter(k => spec[k] && spec[k].length);
+    const total = keys.reduce((a, k) => a * spec[k].length, 1);
+    return { keys, total };
   }
 
-  function generate(model, spec, onProgress) {
-    const t0 = now(), X = prep(model, spec), { lists, keys, total, runs } = X;
-    if (!keys.length) return { error: 'Pick at least one column to vary.' };
-    const K = compile(model), how = spec.how === 'worst' ? 'worst' : 'avg', keepN = Math.max(1, Math.min(12, spec.keep || 5));
-    const base = model.rows.find(r => r.id === spec.base) || model.rows[0] || { v: {} };
-    const sig = v => model.columns.map(c => valText(v[c.id] ?? '')).join('\u0001');
+  function nameOf(model, v, keys, base) {
+    const parts = keys.filter(k => v[k] !== base.v[k]).map(k => { const c = model.columns.find(x => x.id === k); const x = v[k]; return `${c.label} ${typeof x === 'boolean' ? (x ? 'yes' : 'no') : typeof x === 'number' ? U.withUnit(x, c.unit) : x}`; });
+    return parts.length ? parts.join(', ') : base.label + ' (same)';
+  }
+
+  function find(model, spec, opt) {
+    opt = opt || {};
+    const t0 = now();
+    const prep = E.prepare(model);
+    const base = model.rows.find(r => r.id === opt.from) || model.rows[0];
+    const { keys, total } = product(spec);
+    if (!keys.length || !base) return { error: 'Pick at least one column to vary.' };
+    const ctx = opt.judge === 'day' ? null : contexts(model, opt.judge);
+    const nCtx = opt.judge === 'day' ? model.day.values.length : ctx.length;
+    const sig = v => keys.map(k => String(v[k])).join('|');
     const existing = new Map(model.rows.map(r => [sig(r.v), r.id]));
-    const recs = new Map(); let gi = 0;
-    const record = (row, t, mine) => {
-      const x = { id: row.id, label: row.label, v: row.v, sig: row.sig, mine, avg: t.avg, worst: t.worst, pass: t.pass, left: t.left,
-        worstRun: (runs.find(r => r.id === t.worstRun) || {}).label || '' };
-      x.score = x[how];
-      x.fit = x.score + 1e-3 * (t.pass / runs.length) + 1e-5 * t.mS - 1e-6 * t.left;
-      return x;
-    };
-    const rowOf = pick => { const v = Object.assign({}, base.v, pick); return { id: '__g' + gi++, label: label(model, pick), v, sig: sig(v), pick }; };
-    const finish = (extra) => {
-      const all = [...recs.values()], mine = all.filter(r => r.mine).sort((a, b) => b.fit - a.fit)[0] || null;
-      const good = all.filter(r => !r.mine && r.score > 0).sort((a, b) => b.fit - a.fit);
-      return Object.assign({ total, runs: runs.length, runLabel: runs.length > 1 ? (spec.over === 'day' ? 'hours' : 'scenarios') : 'run', how,
-        carry: !!runs.carry, passing: good.length, top: good.slice(0, keepN), mine, ms: Math.round(now() - t0) }, extra);
-    };
-
-    if (X.exhaustive) {
-      const gen = [];
-      for (const pick of combos(lists, keys)) { const r = rowOf(pick); if (!existing.has(r.sig)) { existing.set(r.sig, r.id); gen.push(r); } }
-      const J = judge(Object.assign({}, model, { rows: model.rows.concat(gen) }), runs, { K });
-      model.rows.forEach(r => recs.set(r.id, record(Object.assign({ sig: sig(r.v) }, r), J.tot[r.id], true)));
-      gen.forEach(r => recs.set(r.id, record(r, J.tot[r.id], false)));
-      return finish({ method: 'all', tried: gen.length });
-    }
-
-    const R = E.rng(spec.seed || 13);
-    const rand = () => { const o = {}; keys.forEach(k => { o[k] = lists[k][Math.floor(R() * lists[k].length)]; }); return o; };
-    const refRows = model.rows.concat(Array.from({ length: 160 }, () => rowOf(rand())));
-    const refModel = Object.assign({}, model, { rows: refRows });
-    const ranges = runs.map(run => compute(refModel, { P: run.values, K }).ranges);
-    const bySig = new Map();
-    let evals = 0, starts = 0, lastPing = 0;
-    const out = () => evals >= X.maxEval || now() - t0 > LIMITS.ms;
-    const evalRows = (rows, mine) => {
-      const fresh = rows.filter(r => !bySig.has(r.sig));
-      if (!fresh.length) return;
-      const J = judge(Object.assign({}, model, { rows: fresh }), runs, { K, ranges });
-      fresh.forEach(r => { const x = record(r, J.tot[r.id], mine || existing.has(r.sig)); x.pick = r.pick; bySig.set(r.sig, x); recs.set(r.id, x); });
-      evals += fresh.length;
-      if (onProgress && now() - lastPing > 120) { lastPing = now(); const b = best(); onProgress({ evals, max: X.maxEval, best: b ? b.score : 0, label: b ? b.label : '' }); }
-    };
-    const best = () => { let b = null; bySig.forEach(x => { if (!x.mine && (!b || x.fit > b.fit)) b = x; }); return b; };
-    const pickOf = v => { const o = {}; keys.forEach(k => { const l = lists[k], hit = l.find(x => String(x) === String(v[k])); o[k] = hit !== undefined ? hit : l[0]; }); return o; };
-    evalRows(model.rows.map(r => Object.assign({ sig: sig(r.v), pick: pickOf(r.v) }, r)), true);
-    const climb = pick => {
-      let cur = bySig.get(sig(Object.assign({}, base.v, pick)));
-      if (!cur) { evalRows([rowOf(pick)]); cur = bySig.get(sig(Object.assign({}, base.v, pick))); }
-      starts++;
-      while (!out()) {
-        const nb = [];
-        keys.forEach(k => lists[k].forEach(val => { if (String(val) !== String(cur.pick[k])) nb.push(rowOf(Object.assign({}, cur.pick, { [k]: val }))); }));
-        evalRows(nb);
-        let next = cur;
-        nb.forEach(r => { const x = bySig.get(r.sig); if (x && x.fit > next.fit + 1e-9) next = x; });
-        if (next === cur) break;
-        cur = next;
+    const fixedR = fixedRanges(model, prep, ctx, keys, spec, base);
+    const scoreRows = cands => {
+      const rows = cands.map((v, i) => ({ id: '__c' + i, label: '', v }));
+      let agg;
+      if (opt.judge === 'day') {
+        const dr = dayRun(model, prep, rows, fixedR);
+        agg = dr.per.map(p => ({ avg: p.avg, worst: p.worst }));
+      } else {
+        const per = rows.map(() => []);
+        ctx.forEach(c => { const r = E.compute(model, { prep, K: c.K, rows, R: fixedR }); r.rows.forEach((x, i) => per[i].push(x.pass ? x.score : 0)); });
+        agg = per.map(s => ({ avg: s.reduce((a, b) => a + b, 0) / s.length, worst: Math.min(...s) }));
       }
+      return agg.map(a => (opt.agg === 'worst' ? a.worst + a.avg / 1000 : a.avg + a.worst / 1000));
     };
-    const seeds = model.rows.map(r => pickOf(r.v));
-    let turn = 0;
-    while (!out()) {
-      const b = best();
-      let start;
-      if (turn < seeds.length) start = seeds[turn];
-      else if (b && turn % 2) { start = Object.assign({}, b.pick); for (let j = 0; j < 2; j++) { const k = keys[Math.floor(R() * keys.length)]; start[k] = lists[k][Math.floor(R() * lists[k].length)]; } }
-      else start = rand();
-      turn++;
-      climb(start);
-      if (turn > seeds.length + 400) break;
-    }
-    const tried = [...bySig.values()].filter(x => !x.mine).length;
-    return finish({ method: 'search', tried, evals, starts, budget: X.maxEval, timedOut: now() - t0 > LIMITS.ms });
-  }
-
-  function grid(model, axes) {
-    const ax = axes.filter(a => a && a.values && a.values.length && model.params.some(p => p.id === a.knob));
-    if (!ax.length) return [];
-    let out = [{ label: [], values: {} }];
-    ax.forEach(a => {
-      const p = model.params.find(x => x.id === a.knob), next = [];
-      out.forEach(o => a.values.forEach(v => next.push({ label: o.label.concat(`${p.label} ${fmtN(v)}${p.unit ? ' ' + p.unit : ''}`), values: Object.assign({}, o.values, { [a.knob]: v }) })));
-      out = next;
-    });
-    return out.map(o => ({ label: o.label.join(' · '), values: o.values }));
-  }
-
-  function shape(name, n, lo, hi, step) {
-    const f = (SHAPES[name] || SHAPES.flat).f, st = step > 0 ? step : 1;
-    return Array.from({ length: n }, (_, i) => { const v = lo + f((i + 0.5) / n) * (hi - lo); return +(Math.round(v / st) * st).toFixed(6); });
-  }
-
-  function day(model) {
-    const runs = dayRuns(model); if (!runs.length) return null;
-    const K = compile(model), carry = runs.carry, sticky = Math.max(0, +(model.day.sticky ?? 3));
-    const J = judge(model, runs, { K });
-    let prev = null, backlog = carry ? +(model.params.find(p => p.id === carry.knob).value) || 0 : 0;
-    const hours = runs.map(run => {
-      const P = Object.assign({}, run.values); if (carry) P[carry.knob] = backlog;
-      const res = compute(model, { P, K }), best = res.ranked[0] || null;
-      let w = best;
-      if (prev && best && res.byId[prev].pass && res.byId[best].score - res.byId[prev].score <= sticky) w = prev;
-      prev = w;
-      const start = backlog;
-      if (carry) {
-        const src = w ? res.byId[w] : res.rows.slice().sort((a, b) => leftOf(a, carry) - leftOf(b, carry))[0];
-        backlog = src ? leftOf(src, carry) : 0;
+    const seen = new Map();
+    let runs = 0;
+    const evalBatch = list => {
+      const fresh = list.filter(v => !seen.has(sig(v)));
+      const uniq = [...new Map(fresh.map(v => [sig(v), v])).values()];
+      if (uniq.length) { const s = scoreRows(uniq); runs += uniq.length * nCtx; uniq.forEach((v, i) => seen.set(sig(v), { v, s: s[i] })); }
+    };
+    const mk = pick => Object.assign({}, base.v, pick);
+    let method = 'all';
+    if (total <= LIMIT.full && total * nCtx <= LIMIT.runs) {
+      const all = [];
+      const rec = (i, acc) => { if (i === keys.length) { all.push(mk(acc)); return; } spec[keys[i]].forEach(x => rec(i + 1, Object.assign({}, acc, { [keys[i]]: x }))); };
+      rec(0, {});
+      for (let i = 0; i < all.length; i += 256) evalBatch(all.slice(i, i + 256));
+    } else {
+      method = 'search';
+      const rnd = U.rng(7);
+      const starts = model.rows.map(r => mk(Object.fromEntries(keys.map(k => [k, spec[k].includes(r.v[k]) ? r.v[k] : spec[k][0]]))));
+      for (let i = 0; i < 12; i++) starts.push(mk(Object.fromEntries(keys.map(k => [k, spec[k][Math.floor(rnd() * spec[k].length)]]))));
+      evalBatch(starts);
+      let climbs = 0;
+      const climb = v => {
+        let cur = v, cs = seen.get(sig(v)).s;
+        for (let step = 0; step < 40; step++) {
+          const nb = [];
+          keys.forEach(k => spec[k].forEach(x => { if (x !== cur[k]) nb.push(Object.assign({}, cur, { [k]: x })); }));
+          evalBatch(nb);
+          let best = null, bs = cs;
+          nb.forEach(n => { const s = seen.get(sig(n)).s; if (s > bs + 1e-9) { bs = s; best = n; } });
+          if (!best || runs > LIMIT.search || now() - t0 > LIMIT.ms) break;
+          cur = best; cs = bs;
+        }
+        climbs++;
+      };
+      starts.forEach(s => { if (runs < LIMIT.search && now() - t0 < LIMIT.ms) climb(s); });
+      while (runs < LIMIT.search && now() - t0 < LIMIT.ms) {
+        const top = [...seen.values()].sort((a, b) => b.s - a.s)[0].v;
+        const kick = Object.assign({}, top);
+        keys.forEach(k => { if (rnd() < 0.35) kick[k] = spec[k][Math.floor(rnd() * spec[k].length)]; });
+        evalBatch([kick]); climb(kick);
+        if (climbs > 400) break;
       }
-      return { id: run.id, label: run.label, end: run.end, values: P, v: run.values[model.day.knob], winner: w, best, score: w ? res.byId[w].score : 0, left: res.ranked.length, res, start, after: backlog };
-    });
-    const segs = [];
-    hours.forEach(h => { const s = segs[segs.length - 1]; if (s && s.winner === h.winner) { s.to = h; s.n++; s.sum += h.score; } else segs.push({ winner: h.winner, from: h, to: h, n: 1, sum: h.score }); });
-    const rank = k => model.rows.map(r => Object.assign({ id: r.id, label: r.label }, J.tot[r.id])).sort((a, b) => b[k] - a[k] || b.avg - a.avg)[0] || null;
-    const steady = rank('worst'), average = rank('avg');
-    const worstLabel = t => t && (runs.find(x => x.id === t.worstRun) || {}).label;
-    return { hours, segs, carry: !!carry, closing: carry ? backlog : 0, switches: segs.filter(s => s.winner).length - 1, gaps: hours.filter(h => !h.winner),
-      steady: steady && steady.worst > 0 ? Object.assign(steady, { worstLabel: worstLabel(steady) }) : null,
-      average: average ? Object.assign(average, { worstLabel: worstLabel(average) }) : null };
+    }
+    const ranked = [...seen.values()].sort((a, b) => b.s - a.s);
+    const curBest = (() => {
+      const vs = model.rows.map(r => r.v);
+      const s = scoreRows(vs);
+      let bi = 0; s.forEach((x, i) => { if (x > s[bi]) bi = i; });
+      return { id: model.rows[bi].id, label: model.rows[bi].label, s: s[bi] };
+    })();
+    const top = ranked.filter(x => x.s > 0).slice(0, 8).map(x => ({ v: x.v, s: x.s, name: nameOf(model, x.v, keys, base), existing: existing.get(sig(x.v)) || null }));
+    return { method, total, checked: seen.size, runs, ms: Math.round(now() - t0), top, current: curBest, keys, contexts: nCtx, agg: opt.agg || 'avg', judge: opt.judge || 'now' };
   }
 
-  M.plan = { LIMITS, SHAPES, hh, choicesFor, parseList, valText, label, carryOf, dayRuns, runSet, judge, prep, generate, grid, shape, day };
+  function fixedRanges(model, prep, ctx, keys, spec, base) {
+    const rnd = U.rng(3), sample = model.rows.map(r => r.v);
+    for (let i = 0; i < 60; i++) sample.push(Object.assign({}, base.v, Object.fromEntries(keys.map(k => [k, spec[k][Math.floor(rnd() * spec[k].length)]]))));
+    keys.forEach(k => spec[k].forEach(x => sample.push(Object.assign({}, base.v, { [k]: x }))));
+    const rows = sample.map((v, i) => ({ id: '__s' + i, label: '', v }));
+    const R = {};
+    (ctx || [{ K: Object.assign({}, model.base) }]).slice(0, 6).forEach(c => {
+      const r = E.compute(model, { prep, K: c.K, rows });
+      Object.entries(r.ranges).forEach(([id, x]) => { if (x.text || x.empty) return; if (!R[id]) R[id] = { lo: x.lo, hi: x.hi, auto: x.auto }; else { R[id].lo = Math.min(R[id].lo, x.lo); R[id].hi = Math.max(R[id].hi, x.hi); } });
+    });
+    return R;
+  }
+
+  function spaceFor(model, colId) {
+    const c = model.columns.find(x => x.id === colId); if (!c || c.formula) return [];
+    if (c.type === 'yesno') return [false, true];
+    const vals = model.rows.map(r => r.v[colId]).filter(x => x != null);
+    if (c.type === 'text') return [...new Set([...(c.choices || []), ...vals.map(String)])];
+    const nums = [...new Set(vals.filter(x => typeof x === 'number'))].sort((a, b) => a - b);
+    if (nums.length && nums.every(Number.isInteger) && nums[nums.length - 1] - nums[0] <= 12) { const out = []; for (let i = nums[0]; i <= nums[nums.length - 1]; i++) out.push(i); return out; }
+    return nums;
+  }
+
+  function agreement(model, prep, pairs, W) {
+    const r = E.compute(model, { prep, W });
+    return pairs.map(p => {
+      const a = r.byId[p.a], b = r.byId[p.b];
+      if (!a || !b) return { p, ok: null };
+      if (!a.pass || !b.pass) return { p, ok: null, out: !a.pass ? p.a : p.b };
+      return { p, ok: a.score > b.score + 1e-9, gap: a.score - b.score };
+    });
+  }
+
+  function fit(model, pairs) {
+    const prep = E.prepare(model);
+    const crits = model.criteria.filter(c => c.on && prep.colById[c.col]);
+    const orig = Object.fromEntries(crits.map(c => [c.id, c.weight]));
+    const loss = W => {
+      const ag = agreement(model, prep, pairs, W);
+      const bad = ag.reduce((a, x) => a + (x.ok === false ? 1 : 0), 0);
+      const hinge = ag.reduce((a, x) => a + (x.gap != null ? Math.max(0, 2 - x.gap) : 0), 0);
+      const drift = crits.reduce((a, c) => a + Math.abs(W[c.id] - orig[c.id]), 0);
+      return bad * 1000 + hinge + drift * 0.15;
+    };
+    let W = Object.assign({}, orig), L = loss(W);
+    if (Object.values(W).every(w => !w)) crits.forEach(c => { W[c.id] = 5; });
+    for (let pass = 0; pass < 6; pass++) {
+      let moved = false;
+      crits.forEach(c => {
+        for (let w = 0; w <= 10; w++) {
+          if (w === W[c.id]) continue;
+          const T = Object.assign({}, W, { [c.id]: w });
+          if (!Object.values(T).some(x => x > 0)) continue;
+          const l = loss(T);
+          if (l < L - 1e-9) { L = l; W = T; moved = true; }
+        }
+      });
+      if (!moved) break;
+    }
+    const before = agreement(model, prep, pairs, orig), after = agreement(model, prep, pairs, W);
+    const n = a => a.filter(x => x.ok === true).length, m = a => a.filter(x => x.ok != null).length;
+    const changes = crits.filter(c => W[c.id] !== orig[c.id]).map(c => ({ id: c.id, from: orig[c.id], to: W[c.id] }));
+    return { W, changes, before: { ok: n(before), of: m(before) }, after: { ok: n(after), of: m(after) }, detail: after, skipped: after.filter(x => x.ok == null) };
+  }
+
+  M.plan = { matrix, dayRun, dayContexts, shape, SHAPES, find, spaceFor, fit, agreement, product, LIMIT, hh };
 })(window.M);

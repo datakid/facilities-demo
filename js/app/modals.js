@@ -8,8 +8,14 @@ window.M = window.M || {};
     const k = S.ui.modal;
     if (!k) { root.innerHTML = ''; document.body.classList.remove('has-modal'); return; }
     document.body.classList.add('has-modal');
-    const body = ({ start, export: exp, paste })[k]();
+    const fn = (R.extraModals && R.extraModals[k]) || ({ start, export: exp, paste })[k];
+    const body = fn();
+    const prev = root.querySelector('.modal'), st = prev && prev.classList.contains(k) ? prev.scrollTop : 0;
+    const a = document.activeElement, fk = a && root.contains(a) ? a.getAttribute('data-fk') : null;
     root.innerHTML = `<div class="scrim" data-act="close-modal"></div><div class="modal ${k}" role="dialog" aria-modal="true" aria-labelledby="modal-title">${body}</div>`;
+    root.querySelector('.modal').scrollTop = st;
+    if (fk) { const el = root.querySelector(`[data-fk="${CSS.escape(fk)}"]`); if (el) { el.focus(); return; } }
+    if (st) return;
     const f = root.querySelector('[autofocus]') || root.querySelector('.modal button, .modal textarea');
     if (f) f.focus();
   };

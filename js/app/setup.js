@@ -134,7 +134,7 @@ window.M = window.M || {};
 
   function rules() {
     const m = S.model;
-    let h = help('An option that fails any must-have is ruled out and not scored. Use them for deal-breakers, not preferences.');
+    let h = help('Deal-breakers rule an option out. Softer wishes can take points off instead, so a great option that misses one still has a chance.');
     h += `<div class="rule-list">${m.rules.map(ruleCard).join('') || '<p class="empty">No must-haves yet. Everything gets ranked.</p>'}</div>`;
     if (m.rules.length < H.LIMIT.rules) h += `<div class="adder"><button class="btn" data-act="rule-add">${R.I.plus}Add a must-have</button></div>`;
     if (m.knobs.length) h += `<h3 class="sub">Settings used by must-haves</h3><div class="knob-list">${m.knobs.map(knobCard).join('')}</div>`;
@@ -168,7 +168,8 @@ window.M = window.M || {};
         <button class="link sm" data-act="rule-mode" data-id="${esc(r.id)}">${parts ? 'Write as formula' : (MD.ruleParts(S.model, r.formula) ? 'Simple' : '')}</button>
         <button class="icon-btn sm" data-act="rule-del" data-id="${esc(r.id)}" aria-label="Remove must-have" title="Remove">${R.I.x}</button></header>
       ${body}
-      <p class="rule-out" data-live="rout:${esc(r.id)}">${ruleOut(r.id)}</p></article>`;
+      <div class="rule-kind">${R.seg('rule-kind', r.soft ? 'soft' : 'hard', [['hard', 'Rule it out'], ['soft', 'Take off points']], `data-id="${esc(r.id)}"`)}${r.soft ? `<label class="field-inline">minus <input class="num-in" type="text" inputmode="decimal" data-in="rule-pen" data-id="${esc(r.id)}" data-fk="rp-${esc(r.id)}" value="${esc(r.penalty)}" aria-label="Points taken off"> points</label>` : ''}</div>
+      <p class="rule-out${r.soft ? ' soft' : ''}" data-live="rout:${esc(r.id)}">${ruleOut(r.id)}</p></article>`;
   }
   function ruleStatus(id) {
     const iss = S.res.issues.find(x => x.where === 'rule' && x.id === id);
@@ -181,6 +182,7 @@ window.M = window.M || {};
     if (!r.on) return '<span class="muted">Switched off</span>';
     const fails = S.res.rows.filter(x => x.rules.some(y => y.id === id && !y.pass));
     if (!fails.length) return `<span class="muted">Every option passes</span>`;
+    if (r.soft) return `Takes ${U.fmtNum(r.penalty)} points off <strong>${esc(U.list(fails.slice(0, 4).map(x => x.label)))}</strong>${fails.length > 4 ? ` and ${fails.length - 4} more` : ''}`;
     return `Rules out <strong>${esc(U.list(fails.slice(0, 4).map(x => x.label)))}</strong>${fails.length > 4 ? ` and ${fails.length - 4} more` : ''}`;
   }
   R.LIVE.rfx = ruleStatus;

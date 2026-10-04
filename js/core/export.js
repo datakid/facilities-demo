@@ -26,7 +26,7 @@ window.M = window.M || {};
     const calc = model.columns.filter(c => c.formula);
     if (calc.length) { L.push('Worked-out columns'); calc.forEach(c => L.push(`  ${c.label} = ${MD.pretty(model, c.formula) || c.formula}`)); L.push(''); }
     const rules = model.rules.filter(r => r.on);
-    if (rules.length) { L.push('Must-haves (an option that fails any is ruled out)'); rules.forEach(r => L.push(`  ${r.label ? r.label + ': ' : ''}${MD.pretty(model, r.formula) || r.formula}`)); L.push(''); }
+    if (rules.length) { L.push('Must-haves'); rules.forEach(r => L.push(`  ${r.label ? r.label + ': ' : ''}${MD.pretty(model, r.formula) || r.formula}  (${r.soft ? `−${r.penalty} points if missed` : 'ruled out if missed'})`)); L.push(''); }
     L.push(`Score = ${model.method === 'balanced' ? 'balanced blend' : 'sum'} of points × importance share, out of 100`);
     model.criteria.filter(c => c.on && res.share[c.id] != null).forEach(c => {
       const R = res.ranges[c.id], col = model.columns.find(x => x.id === c.col);
@@ -61,7 +61,8 @@ window.M = window.M || {};
     L.push('export function score(r) {');
     L.push('  r = Object.assign({}, r);');
     res.prep.order.forEach(id => L.push(`  r.${id} = ${F.toJS(res.prep.comp[id].ast, ref)};`));
-    res.prep.rules.forEach(({ r, ast }) => L.push(`  if (!(${F.toJS(ast, ref)})) return { pass: false, score: 0, fails: ${JSON.stringify(r.label || r.formula)} };`));
+    L.push('  let penalty = 0;');
+    res.prep.rules.forEach(({ r, ast }) => L.push(r.soft ? `  if (!(${F.toJS(ast, ref)})) penalty += ${+r.penalty || 0};` : `  if (!(${F.toJS(ast, ref)})) return { pass: false, score: 0, fails: ${JSON.stringify(r.label || r.formula)} };`));
     L.push('  const s = {};');
     model.criteria.filter(c => c.on && res.share[c.id] != null).forEach(c => {
       const R = res.ranges[c.id], col = model.columns.find(x => x.id === c.col);
@@ -82,7 +83,7 @@ window.M = window.M || {};
     const ws = model.criteria.filter(c => c.on && res.share[c.id] != null).map(c => [c.id, +res.share[c.id].toPrecision(15)]);
     if (model.method === 'balanced') L.push(`  const S = (Math.exp(${ws.map(([id, w]) => `${w} * Math.log(0.1 + 0.9 * s.${id})`).join(' + ') || '0'}) - 0.1) / 0.9;`);
     else L.push(`  const S = ${ws.map(([id, w]) => `${w} * s.${id}`).join(' + ') || '0'};`);
-    L.push('  return { pass: true, score: F.clamp(S, 0, 1) * 100, s };');
+    L.push('  return { pass: true, score: Math.max(0, F.clamp(S, 0, 1) * 100 - penalty), s };');
     L.push('}');
     return L.join('\n');
   }

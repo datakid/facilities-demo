@@ -30,9 +30,9 @@ window.M = window.M || {};
     return { colById, comp, order, rules, issues };
   }
 
-  function valuesFor(model, prep, row, K, V) {
-    const s = {}, errs = {};
-    model.knobs.forEach(k => { s[k.id] = K && K[k.id] != null ? +K[k.id] : +k.value; });
+  function valuesFor(model, prep, row, K, V, RK) {
+    const s = {}, errs = {}, rk = RK && RK[row.id];
+    model.knobs.forEach(k => { s[k.id] = rk && rk[k.id] != null ? +rk[k.id] : K && K[k.id] != null ? +K[k.id] : +k.value; });
     const ov = V && V[row.id];
     model.columns.forEach(c => { if (!(c.formula && c.formula.trim())) s[c.id] = ov && c.id in ov ? ov[c.id] : (row.v[c.id] ?? null); else s[c.id] = null; });
     const label = id => MD.labelOf(model, id);
@@ -71,16 +71,19 @@ window.M = window.M || {};
   function compute(model, opt) {
     opt = opt || {};
     const prep = opt.prep || prepare(model);
-    const rows = model.rows.map(r => { const { s, errs } = valuesFor(model, prep, r, opt.K, opt.V); return { id: r.id, label: r.label, vals: s, errs }; });
+    const src = opt.rows || model.rows;
+    const rows = src.map(r => { const { s, errs } = valuesFor(model, prep, r, opt.K, opt.V, opt.RK); return { id: r.id, label: r.label, vals: s, errs }; });
     const label = id => MD.labelOf(model, id);
     rows.forEach(row => {
       row.rules = prep.rules.map(({ r, ast }) => {
-        try { return { id: r.id, pass: !!F.evaluate(ast, row.vals, label) }; }
-        catch (e) { return { id: r.id, pass: false, error: e.message }; }
+        try { return { id: r.id, pass: !!F.evaluate(ast, row.vals, label), soft: !!r.soft }; }
+        catch (e) { return { id: r.id, pass: false, error: e.message, soft: !!r.soft }; }
       });
-      const f = row.rules.find(x => !x.pass);
+      const f = row.rules.find(x => !x.pass && !x.soft);
       row.pass = !f;
       row.failRule = f ? f.id : null;
+      row.penalties = row.rules.filter(x => !x.pass && x.soft).map(x => { const r = prep.rules.find(y => y.r.id === x.id).r; return { id: x.id, pts: Math.max(0, +r.penalty || 0) }; });
+      row.penalty = row.penalties.reduce((a, p) => a + p.pts, 0);
     });
     const crits = model.criteria.filter(c => c.on && prep.colById[c.col]);
     const wOf = c => opt.W && opt.W[c.id] != null ? opt.W[c.id] : c.weight;
@@ -95,7 +98,7 @@ window.M = window.M || {};
         const cats = [...new Set([...(col.choices || []), ...raws.filter(x => x != null).map(x => String(x))])];
         info[c.id] = { cats, flat: cats.length < 2 || cats.every(k => (c.points[k] ?? 5) === (c.points[cats[0]] ?? 5)) };
       } else {
-        ranges[c.id] = rangeOf(c, raws);
+        ranges[c.id] = opt.R && opt.R[c.id] ? opt.R[c.id] : rangeOf(c, raws);
         info[c.id] = { flat: ranges[c.id].lo === ranges[c.id].hi && c.curve !== 'target' };
       }
       rows.forEach((row, i) => {
@@ -126,7 +129,8 @@ window.M = window.M || {};
         crits.forEach(c => { const x = row.c[c.id]; x.contrib = share[c.id] * x.s; S += x.contrib; });
       }
       row.S = S;
-      row.score = row.pass ? S * 100 : 0;
+      row.base = S * 100;
+      row.score = row.pass ? Math.max(0, S * 100 - row.penalty) : 0;
       row.missing = crits.filter(c => row.c[c.id].missing).map(c => c.id);
     });
     const byId = {}; rows.forEach(r => { byId[r.id] = r; });
@@ -141,7 +145,7 @@ window.M = window.M || {};
       if (r2) crits.forEach(c => { const d = (w.c[c.id].contrib - r2.c[c.id].contrib) * 100; if (d > best) { best = d; driver = c.id; } if (d < worst) { worst = d; weak = c.id; } });
       lead = { winner: w.id, runnerUp: r2 ? r2.id : null, margin: r2 ? w.score - r2.score : null, driver, driverPts: best, weak: worst < 0 ? weak : null, weakPts: worst };
     }
-    return { rows, byId, ranked, out, share, ranges, info, crits: crits.map(c => c.id), totalW, lead, issues: prep.issues, prep };
+    return { rows, byId, ranked, out, share, ranges, info, crits: crits.map(c => c.id), totalW, lead, issues: prep.issues, prep, K: opt.K || null };
   }
 
   function withModel(model, fn) { const m = U.clone(model); fn(m); return m; }

@@ -31,6 +31,15 @@ Score = Σ importance share × points (0–10), out of 100. A Balanced method pe
 - **Design**: milky lavender-white, one brand hue (300) at low chroma, soft criterion tints, Fraunces italic for titles, mono numbers. A new light favicon (`favicon.svg`).
 - **Responsive**: Build/Ranking switch on phones. The ranking panel uses container queries, so rows reflow (name on top, bar below) whenever the panel is narrow. This fixes the clipped "Borea…" names. Situation chips wrap on phones.
 
+## Done in v4.1: Go further
+All four live in a **Go further** panel under the ranking, use the same engine (overrides, no copies of the model) and explain themselves in plain words.
+- **Find the best option** (`M.plan.find`): start from an option, tick the columns to vary, type the values to try. Every combination is scored with the full ranking (formulas, must-haves, importances). You can judge on the current settings, on every situation or on the whole day, and rank by average or worst case. Up to 4,096 combinations (60,000 runs) are all tried; bigger spaces use a step-by-step search from many starts. The result says which method it used and how many plans it checked, compares the best with your best listed option, flags combinations already in your list, and **Add** puts a found plan into Options. Pharmacy: all 625 role splits in well under a second.
+- **Compare situations** (`M.plan.matrix`): every option × Now, Baseline and each situation, with the winner in bold, "out" where a must-have fails, worst, average and wins, plus the **safest all-round** (best worst case) and the best average when they differ.
+- **Day plans** (`model.day`, `M.plan.dayRun`): one setting changes hour by hour (type the values or fill them from a shape). A second setting can follow it from the quietest hour to the busiest, and a worked-out column can **carry over** into a setting for the next hour, separately for each option (pharmacy: people still waiting → next hour's backlog). The strip under Situations shows the best option per hour, striped where a queue is carried. The plan only switches for a gain of at least N points, and one plan is named for the whole day. Click an hour to load its settings; **Save hours as situations** turns them into chips.
+- **Teach it my taste** (`M.plan.fit`): add "I'd pick A over B" pairs. It shows how many the ranking agrees with, then suggests importances (0–10 steps) that agree with as many pairs as possible while changing as little as possible. If no importance change fixes a pair, it says so and suggests what else might be driving the choice. Pairs are saved with the ranking.
+- **Soft must-haves**: each must-have can either **rule it out** or **take off points**. A soft miss shows as a −N tag in the ranking and as a line in the Why panel, is included in the exported JS, and is described in the summary.
+- Examples updated: pharmacy and coffee shop have day plans (pharmacy with queue carry-over), the flat has a soft balcony wish, and the RICE example has two saved pairs. Their guides cover the new tools.
+
 ## Examples (11, all with guides)
 | Everyday | Teaches |
 |---|---|
@@ -55,8 +64,8 @@ Score = Σ importance share × points (0–10), out of 100. A Balanced method pe
 | `index.html` | The app. A first visit shows the example picker |
 | `index.html#m=<base64url JSON>` | Opens a shared ranking |
 | `index.html#ex=<id>` | Opens an example (`laptop, flat, job, rice, supplier, shift, pharmacy, feed, venue, cafe, care`); add `&view=ranking` to open on the ranking, or `&tour` to start its guided tour |
-| `tests.html` | 166 engine tests: parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
-| `ui-check.html` | 46 checks driving the real app (results go to the console), including drag speed on the pharmacy |
+| `tests.html` | 189 engine tests (v4.1 adds soft rules, matrix, day plan + carry-over, finder full and search, fitting): parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
+| `ui-check.html` | 55 checks driving the real app (results go to the console), including drag speed on the pharmacy |
 | `preview-ranking.html` | Opens an example without the start screen, for layout checks (set `data-ex` / `data-view` on `<html>`) |
 
 ## Files
@@ -69,6 +78,8 @@ js/core/model.js     model shape, curves, name resolution, simple-rule ↔ formu
 js/core/engine.js    compute (formulas → must-haves → points → score), overrides, sweeps, situations, what-it-takes, trace
 js/core/insights.js  verdict and trust checks
 js/core/export.js    summary, CSV, JavaScript, JSON
+js/core/plan.js      finder (full + step-by-step), situation matrix, day plan with carry-over, importance fitting
+js/app/tools.js      Go further panel, day strip, finder / matrix / day / pairs dialogs, soft must-have controls
 js/examples.js       everyday examples + guides
 js/examples-ops.js   planning examples (ported from v3) + guides
 js/app/*.js          store, render, setup (tabs), results, modals, guide, events
@@ -77,16 +88,17 @@ js/tests/*.js        engine tests, UI checks, helpers
 
 ## Data model
 One JSON model, saved in `localStorage['meridian.studio.v4']`:
-`name, question, about, method (add|balanced), columns[{id,label,type number|yesno|text,unit,formula,group,pct,choices}], rows[{id,label,v}], knobs[{id,label,value,min,max,step,unit,group,note}], base{knobId:value}, scenarios[{id,label,values}], rules[{id,label,formula,on}], criteria[{id,col,on,weight 0–10,want more|less,curve,at,tol,points,range}], guide{level,teaches,steps[]}`.
+`name, question, about, method (add|balanced), columns[{id,label,type number|yesno|text,unit,formula,group,pct,choices}], rows[{id,label,v}], knobs[{id,label,value,min,max,step,unit,group,note}], base{knobId:value}, scenarios[{id,label,values}], rules[{id,label,formula,on,soft,penalty}], day{knob,start,values[],link{knob,lo,hi},carry{col,knob},sticky}, pairs[{a,b}], criteria[{id,col,on,weight 0–10,want more|less,curve,at,tol,points,range}], guide{level,teaches,steps[]}`.
 No server and no table API are used.
 
 ## Not done yet
-- Day plans and queue carry-over between hours (v3) are not in v4; situations cover the main use.
-- The plan finder (trying every role split automatically) is not in v4.
-- No fitting of importances from options you rank by hand, and no side-by-side comparison of two rankings.
+- The finder and fitting run on the main thread (the pharmacy whole-day search takes about a second); there is no Web Worker yet.
+- Within an hour the queue is steady state (M/M/c); only the carried-over value links hours.
+- Plans that change roles between hours, with a cost for switching, aren't searched.
+- No side-by-side comparison of two rankings.
 
 ## Suggested next steps
-1. "Find the best option": generate combinations of column values (the old plan finder), using the new engine's overrides.
-2. A matrix of every option × every situation, with "safest all-round" picked out.
-3. Learn importances from a few pairs the user compares ("I'd pick A over B").
-4. Soft must-haves: a penalty instead of ruling an option out.
+1. Move find and fit to a Web Worker with a progress bar.
+2. Search hour-by-hour plans with a switching cost.
+3. Side-by-side comparison of two rankings, or of one ranking before and after a change.
+4. Fit curves, not only importances, from the pairs.

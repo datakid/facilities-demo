@@ -8,9 +8,11 @@ window.M = window.M || {};
     R.keepFocus(el, () => {
       el.innerHTML = `<section class="verdict" id="verdict" data-g="results" aria-live="polite">${verdict()}</section>
         <section class="sits" id="situations" data-g="situations">${sits()}</section>
+        <section class="day" id="day" data-g="day">${R.dayHTML ? R.dayHTML() : ''}</section>
         <section class="ranking" aria-label="Ranking">${legend()}<ol class="rank-list" id="rank-list">${ranking()}</ol>${outList()}</section>
         <section class="why" id="why" data-g="why">${why()}</section>
-        <section class="checks" id="checks" data-g="checks"></section>`;
+        <section class="checks" id="checks" data-g="checks"></section>
+        <section class="tools" id="tools" data-g="tools">${R.toolsHTML ? R.toolsHTML() : ''}</section>`;
     });
     R.checks();
   };
@@ -55,6 +57,7 @@ window.M = window.M || {};
     const d = Object.entries(vals || {}).filter(([k, v]) => m.knobs.some(x => x.id === k) && Math.abs(v - m.base[k]) > 1e-9).map(([k, v]) => { const kn = m.knobs.find(x => x.id === k); return `${kn.label} ${U.withUnit(v, kn.unit)}`; });
     return d.length ? d.slice(0, 3).join(' · ') + (d.length > 3 ? ` · +${d.length - 3}` : '') : 'Same as baseline';
   }
+  R.day = () => { const el = document.getElementById('day'); if (el && R.dayHTML) el.innerHTML = R.dayHTML(); };
   R.situations = () => { const el = document.getElementById('situations'); if (el) R.keepFocus(el, () => { el.innerHTML = sits(); }); };
 
   function legend() {
@@ -71,7 +74,7 @@ window.M = window.M || {};
       const r = res.byId[id], p = prev && prev.byId[id];
       const mv = p && p.rank && r.rank ? p.rank - r.rank : 0;
       const segs = res.crits.map(cid => { const x = r.c[cid], k = H.cidx(cid); const w = x.contrib * 100; return w > 0.05 ? `<span style="width:${w.toFixed(2)}%;--c:var(--c${k})" title="${esc(R.critName(H.crit(cid)))}: ${w.toFixed(1)} pts"></span>` : ''; }).join('');
-      const miss = r.missing.length ? `<span class="tag warn" title="Blank values score zero">blank</span>` : '';
+      const miss = (r.missing.length ? `<span class="tag warn" title="Blank values score zero">blank</span>` : '') + (r.penalty ? `<span class="tag bad" title="Misses a soft must-have">−${U.fmtNum(r.penalty)}</span>` : '');
       return `<li class="rank-row${sel === id ? ' sel' : ''}" data-key="${esc(id)}"><button class="rank-btn" data-act="select" data-id="${esc(id)}" aria-pressed="${sel === id}">
         <span class="rank-n num">${r.rank}</span>
         <span class="rank-name">${esc(r.label)}${miss}</span>
@@ -95,7 +98,7 @@ window.M = window.M || {};
     const m = S.model;
     let h = `<div class="why-head"><h3>Why ${esc(r.label)} ${r.pass ? `is ${ordinal(r.rank)}` : 'is ruled out'}</h3>${r.pass ? `<span class="num why-s">${r.score.toFixed(1)}</span>` : ''}</div>`;
     if (!r.pass) {
-      const fails = r.rules.filter(x => !x.pass).map(x => { const g = H.rule(x.id); return `<li>${R.I.x}<span>${esc(g.label || 'Must-have')}: <span class="mono">${esc(MD.pretty(m, g.formula) || g.formula)}</span>${x.error ? ` · ${esc(x.error)}` : ''}</span></li>`; });
+      const fails = r.rules.filter(x => !x.pass && !x.soft).map(x => { const g = H.rule(x.id); return `<li>${R.I.x}<span>${esc(g.label || 'Must-have')}: <span class="mono">${esc(MD.pretty(m, g.formula) || g.formula)}</span>${x.error ? ` · ${esc(x.error)}` : ''}</span></li>`; });
       h += `<ul class="fail-list">${fails.join('')}</ul><p class="hint">Change its values on the Options tab or loosen the must-have to bring it back.</p>`;
       return h;
     }
@@ -108,7 +111,8 @@ window.M = window.M || {};
         <td><span class="mini"><span style="width:${(x.s * 100).toFixed(1)}%"></span></span><span class="num mini-v">${pts10.toFixed(1)}</span></td>
         <td class="r num muted">${Math.round(x.w * 100)}%</td><td class="r num"><b>${(x.contrib * 100).toFixed(1)}</b></td></tr>`;
     });
-    h += `</tbody><tfoot><tr><td colspan="4">${m.method === 'balanced' ? 'Balanced total' : 'Total'}</td><td class="r num"><b>${r.score.toFixed(1)}</b></td></tr></tfoot></table>`;
+    const pen = r.penalties.map(p => { const g = H.rule(p.id); return `<tr class="pen"><td colspan="4">Misses “${esc(g.label || MD.pretty(m, g.formula) || g.formula)}”</td><td class="r num">−${U.fmtNum(p.pts)}</td></tr>`; }).join('');
+    h += `</tbody><tfoot>${pen}<tr><td colspan="4">${m.method === 'balanced' ? 'Balanced total' : 'Total'}</td><td class="r num"><b>${r.score.toFixed(1)}</b></td></tr></tfoot></table>`;
     const calcs = E.trace(m, res, id);
     if (calcs.length) h += `<details class="calc-trace"><summary>Worked out for ${esc(r.label)}</summary><ul>${calcs.map(s => `<li><b>${esc(MD.labelOf(m, s.col))}</b> = <span class="mono">${esc(s.plug)}</span> = <b class="num">${s.err ? esc(s.err) : esc(H.val(s.col, s.value))}</b></li>`).join('')}</ul></details>`;
     const wit = E.whatItTakes(m, res, id);

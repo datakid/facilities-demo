@@ -156,6 +156,55 @@
   ok('cafe: bottleneck named', ['register', 'bar'].includes(r.byId.c1.vals.bottleneck));
   ok('all 11 examples present', M.examples.length === 11, M.examples.length);
 
+  const P = M.plan;
+  const fl = M.examples.get('flat'); r = E.compute(fl);
+  ok('soft must-have: no balcony loses 6 points, stays ranked', r.byId.r2.pass && near(r.byId.r2.score, Math.max(0, r.byId.r2.base - 6)), r.byId.r2.score + ' vs ' + r.byId.r2.base);
+  ok('soft must-have: balcony flat loses nothing', near(r.byId.r1.score, r.byId.r1.base));
+  const flHard = E.withModel(fl, m => { m.rules[1].soft = false; });
+  ok('switching to hard rules them out', E.compute(flHard).out.includes('r2'));
+
+  const lapM = P.matrix(lap);
+  ok('matrix: has Now + Baseline columns', lapM.cols.length === 2);
+  const phM = P.matrix(ph);
+  ok('matrix: pharmacy 8 columns × 9 rows', phM.cols.length === 8 && phM.rows.length === 9);
+  ok('matrix: safest all-round picked', !!phM.safest, phM.safest);
+  const safeRow = phM.rows.find(x => x.id === phM.safest);
+  ok('matrix: safest has the best worst case', phM.rows.every(x => x.worst <= safeRow.worst + 1e-9));
+
+  const dr = P.dayRun(ph);
+  ok('day: 14 hours scored', dr.hours.length === 14);
+  ok('day: carry-over adds backlog in later hours', dr.hours.some(h => Object.values(h.carried).some(v => v > 0.5)), JSON.stringify(dr.hours[11].carried));
+  ok('day: one plan for the whole day', !!dr.allDay);
+  ok('day: switching plan has a start', dr.switches.length >= 1 && dr.switches[0].row);
+  const noCarry = P.dayRun(E.withModel(ph, m => { m.day.carry = null; }));
+  const endA = dr.per.find(p => p.id === dr.allDay), endB = noCarry.per.find(p => p.id === dr.allDay);
+  ok('day: carry-over lowers or keeps the all-day average', endA.avg <= endB.avg + 1e-9, endA.avg + ' vs ' + endB.avg);
+  ok('day: shapes fill values in the knob range', P.shape(ph, 'evening', 12).every(v => v >= 4 && v <= 60));
+
+  const sp = M.examples.get('shift');
+  const f1 = P.find(sp, { tills: [1, 2, 3, 4, 5, 6], floor_staff: [0, 1, 2, 3] }, { from: 'r3' });
+  ok('find: tries all 24 combinations', f1.method === 'all' && f1.checked === 24, f1.method + ' ' + f1.checked);
+  ok('find: best is at least as good as current best', f1.top[0].s >= f1.current.s - 1e-6, f1.top[0].s + ' vs ' + f1.current.s);
+  ok('find: flags combinations already in the list', f1.top.some(t => t.existing));
+  const roles = ['window', 'typing', 'records', 'back', 'off'];
+  const sp2 = { role_maya: roles, role_omar: roles, role_lina: roles, role_sam: roles };
+  const f2 = P.find(ph, sp2, { judge: 'now' });
+  ok('find: pharmacy 625 role splits, all tried', f2.method === 'all' && f2.checked === 625, f2.method + ' ' + f2.checked + ' ' + f2.ms + 'ms');
+  ok('find: pharmacy finds a plan ≥ the best listed one', f2.top[0].s >= f2.current.s - 1e-6);
+  const f3 = P.find(ph, sp2, { judge: 'day' });
+  ok('find: whole-day search runs with carry-over', f3.top.length > 0 && f3.contexts === 14, f3.method + ' ' + f3.ms + 'ms');
+  const huge = M.model.normalize({ columns: Array.from({ length: 6 }, (_, i) => ({ id: 'x' + i, label: 'X' + i })), rows: [{ id: 'a', label: 'A', v: { x0: 0, x1: 0, x2: 0, x3: 0, x4: 0, x5: 0 } }], criteria: Array.from({ length: 6 }, (_, i) => ({ id: 'x' + i, col: 'x' + i, weight: 5, range: { auto: false, lo: 0, hi: 9 } })) });
+  const f4 = P.find(huge, Object.fromEntries(Array.from({ length: 6 }, (_, i) => ['x' + i, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]])), {});
+  ok('find: 1,000,000 combos uses step-by-step search and finds the top', f4.method === 'search' && f4.top[0].s >= 100 - 1e-6, f4.method + ' ' + f4.top[0].s);
+
+  const rc = M.examples.get('rice');
+  const fitR = P.fit(rc, rc.pairs);
+  ok('fit: agrees with at least as many pairs as before', fitR.after.ok >= fitR.before.ok, fitR.before.ok + ' → ' + fitR.after.ok);
+  const lapP = E.withModel(lap, m => { m.pairs = [{ a: 'r2', b: 'r6' }, { a: 'r2', b: 'r1' }]; });
+  const fitL = P.fit(lapP, lapP.pairs);
+  ok('fit: learns Borealis over Fjord and Aster', fitL.after.ok === 2, JSON.stringify(fitL.changes));
+  ok('fit: result really ranks Borealis first among them', (() => { const r2 = E.compute(lapP, { W: fitL.W }); return r2.byId.r2.score > r2.byId.r6.score && r2.byId.r2.score > r2.byId.r1.score; })());
+
   const parts = M.model.ruleParts(lap, 'Price <= Budget');
   ok('simple rule parse with setting', parts && parts.col === 'price' && parts.knob === 'budget');
   ok('simple rule rebuild', M.model.ruleFormula(lap, { col: 'ram', op: '>=', value: 32 }) === 'Memory >= 32');
