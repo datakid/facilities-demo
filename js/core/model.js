@@ -41,7 +41,7 @@ window.M = window.M || {};
     m.knobs = (m.knobs || []).map(k => ({ id: k.id, label: k.label || k.id, value: +k.value || 0, min: +(k.min ?? 0), max: +(k.max ?? 100), step: +(k.step || 1), unit: k.unit || '', note: k.note || '', group: k.group || '' }));
     m.scenarios = (m.scenarios || []).map((s, i) => ({ id: s.id || 's' + (i + 1), label: String(s.label || 'Situation ' + (i + 1)), values: Object.assign({}, s.values || {}) }));
     m.rules = (m.rules || []).map((r, i) => ({ id: r.id || 'g' + (i + 1), label: r.label || '', formula: String(r.formula || ''), on: r.on !== false, soft: !!r.soft, penalty: r.penalty == null ? 15 : U.clamp(+r.penalty || 0, 0, 100) }));
-    m.day = m.day && m.day.knob ? { knob: m.day.knob, start: +m.day.start || 8, values: (m.day.values || []).map(Number), link: m.day.link || null, carry: m.day.carry || null, sticky: m.day.sticky ?? 3 } : null;
+    m.day = m.day && m.day.knob ? { knob: m.day.knob, start: +m.day.start || 8, values: (m.day.values || []).map(Number), link: m.day.link || null, carry: m.day.carry || null, sticky: m.day.sticky ?? 3, switchCost: m.day.switchCost ?? 4 } : null;
     m.pairs = (m.pairs || []).filter(p => p && p.a && p.b);
     m.pinned = m.pinned || null;
     m.criteria = (m.criteria || []).map(c => crit(c.id, c.col, c.weight ?? 5, c));

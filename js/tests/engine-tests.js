@@ -205,6 +205,36 @@
   ok('fit: learns Borealis over Fjord and Aster', fitL.after.ok === 2, JSON.stringify(fitL.changes));
   ok('fit: result really ranks Borealis first among them', (() => { const r2 = E.compute(lapP, { W: fitL.W }); return r2.byId.r2.score > r2.byId.r6.score && r2.byId.r2.score > r2.byId.r1.score; })());
 
+  const progs = [];
+  const fp = P.find(ph, sp2, { judge: 'now', progress: p => progs.push(p) });
+  ok('find: reports progress with best so far', progs.length >= 1 && progs[progs.length - 1].checked === 625 && progs[progs.length - 1].best, progs.length);
+  void fp;
+
+  const hy = P.hourly(ph);
+  ok('hourly: plan for all 14 hours', hy.plan.length === 14 && hy.scores.length === 14, hy.plan.length);
+  ok('hourly: at least as good as one plan all day', hy.avg >= hy.single.avg - 1e-6, hy.avg + ' vs ' + hy.single.avg);
+  const hyFree = P.hourly(ph, { cost: 0 }), hyDear = P.hourly(ph, { cost: 1000 });
+  ok('hourly: free switching switches at least as often', hyFree.nSwitch >= hy.nSwitch, hyFree.nSwitch + ' vs ' + hy.nSwitch);
+  ok('hourly: very costly switching never switches', hyDear.nSwitch === 0, hyDear.nSwitch);
+  ok('hourly: free switching ≥ best single plan per hour', hyFree.avg >= hy.single.avg - 1e-6);
+  ok('hourly: carries the queue', hy.carry === true && hy.endQueue != null);
+  const cafeH = P.hourly(M.examples.get('cafe'), { cost: 0 });
+  ok('hourly: coffee shop picks more baristas at the peak', (() => { const m = M.examples.get('cafe'); const peak = m.day.values.indexOf(Math.max(...m.day.values)); const quiet = m.day.values.indexOf(Math.min(...m.day.values)); const b = id => m.rows.find(r => r.id === id).v.baristas; return b(cafeH.plan[peak]) >= b(cafeH.plan[quiet]); })(), cafeH.plan.join(','));
+
+  const curveCase = M.model.normalize({ columns: [{ id: 'x', label: 'X' }, { id: 'y', label: 'Y' }],
+    rows: [{ id: 'a', label: 'A', v: { x: 5, y: 5 } }, { id: 'b', label: 'B', v: { x: 10, y: 0 } }, { id: 'c', label: 'C', v: { x: 0, y: 10 } }],
+    criteria: [{ id: 'x', col: 'x', weight: 5 }, { id: 'y', col: 'y', weight: 5 }], pairs: [{ a: 'a', b: 'b' }, { a: 'a', b: 'c' }] });
+  const fw = P.fit(curveCase, curveCase.pairs), fa = P.fitAll(curveCase, curveCase.pairs);
+  ok('fitAll: importances alone cannot make the all-rounder win', fw.after.ok < 2, fw.after.ok);
+  ok('fitAll: changing curves makes it win both', fa.after.ok === 2 && fa.curves.length >= 1, JSON.stringify(fa.curves));
+
+  const cA = M.examples.get('laptop'), cB = E.withModel(cA, m => { m.criteria.find(c => c.id === 'battery').weight = 10; m.knobs[0].value = 2000; });
+  const cmp = P.compare(cA, cB);
+  ok('compare: lists importance and setting changes', cmp.diffs.some(d => /Battery importance 6 → 10/.test(d)) && cmp.diffs.some(d => /Budget/.test(d)), cmp.diffs.join(' | '));
+  ok('compare: rows matched by name', cmp.rows.length === 6 && cmp.rows.every(r => r.a && r.b));
+  ok('compare: shows options coming back in', cmp.rows.some(r => r.a.rank == null && r.b.rank != null));
+  ok('compare: same model, no diffs', P.compare(cA, cA).diffs.length === 0);
+
   const parts = M.model.ruleParts(lap, 'Price <= Budget');
   ok('simple rule parse with setting', parts && parts.col === 'price' && parts.knob === 'budget');
   ok('simple rule rebuild', M.model.ruleFormula(lap, { col: 'ram', op: '>=', value: 32 }) === 'Memory >= 32');

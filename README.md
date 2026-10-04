@@ -40,6 +40,13 @@ All four live in a **Go further** panel under the ranking, use the same engine (
 - **Soft must-haves**: each must-have can either **rule it out** or **take off points**. A soft miss shows as a −N tag in the ranking and as a line in the Why panel, is included in the exported JS, and is described in the summary.
 - Examples updated: pharmacy and coffee shop have day plans (pharmacy with queue carry-over), the flat has a soft balcony wish, and the RICE example has two saved pairs. Their guides cover the new tools.
 
+## Done in v4.2
+- **Runs in the background**: Find the best option, change-by-hour plans and Teach it my taste run in a Web Worker (`js/core/plan-worker.js` via `js/app/runner.js`), so the page never freezes. The finder shows a live progress bar, the number checked and the best so far, and has a **Stop** button. On `file://` or without workers it falls back to the main thread automatically.
+- **Change by hour** (`M.plan.hourly`): under the day plan, “Best plan if you can switch every hour” finds the best sequence of options, one per hour, when each switch costs N points (editable, saved as `day.switchCost`). It is a dynamic-programming search over hours that includes queue carry-over (state = current option + carried queue level), so letting a line build up costs you later hours. It shows the plan as a coloured bar, the switch times, the number of switches, the gain over keeping one plan all day, and the queue at closing. Tested: free switching is at least as good as the best single plan, and a huge switching cost never switches.
+- **Compare two versions** (`M.plan.compare`): **Pin this version**, change anything, and open Compare. It says whether the winner changed, lists what changed in plain words (importances, directions, curves, settings, must-haves, the combine method, how many values differ) and shows both rankings side by side with ▲/▼ moves. Options are matched by name. You can also **compare with a file** (a ranking JSON someone sent you), and **swap** to the pinned version without losing the current one. The pin is saved with the model but left out of share links.
+- **Teach it my taste fits curves too** (`M.plan.fitAll`): when importances alone can't agree with your choices, it also tries each number column's curve (every bit counts, first steps count most, only the top end counts, good enough) and fits the importances again. Suggestions name both kinds of change. Tested: with options A (5,5), B (10,0) and C (0,10) and “A over B, A over C”, importances alone fail and a curve change fixes both.
+- Section links (Show me, guide steps) now scroll with room for the sticky bars, so headings are never hidden under them. The app starts from `js/app/main.js` after every module has loaded.
+
 ## Examples (11, all with guides)
 | Everyday | Teaches |
 |---|---|
@@ -64,8 +71,8 @@ All four live in a **Go further** panel under the ranking, use the same engine (
 | `index.html` | The app. A first visit shows the example picker |
 | `index.html#m=<base64url JSON>` | Opens a shared ranking |
 | `index.html#ex=<id>` | Opens an example (`laptop, flat, job, rice, supplier, shift, pharmacy, feed, venue, cafe, care`); add `&view=ranking` to open on the ranking, or `&tour` to start its guided tour |
-| `tests.html` | 189 engine tests (v4.1 adds soft rules, matrix, day plan + carry-over, finder full and search, fitting): parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
-| `ui-check.html` | 55 checks driving the real app (results go to the console), including drag speed on the pharmacy |
+| `tests.html` | 203 engine tests (v4.2 adds finder progress, change-by-hour, curve fitting, version compare): parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
+| `ui-check.html` | 60 checks (v4.2: progress bar, the finder really running in the worker, change-by-hour, pin + compare) driving the real app (results go to the console), including drag speed on the pharmacy |
 | `preview-ranking.html` | Opens an example without the start screen, for layout checks (set `data-ex` / `data-view` on `<html>`) |
 
 ## Files
@@ -78,8 +85,11 @@ js/core/model.js     model shape, curves, name resolution, simple-rule ↔ formu
 js/core/engine.js    compute (formulas → must-haves → points → score), overrides, sweeps, situations, what-it-takes, trace
 js/core/insights.js  verdict and trust checks
 js/core/export.js    summary, CSV, JavaScript, JSON
-js/core/plan.js      finder (full + step-by-step), situation matrix, day plan with carry-over, importance fitting
-js/app/tools.js      Go further panel, day strip, finder / matrix / day / pairs dialogs, soft must-have controls
+js/core/plan.js      finder (full + step-by-step, progress), situation matrix, day plan with carry-over, change-by-hour search, importance + curve fitting, version compare
+js/core/plan-worker.js  Web Worker wrapper for find / hourly / fitAll
+js/app/runner.js     runs jobs in the worker or falls back to the main thread
+js/app/main.js       starts the app after all modules load
+js/app/tools.js      Go further panel, day strip + change-by-hour, finder / matrix / day / pairs / compare dialogs, soft must-have controls
 js/examples.js       everyday examples + guides
 js/examples-ops.js   planning examples (ported from v3) + guides
 js/app/*.js          store, render, setup (tabs), results, modals, guide, events
@@ -88,17 +98,15 @@ js/tests/*.js        engine tests, UI checks, helpers
 
 ## Data model
 One JSON model, saved in `localStorage['meridian.studio.v4']`:
-`name, question, about, method (add|balanced), columns[{id,label,type number|yesno|text,unit,formula,group,pct,choices}], rows[{id,label,v}], knobs[{id,label,value,min,max,step,unit,group,note}], base{knobId:value}, scenarios[{id,label,values}], rules[{id,label,formula,on,soft,penalty}], day{knob,start,values[],link{knob,lo,hi},carry{col,knob},sticky}, pairs[{a,b}], criteria[{id,col,on,weight 0–10,want more|less,curve,at,tol,points,range}], guide{level,teaches,steps[]}`.
+`name, question, about, method (add|balanced), columns[{id,label,type number|yesno|text,unit,formula,group,pct,choices}], rows[{id,label,v}], knobs[{id,label,value,min,max,step,unit,group,note}], base{knobId:value}, scenarios[{id,label,values}], rules[{id,label,formula,on,soft,penalty}], day{knob,start,values[],link{knob,lo,hi},carry{col,knob},sticky}, pairs[{a,b}], pinned{at,model}, day.switchCost, criteria[{id,col,on,weight 0–10,want more|less,curve,at,tol,points,range}], guide{level,teaches,steps[]}`.
 No server and no table API are used.
 
 ## Not done yet
-- The finder and fitting run on the main thread (the pharmacy whole-day search takes about a second); there is no Web Worker yet.
-- Within an hour the queue is steady state (M/M/c); only the carried-over value links hours.
-- Plans that change roles between hours, with a cost for switching, aren't searched.
-- No side-by-side comparison of two rankings.
+- Within an hour the queue is steady state (M/M/c); only the carried-over value links hours. A minute-by-minute simulation isn't modelled.
+- Change-by-hour plans choose among the options in your list (up to 60). To include new role splits, find them first and Add them.
+- The queue level in the change-by-hour search is grouped into a few bands, so in rare cases a slightly better plan can be missed.
 
 ## Suggested next steps
-1. Move find and fit to a Web Worker with a progress bar.
-2. Search hour-by-hour plans with a switching cost.
-3. Side-by-side comparison of two rankings, or of one ranking before and after a change.
-4. Fit curves, not only importances, from the pairs.
+1. Combine the two searches: find new options and their hourly sequence in one go.
+2. Compare more than two versions (a version history with named checkpoints).
+3. Let soft must-haves and sweet-spot positions be fitted from your choices too.

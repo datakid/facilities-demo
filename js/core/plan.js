@@ -99,7 +99,14 @@ window.M = window.M || {};
 
   function find(model, spec, opt) {
     opt = opt || {};
-    const t0 = now();
+    const t0 = now(), onP = typeof opt.progress === 'function' ? opt.progress : null;
+    let lastP = 0;
+    const report = force => {
+      if (!onP) return;
+      const t = now(); if (!force && t - lastP < 120) return; lastP = t;
+      let best = null; seen.forEach(x => { if (!best || x.s > best.s) best = x; });
+      onP({ checked: seen.size, total, method, frac: method === 'all' ? seen.size / total : Math.min(0.99, Math.max(runs / LIMIT.search, (t - t0) / LIMIT.ms)), best: best ? { s: best.s, name: nameOf(model, best.v, keys, base) } : null });
+    };
     const prep = E.prepare(model);
     const base = model.rows.find(r => r.id === opt.from) || model.rows[0];
     const { keys, total } = product(spec);
@@ -128,6 +135,7 @@ window.M = window.M || {};
       const fresh = list.filter(v => !seen.has(sig(v)));
       const uniq = [...new Map(fresh.map(v => [sig(v), v])).values()];
       if (uniq.length) { const s = scoreRows(uniq); runs += uniq.length * nCtx; uniq.forEach((v, i) => seen.set(sig(v), { v, s: s[i] })); }
+      report();
     };
     const mk = pick => Object.assign({}, base.v, pick);
     let method = 'all';
@@ -165,6 +173,7 @@ window.M = window.M || {};
         if (climbs > 400) break;
       }
     }
+    report(true);
     const ranked = [...seen.values()].sort((a, b) => b.s - a.s);
     const curBest = (() => {
       const vs = model.rows.map(r => r.v);
@@ -241,5 +250,116 @@ window.M = window.M || {};
     return { W, changes, before: { ok: n(before), of: m(before) }, after: { ok: n(after), of: m(after) }, detail: after, skipped: after.filter(x => x.ok == null) };
   }
 
-  M.plan = { matrix, dayRun, dayContexts, shape, SHAPES, find, spaceFor, fit, agreement, product, LIMIT, hh };
+  function hourly(model, opt) {
+    opt = opt || {};
+    const prep = opt.prep || E.prepare(model);
+    const d = model.day; if (!d || !d.values.length) return { error: 'Set up a day plan first.' };
+    const cost = Math.max(0, opt.cost ?? d.switchCost ?? 4);
+    const ctx = dayContexts(model), H = ctx.length;
+    const list = (opt.rows || model.rows).slice(0, 60), n = list.length;
+    const carry = d.carry && model.knobs.some(k => k.id === d.carry.knob) && model.columns.some(c => c.id === d.carry.col) ? d.carry : null;
+    const BUCKETS = carry ? 6 : 1;
+    const step = (h, q) => {
+      const RK = carry ? Object.fromEntries(list.map(r => [r.id, { [d.carry.knob]: q }])) : null;
+      const res = E.compute(model, { prep, K: ctx[h].K, RK, rows: list });
+      return list.map(r => { const x = res.byId[r.id]; const nq = carry ? Math.max(0, +x.vals[d.carry.col] || 0) : 0; return { s: x.pass ? x.score : 0, q: isFinite(nq) ? nq : 1e6 }; });
+    };
+    let states = [{ q: 0, total: 0, path: [], qs: [], last: -1 }];
+    const cache = new Map();
+    const at = (h, q) => { const key = h + '|' + (carry ? +q.toFixed(2) : 0); if (!cache.has(key)) cache.set(key, step(h, q)); return cache.get(key); };
+    for (let h = 0; h < H; h++) {
+      const next = [];
+      states.forEach(st => {
+        const out = at(h, st.q);
+        out.forEach((o, i) => {
+          const sw = st.last >= 0 && st.last !== i ? cost : 0;
+          next.push({ q: o.q, total: st.total + o.s - sw, path: st.path.concat(i), qs: st.qs.concat(o.q), last: i, sc: o.s });
+        });
+      });
+      const keep = new Map();
+      next.forEach(s => {
+        const key = s.last + '|' + (carry ? Math.min(BUCKETS - 1, Math.floor(Math.log2(1 + s.q))) : 0);
+        const cur = keep.get(key);
+        if (!cur || s.total > cur.total || (s.total === cur.total && s.q < cur.q)) keep.set(key, s);
+      });
+      states = [...keep.values()].sort((a, b) => b.total - a.total).slice(0, Math.max(n * 2, 24));
+    }
+    const best = states.sort((a, b) => b.total - a.total || a.q - b.q)[0];
+    const scores = [];
+    let q = 0;
+    best.path.forEach((i, h) => { const o = at(h, q)[i]; scores.push(o.s); q = o.q; });
+    const switches = [];
+    best.path.forEach((i, h) => { if (h === 0 || i !== best.path[h - 1]) switches.push({ i: h, at: ctx[h].label, row: list[i].id }); });
+    const dr = dayRun(model, prep, list);
+    const single = dr.per.find(p => p.id === dr.allDay);
+    return { plan: best.path.map(i => list[i].id), scores, avg: scores.reduce((a, b) => a + b, 0) / H, total: best.total, switches, nSwitch: switches.length - 1, cost, endQueue: carry ? q : null,
+      single: single ? { id: single.id, avg: single.avg, endQueue: single.endQueue } : null, hours: ctx.map(c => c.label), carry: !!carry };
+  }
+
+  const CURVE_LIST = ['even', 'gentle', 'steep', 'enough'];
+  function fitAll(model, pairs) {
+    const prep = E.prepare(model);
+    const first = fit(model, pairs);
+    let m = U.clone(model);
+    m.criteria.forEach(c => { if (first.W[c.id] != null) c.weight = first.W[c.id]; });
+    const score = mm => { const ag = agreement(mm, E.prepare(mm), pairs); return { ok: ag.filter(x => x.ok === true).length, gap: ag.reduce((a, x) => a + (x.gap != null ? Math.min(x.gap, 5) : 0), 0) }; };
+    let cur = score(m);
+    const curveChanges = [];
+    if (cur.ok < first.after.of) {
+      m.criteria.filter(c => c.on && prep.colById[c.col] && prep.colById[c.col].type === 'number').forEach(c => {
+        let bestC = c.curve, best = cur;
+        CURVE_LIST.forEach(cv => {
+          if (cv === c.curve) return;
+          const t = U.clone(m); const tc = t.criteria.find(x => x.id === c.id); tc.curve = cv; if (cv === 'enough') tc.at = null;
+          const s = score(t);
+          if (s.ok > best.ok || (s.ok === best.ok && s.gap > best.gap + 1)) { best = s; bestC = cv; }
+        });
+        if (bestC !== c.curve) { curveChanges.push({ id: c.id, from: c.curve, to: bestC }); c.curve = bestC; if (bestC === 'enough') c.at = null; cur = best; }
+      });
+      if (curveChanges.length) {
+        const again = fit(m, pairs);
+        m.criteria.forEach(c => { if (again.W[c.id] != null) c.weight = again.W[c.id]; });
+        cur = score(m);
+      }
+    }
+    const weightChanges = model.criteria.filter(c => { const x = m.criteria.find(y => y.id === c.id); return x && x.weight !== c.weight; }).map(c => ({ id: c.id, from: c.weight, to: m.criteria.find(y => y.id === c.id).weight }));
+    return { model: m, W: Object.fromEntries(m.criteria.map(c => [c.id, c.weight])), changes: weightChanges, curves: curveChanges, before: first.before, after: { ok: cur.ok, of: first.after.of } };
+  }
+
+  function compare(a, b) {
+    const ra = E.compute(a), rb = E.compute(b);
+    const key = r => r.label.trim().toLowerCase();
+    const mapB = new Map(b.rows.map(r => [key(r), r]));
+    const rows = a.rows.map(r => {
+      const o = mapB.get(key(r)), x = ra.byId[r.id], y = o ? rb.byId[o.id] : null;
+      return { label: r.label, a: { rank: x.rank, score: x.pass ? x.score : null }, b: y ? { rank: y.rank, score: y.pass ? y.score : null } : null };
+    });
+    b.rows.forEach(r => { if (!a.rows.some(x => key(x) === key(r))) { const y = rb.byId[r.id]; rows.push({ label: r.label, a: null, b: { rank: y.rank, score: y.pass ? y.score : null } }); } });
+    const diffs = [];
+    const nm = (m, c) => { const col = m.columns.find(x => x.id === c.col); return col ? col.label : c.col; };
+    a.criteria.forEach(c => {
+      const o = b.criteria.find(x => x.col === c.col || x.id === c.id);
+      if (!o) { diffs.push(`${nm(a, c)} only counts in A`); return; }
+      if (o.on !== c.on) diffs.push(`${nm(a, c)} is ${c.on ? 'on' : 'off'} in A, ${o.on ? 'on' : 'off'} in B`);
+      if (o.weight !== c.weight) diffs.push(`${nm(a, c)} importance ${c.weight} → ${o.weight}`);
+      if (o.want !== c.want) diffs.push(`${nm(a, c)}: ${c.want} is better → ${o.want}`);
+      if (o.curve !== c.curve) diffs.push(`${nm(a, c)} curve ${MD().CURVES[c.curve].label.toLowerCase()} → ${MD().CURVES[o.curve].label.toLowerCase()}`);
+    });
+    b.criteria.forEach(c => { if (!a.criteria.some(x => x.col === c.col || x.id === c.id)) diffs.push(`${nm(b, c)} only counts in B`); });
+    a.knobs.forEach(k => { const o = b.knobs.find(x => x.id === k.id); if (o && Math.abs(o.value - k.value) > 1e-9) diffs.push(`${k.label} ${U.withUnit(k.value, k.unit)} → ${U.withUnit(o.value, o.unit)}`); });
+    const rf = r => `${r.label || r.formula}${r.on ? '' : ' (off)'}${r.soft ? ` (−${r.penalty})` : ''}`;
+    a.rules.forEach(r => { const o = b.rules.find(x => x.id === r.id); if (!o) diffs.push(`Must-have “${rf(r)}” only in A`); else if (rf(o) !== rf(r) || o.formula !== r.formula) diffs.push(`Must-have “${rf(r)}” → “${rf(o)}”`); });
+    b.rules.forEach(r => { if (!a.rules.some(x => x.id === r.id)) diffs.push(`Must-have “${rf(r)}” only in B`); });
+    if (a.method !== b.method) diffs.push(`Combine: ${a.method} → ${b.method}`);
+    const cellDiff = rows.filter(x => x.a && x.b).length;
+    let dataChanges = 0;
+    a.rows.forEach(r => { const o = mapB.get(key(r)); if (o) a.columns.forEach(c => { if (!c.formula && JSON.stringify(r.v[c.id]) !== JSON.stringify(o.v[c.id])) dataChanges++; }); });
+    if (dataChanges) diffs.push(`${dataChanges} value${dataChanges > 1 ? 's' : ''} differ in the options`);
+    void cellDiff;
+    rows.sort((x, y) => (x.b ? x.b.rank ?? 99 : 99) - (y.b ? y.b.rank ?? 99 : 99) || (x.a ? x.a.rank ?? 99 : 99) - (y.a ? y.a.rank ?? 99 : 99));
+    return { rows, diffs, winA: ra.ranked[0] ? ra.byId[ra.ranked[0]].label : null, winB: rb.ranked[0] ? rb.byId[rb.ranked[0]].label : null };
+  }
+  const MD = () => M.model;
+
+  M.plan = { matrix, dayRun, dayContexts, shape, SHAPES, find, spaceFor, fit, fitAll, agreement, product, hourly, compare, LIMIT, hh };
 })(window.M);

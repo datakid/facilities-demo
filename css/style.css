@@ -464,6 +464,7 @@ input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--fo
 .tag.ok{background:var(--ok-t);color:var(--ok-k);margin-left:6px}
 .tag{background:var(--sunken);color:var(--ink-2);margin-left:6px}
 .why-t tfoot tr.pen td{color:var(--warn-k);padding:4px;border-bottom:0}
+.results>section,[data-g]{scroll-margin-top:calc(var(--top-h) + 56px)}
 .tools{margin-top:24px;padding-top:20px;border-top:1px solid var(--line)}
 .tool-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 @container res (max-width:360px){.tool-grid{grid-template-columns:1fr}}
@@ -538,6 +539,22 @@ input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--fo
   .pr{grid-template-columns:18px 1fr 24px}
   .pr-why{grid-column:2;grid-row:2}
 }
+.prog{height:6px;border-radius:var(--rp);background:var(--sunken);overflow:hidden;margin-bottom:10px}
+.prog span{display:block;height:100%;background:var(--brand);border-radius:var(--rp);transition:width var(--t-med) var(--ease)}
+.hrly{margin-top:12px;padding:10px 12px;border-radius:var(--r2);background:var(--bg)}
+.hrly-h{margin:0 0 8px;font-size:var(--fs-sm);color:var(--ink-2);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.num-in.xs{width:48px;height:24px;padding:0 6px;font-size:var(--fs-xs)}
+.hrly-bar{display:flex;height:8px;gap:2px;border-radius:var(--rp);overflow:hidden}
+.hrly-bar span{background:var(--rc);opacity:.85}
+.hrly-list{list-style:none;margin:8px 0 4px;padding:0;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:var(--fs-xs);color:var(--ink-2)}
+.hrly-list li{display:flex;align-items:center;gap:5px}
+.hrly-list .num{color:var(--ink-3)}
+.modal.compare{width:min(920px,calc(100vw - 24px))}
+.cmp-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:20px}
+.cmp-diff{margin:0;padding:0 0 0 16px;font-size:var(--fs-sm);color:var(--ink-2);display:flex;flex-direction:column;gap:4px}
+.cmp-t td{white-space:nowrap}
+.cmp-out{color:var(--bad-k);font-size:var(--fs-xs)}
+@media (max-width:720px){.cmp-grid{grid-template-columns:1fr}}
 .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);background:var(--ink);color:var(--on-brand);padding:9px 16px;border-radius:var(--rp);font-size:var(--fs-sm);opacity:0;pointer-events:none;transition:opacity var(--t-med),transform var(--t-med) var(--ease);z-index:80;max-width:calc(100vw - 32px);text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 

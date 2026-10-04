@@ -15,7 +15,8 @@ window.M = window.M || {};
       ${b('open-find', 'Find the best option', 'Try every combination of values, not just the options you typed.')}
       ${m.knobs.length ? b('open-matrix', 'Compare situations', 'Every option in every situation, and the safest all-round.') : ''}
       ${m.knobs.length ? b('open-day', m.day ? 'Edit the day plan' : 'Plan a day', 'Change a setting hour by hour and get a switching plan.') : ''}
-      ${b('open-pairs', 'Teach it my taste', 'Say “I’d pick A over B” and it tunes the importances.')}</div>`;
+      ${b('open-pairs', 'Teach it my taste', 'Say “I’d pick A over B” and it tunes the importances.')}
+      ${b('open-compare', 'Compare two versions', S.model.pinned ? 'See how this version differs from the one you pinned.' : 'Pin this version, change things, then see what moved.')}</div>`;
   };
 
   R.dayHTML = () => {
@@ -33,7 +34,25 @@ window.M = window.M || {};
     return `<div class="day-head"><h3>Day plan</h3><button class="link sm" data-act="open-day">Edit</button></div>
       <div class="day-strip" role="group" aria-label="Best option by hour">${cells}</div>
       <p class="day-line">${sw.length > 1 ? sw.slice(0, 4).map((s, i) => `${i ? 'switch to' : 'Start with'} <b>${esc(rl(s.row))}</b> ${i ? 'at ' + esc(s.at) : ''}`).join(', ') + (sw.length > 4 ? ` and ${sw.length - 4} more switches` : '') + '.' : sw.length ? `<b>${esc(rl(sw[0].row))}</b> is best all day.` : 'Nothing passes at any hour.'}</p>
-      ${all && sw.length > 1 ? `<p class="hint">One plan for the whole day: ${dot(all.id)}<b>${esc(all.label)}</b>, average ${U.pts(all.avg)}${endQ != null ? `, ${U.fmtNum(endQ)} still waiting at closing` : ''}.</p>` : ''}`;
+      ${all && sw.length > 1 ? `<p class="hint">One plan for the whole day: ${dot(all.id)}<b>${esc(all.label)}</b>, average ${U.pts(all.avg)}${endQ != null ? `, ${U.fmtNum(endQ)} still waiting at closing` : ''}.</p>` : ''}
+      ${hourlyHTML()}`;
+  };
+
+  function hourlyHTML() {
+    const Hh = T.hourly, m = S.model;
+    if (T.hourlyBusy) return `<p class="hint">Working out the best change-by-hour plan…</p>`;
+    if (!Hh) return `<button class="link sm" data-act="hr-run">Best plan if you can switch every hour</button>`;
+    if (Hh.error) return `<p class="bad-line">${esc(Hh.error)}</p>`;
+    const segs = Hh.switches.map((s, i) => { const end = i + 1 < Hh.switches.length ? Hh.switches[i + 1].i : Hh.plan.length; return `<span style="flex:${end - s.i};--rc:var(--c${R.rowTone(s.row)})" title="${esc(s.at)}– ${esc(rl(s.row))}"></span>`; }).join('');
+    const gain = Hh.single ? Hh.avg - Hh.single.avg : 0;
+    return `<div class="hrly"><p class="hrly-h"><b>Change by hour</b> · switching costs <input class="num-in xs" data-in="hr-cost" data-fk="hrc" value="${Hh.cost}" aria-label="Points lost per switch"> points</p>
+      <div class="hrly-bar">${segs}</div>
+      <ol class="hrly-list">${Hh.switches.map(s => `<li><span class="num">${esc(s.at)}</span>${dot(s.row)}${esc(rl(s.row))}</li>`).join('')}</ol>
+      <p class="hint">${Hh.nSwitch ? `${Hh.nSwitch} switch${Hh.nSwitch > 1 ? 'es' : ''}, average ${U.pts(Hh.avg)}` : `No switch is worth it: stay on ${esc(rl(Hh.plan[0]))}, average ${U.pts(Hh.avg)}`}${Hh.single && Hh.nSwitch ? `, ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} vs keeping ${esc(rl(Hh.single.id))} all day` : ''}${Hh.endQueue != null ? `; ${U.fmtNum(Hh.endQueue)} still waiting at closing` : ''}.</p></div>`;
+  }
+  const runHourly = () => {
+    T.hourlyBusy = true; R.day();
+    M.runner.run('hourly', S.model, null, { cost: S.model.day.switchCost ?? 4 }).then(r => { T.hourly = r; T.hourlyBusy = false; T.hourlySig = JSON.stringify(S.model); R.day(); });
   };
 
   R.extraModals.matrix = () => {
@@ -79,8 +98,10 @@ window.M = window.M || {};
     if ((m.scenarios || []).length) judges.push(['situations', 'Every situation']);
     if (m.day) judges.push(['day', 'Whole day']);
     let out = '';
-    const F = T.found;
-    if (F && F.error) out = `<p class="bad-line">${esc(F.error)}</p>`;
+    const F = T.found, PR = T.prog;
+    if (T.running) out = `<div class="fd-res"><div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round((PR ? PR.frac : 0) * 100)}"><span style="width:${((PR ? PR.frac : 0) * 100).toFixed(1)}%"></span></div>
+      <p class="fd-sum">${PR ? `Checked <b class="num">${PR.checked.toLocaleString('en-US')}</b>${PR.method === 'all' ? ` of ${PR.total.toLocaleString('en-US')}` : ', searching step by step'}.${PR.best ? ` Best so far: <b class="num">${PR.best.s.toFixed(1)}</b> ${esc(PR.best.name)}` : ''}` : 'Starting…'}</p><button class="btn sm" data-act="fd-stop">Stop</button></div>`;
+    else if (F && F.error) out = `<p class="bad-line">${esc(F.error)}</p>`;
     else if (F) {
       const best = F.top[0], gain = best ? best.s - F.current.s : 0;
       out = `<div class="fd-res"><p class="fd-sum">${F.method === 'all' ? `Tried all <b class="num">${F.checked.toLocaleString('en-US')}</b> combinations` : `Too many to try them all (${F.total.toLocaleString('en-US')}), so it searched step by step and checked <b class="num">${F.checked.toLocaleString('en-US')}</b>. The best is very likely, not certain`} in ${F.ms} ms.
@@ -92,7 +113,7 @@ window.M = window.M || {};
         <label>Judge on ${R.seg('fd-judge', f.judge, judges)}</label>
         ${f.judge !== 'now' ? `<label>Rank by ${R.seg('fd-agg', f.agg, [['avg', 'Average'], ['worst', 'Worst case']])}</label>` : ''}</div>
       <ul class="fd-cols">${colRows}</ul>
-      <div class="modal-foot"><span class="muted num">${total.toLocaleString('en-US')} combinations${nCtx > 1 ? ` × ${nCtx} ${f.judge === 'day' ? 'hours' : 'situations'}` : ''} · ${full ? 'tries them all' : 'searches step by step'}</span><button class="btn primary" data-act="fd-run" ${total ? '' : 'disabled'}>Find</button></div>${out}`;
+      <div class="modal-foot"><span class="muted num">${total.toLocaleString('en-US')} combinations${nCtx > 1 ? ` × ${nCtx} ${f.judge === 'day' ? 'hours' : 'situations'}` : ''} · ${full ? 'tries them all' : 'searches step by step'}</span><button class="btn primary" data-act="fd-run" ${total && !T.running ? '' : 'disabled'}>${T.running ? 'Finding…' : 'Find'}</button></div>${out}`;
   };
 
   R.extraModals.day = () => {
@@ -128,13 +149,13 @@ window.M = window.M || {};
     return `<header class="modal-head"><div><h2 id="modal-title" class="serif">Teach it my taste</h2><p class="muted">Not sure how important each thing is? Compare a few options you know. It finds importances that agree with you, changing as little as possible.</p></div><button class="icon-btn" data-act="close-modal" aria-label="Close">${R.I.x}</button></header>
       <div class="pr-add">I’d pick <select class="sel" data-in="pr-a">${R.opts([['', 'choose…'], ...m.rows.map(r => [r.id, r.label])], T.pairA)}</select> over <select class="sel" data-in="pr-b">${R.opts([['', 'choose…'], ...m.rows.map(r => [r.id, r.label])], T.pairB)}</select><button class="btn" data-act="pr-add" ${T.pairA && T.pairB && T.pairA !== T.pairB ? '' : 'disabled'}>${R.I.plus}Add</button></div>
       ${m.pairs.length ? `<p class="pr-sum">The ranking agrees with <b class="num">${ok} of ${n}</b> of your choices.</p><ul class="pr-list">${list}</ul>` : '<p class="empty">Add two or three choices to start. Pick pairs where you know your answer.</p>'}
-      ${F ? `<div class="pr-fit">${F.changes.length ? `<p>Suggested: ${F.changes.map(c => `<b>${esc(R.critName(H.crit(c.id)))}</b> ${c.from} → ${c.to}`).join(', ')}. That agrees with <b>${F.after.ok} of ${F.after.of}</b> (now ${F.before.ok}).</p><button class="btn primary sm" data-act="pr-apply">Use these importances</button>` : `<p>${F.after.ok === F.after.of ? 'Your importances already agree with every choice.' : 'No change in importances fixes the rest. Something else is driving your choice: maybe a missing column, a must-have, or a different curve.'}</p>`}</div>` : ''}
+      ${F ? `<div class="pr-fit">${F.changes.length || (F.curves || []).length ? `<p>Suggested: ${[...F.changes.map(c => `<b>${esc(R.critName(H.crit(c.id)))}</b> ${c.from} → ${c.to}`), ...(F.curves || []).map(c => `<b>${esc(R.critName(H.crit(c.id)))}</b> curve “${esc(MD.CURVES[c.from].label)}” → “${esc(MD.CURVES[c.to].label)}”`)].join(', ')}. That agrees with <b>${F.after.ok} of ${F.after.of}</b> (now ${F.before.ok}).</p><button class="btn primary sm" data-act="pr-apply">Use ${(F.curves || []).length ? 'these changes' : 'these importances'}</button>` : `<p>${F.after.ok === F.after.of ? 'Your ranking already agrees with every choice.' : 'No change in importances or curves fixes the rest. Something else is driving your choice: maybe a column that isn’t in the ranking yet, or a must-have.'}</p>`}</div>` : ''}
       <div class="modal-foot"><span class="hint">Pairs are saved with the ranking.</span><button class="btn primary" data-act="pr-fit" ${n ? '' : 'disabled'}>Suggest importances</button></div>`;
   };
 
   const A = M.app.ACT;
   const re = () => R.modal();
-  A['open-find'] = () => { findSpec(); S.ui.modal = 'find'; re(); };
+  A['open-find'] = () => { findSpec(); M.runner.warm(); S.ui.modal = 'find'; re(); };
   A['open-matrix'] = () => { S.ui.modal = 'matrix'; re(); };
   A['open-day'] = () => { T.day = null; S.ui.modal = 'day'; re(); };
   A['open-pairs'] = () => { T.fitted = null; S.ui.modal = 'pairs'; re(); };
@@ -142,9 +163,19 @@ window.M = window.M || {};
   A['fd-agg'] = v => { T.find.agg = v; T.found = null; re(); };
   A['fd-run'] = () => {
     const f = T.find, spec = {}; Object.entries(f.cols).forEach(([k, x]) => { if (x.on && x.vals.length) spec[k] = x.vals; });
-    const btn = document.querySelector('[data-act="fd-run"]'); if (btn) { btn.disabled = true; btn.textContent = 'Finding…'; }
-    setTimeout(() => { T.found = P.find(S.model, spec, { from: f.from, judge: f.judge, agg: f.agg }); re(); }, 20);
+    T.running = true; T.prog = null; T.found = null; re();
+    const tick = p => { T.prog = p; if (S.ui.modal === 'find') { const box = document.querySelector('.fd-res'); if (box) { const bar = box.querySelector('.prog span'); if (bar) bar.style.width = (p.frac * 100).toFixed(1) + '%'; const sum = box.querySelector('.fd-sum'); if (sum) sum.innerHTML = `Checked <b class="num">${p.checked.toLocaleString('en-US')}</b>${p.method === 'all' ? ` of ${p.total.toLocaleString('en-US')}` : ', searching step by step'}.${p.best ? ` Best so far: <b class="num">${p.best.s.toFixed(1)}</b> ${esc(p.best.name)}` : ''}`; } } };
+    const job = T.job = {};
+    M.runner.run('find', S.model, spec, { from: f.from, judge: f.judge, agg: f.agg }, tick).then(r => { if (T.job !== job) return; T.running = false; T.found = r; if (S.ui.modal === 'find') re(); else ST.toast('Search done. Open Find the best option to see it'); });
   };
+  A['fd-stop'] = () => { M.runner.cancel(); T.job = null; T.running = false; T.found = null; re(); ST.toast('Stopped'); };
+  A['hr-run'] = () => runHourly();
+  A['open-compare'] = () => { S.ui.modal = 'compare'; re(); };
+  A['cmp-pin'] = () => { const snap = U.clone(S.model); delete snap.pinned; ST.change(m => { m.pinned = { at: new Date().toISOString(), model: snap }; }); re(); ST.toast('Pinned. Change anything, then come back to compare'); };
+  A['cmp-unpin'] = () => { ST.change(m => { m.pinned = null; }); re(); };
+  A['cmp-file'] = () => { T.cmpPick = true; document.getElementById('cmp-file').click(); };
+  A['cmp-restore'] = () => { const p = S.model.pinned; if (!p) return; const back = U.clone(p.model); back.pinned = { at: new Date().toISOString(), model: (() => { const x = U.clone(S.model); delete x.pinned; return x; })() }; ST.load(back, { guide: false, keepHistory: false }); S.ui.modal = 'compare'; re(); ST.toast('Swapped: the pinned version is now current'); };
+  A['cmp-clear'] = () => { T.cmpOther = null; re(); };
   A['fd-add'] = v => {
     const t = T.found.top[+v]; if (!t) return;
     const id = U.uid('r', S.model.rows);
@@ -152,7 +183,7 @@ window.M = window.M || {};
     t.existing = id; re(); ST.toast('Added to your options');
   };
   A['dy-shape'] = v => { T.day.values = P.shape({ day: T.day, knobs: S.model.knobs }, v, T.day.values.length || 12); re(); };
-  A['dy-save'] = () => { const d = U.clone(T.day); ST.change(m => { m.day = d; }); S.ui.modal = null; re(); ST.toast('Day plan ready, see the ranking panel'); };
+  A['dy-save'] = () => { const d = U.clone(T.day); ST.change(m => { m.day = d; }); T.hourly = null; S.ui.modal = null; re(); ST.toast('Day plan ready, see the ranking panel'); };
   A['dy-remove'] = () => { ST.change(m => { m.day = null; }); S.ui.modal = null; re(); };
   A['dy-sits'] = () => {
     const m = S.model, ctx = P.dayContexts(Object.assign({}, m, { day: T.day }));
@@ -167,8 +198,32 @@ window.M = window.M || {};
   };
   A['pr-add'] = () => { ST.change(m => { m.pairs.push({ a: T.pairA, b: T.pairB }); }); T.pairA = ''; T.pairB = ''; T.fitted = null; re(); };
   A['pr-del'] = v => { ST.change(m => { m.pairs.splice(+v, 1); }); T.fitted = null; re(); };
-  A['pr-fit'] = () => { T.fitted = P.fit(S.model, S.model.pairs); re(); };
-  A['pr-apply'] = () => { const W = T.fitted.W; ST.change(m => { m.criteria.forEach(c => { if (W[c.id] != null) c.weight = W[c.id]; }); }, { setup: true }); T.fitted = null; re(); ST.toast('Importances updated. Ctrl+Z to go back'); };
+  A['pr-fit'] = () => { const b = document.querySelector('[data-act="pr-fit"]'); if (b) { b.disabled = true; b.textContent = 'Thinking…'; } M.runner.run('fitAll', S.model, S.model.pairs, {}).then(r => { T.fitted = r; re(); }); };
+  A['pr-apply'] = () => { const F = T.fitted; ST.change(m => { m.criteria.forEach(c => { const x = F.model.criteria.find(y => y.id === c.id); if (x) { c.weight = x.weight; c.curve = x.curve; c.at = x.at; } }); }, { setup: true }); T.fitted = null; re(); ST.toast('Ranking updated. Ctrl+Z to go back'); };
+
+  R.extraModals.compare = () => {
+    const m = S.model, other = T.cmpOther ? T.cmpOther.model : m.pinned ? m.pinned.model : null;
+    const otherName = T.cmpOther ? T.cmpOther.name : m.pinned ? `Pinned ${new Date(m.pinned.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : '';
+    const head = `<header class="modal-head"><div><h2 id="modal-title" class="serif">Compare two versions</h2><p class="muted">Pin this ranking, change importances, rules or data, then see side by side what moved and why.</p></div><button class="icon-btn" data-act="close-modal" aria-label="Close">${R.I.x}</button></header>`;
+    const bar = `<div class="share-row">${m.pinned ? `<button class="btn" data-act="cmp-pin">Pin again (replace)</button><button class="btn ghost" data-act="cmp-unpin">Unpin</button>` : `<button class="btn primary" data-act="cmp-pin">Pin this version</button>`}<button class="btn" data-act="cmp-file">Compare with a file…</button>${T.cmpOther ? '<button class="btn ghost" data-act="cmp-clear">Back to pinned</button>' : ''}</div>`;
+    if (!other) return head + bar + '<p class="empty">Nothing to compare yet. Pin this version, make your changes, and open this again. Or compare with a ranking file someone sent you.</p>';
+    const A0 = MD.normalize(other), C = P.compare(A0, m);
+    const cell = x => x ? (x.rank ? `<span class="num">${x.rank}</span> <span class="muted num">${x.score.toFixed(1)}</span>` : '<span class="cmp-out">out</span>') : '<span class="muted">—</span>';
+    const mv = r => { if (!r.a || !r.b || !r.a.rank || !r.b.rank) return ''; const d = r.a.rank - r.b.rank; return d ? `<span class="rank-mv ${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' + d : '▼' + (-d)}</span>` : ''; };
+    return head + bar + `<p class="mx-sum">${C.winA === C.winB ? `Both versions pick <b>${esc(C.winB || 'nobody')}</b>.` : `The winner changed: <b>${esc(C.winA || 'nobody')}</b> → <b>${esc(C.winB || 'nobody')}</b>.`}</p>
+      <div class="cmp-grid"><div><h3 class="sub" style="margin-top:0">What changed</h3>${C.diffs.length ? `<ul class="cmp-diff">${C.diffs.slice(0, 14).map(d => `<li>${esc(d)}</li>`).join('')}${C.diffs.length > 14 ? `<li class="muted">and ${C.diffs.length - 14} more</li>` : ''}</ul>` : '<p class="hint">The two versions have the same setup.</p>'}</div>
+      <div><h3 class="sub" style="margin-top:0">Ranking</h3><div class="table-wrap mx-wrap"><table class="grid ro cmp-t"><thead><tr><th scope="col">Option</th><th scope="col">${esc(otherName)}</th><th scope="col">Now</th><th scope="col"><span class="sr">Move</span></th></tr></thead><tbody>${C.rows.map(r => `<tr><th scope="row">${esc(r.label)}</th><td>${cell(r.a)}</td><td>${cell(r.b)}</td><td>${mv(r)}</td></tr>`).join('')}</tbody></table></div></div></div>
+      ${m.pinned && !T.cmpOther ? '<div class="modal-foot"><span class="hint">Swapping keeps both: the current version becomes the pinned one.</span><button class="btn" data-act="cmp-restore">Swap to the pinned version</button></div>' : ''}`;
+  };
+  const cf = document.createElement('input'); cf.type = 'file'; cf.id = 'cmp-file'; cf.accept = '.json,application/json'; cf.hidden = true; document.body.appendChild(cf);
+  cf.addEventListener('change', () => {
+    const f = cf.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => { try { const x = JSON.parse(String(rd.result)); if (!x.rows || !x.columns) throw new Error('x'); T.cmpOther = { name: f.name.replace(/\.json$/i, ''), model: x }; S.ui.modal = 'compare'; re(); } catch (e) { ST.toast('That file is not a ranking'); } cf.value = ''; };
+    rd.readAsText(f);
+  });
+  const oldDay = R.day;
+  R.day = () => { if (T.hourly && T.hourlySig !== JSON.stringify(S.model) && !T.hourlyBusy) T.hourly = null; oldDay(); };
 
   document.addEventListener('change', e => {
     const el = e.target, k = el.getAttribute && el.getAttribute('data-in'); if (!k) return;
@@ -187,6 +242,7 @@ window.M = window.M || {};
       case 'dy-ccol': d.carry = v ? { col: v, knob: (d.carry && d.carry.knob) || (S.model.knobs.find(x => x.id !== d.knob) || {}).id } : null; re(); break;
       case 'dy-cknob': d.carry.knob = v; re(); break;
       case 'dy-sticky': d.sticky = Math.max(0, U.parseNum(v) ?? 3); re(); break;
+      case 'hr-cost': { const n = U.parseNum(v); if (n == null) break; ST.change(m => { m.day.switchCost = Math.max(0, n); }); T.hourly = null; runHourly(); break; }
       case 'pr-a': T.pairA = v; re(); break;
       case 'pr-b': T.pairB = v; re(); break;
       case 'rule-soft': ST.change(() => { H.rule(id).soft = v === 'soft'; }, { setup: true }); break;

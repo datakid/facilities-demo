@@ -1,6 +1,12 @@
 self.window = self;
-importScripts('expr.js', 'shapes.js', 'engine.js', 'plan.js');
+importScripts('util.js', 'formula.js', 'model.js', 'engine.js', 'plan.js');
 self.onmessage = e => {
-  try { self.postMessage({ done: M.plan.generate(e.data.model, e.data.spec, p => self.postMessage({ progress: p })) }); }
-  catch (err) { self.postMessage({ done: { error: String(err && err.message || err) } }); }
+  const { id, job, model, spec, opt } = e.data;
+  try {
+    let out;
+    if (job === 'find') out = M.plan.find(model, spec, Object.assign({}, opt, { progress: p => self.postMessage({ id, progress: p }) }));
+    else if (job === 'hourly') out = M.plan.hourly(model, opt);
+    else if (job === 'fitAll') out = M.plan.fitAll(model, spec);
+    self.postMessage({ id, done: out });
+  } catch (err) { self.postMessage({ id, done: { error: String(err && err.message || err) } }); }
 };

@@ -1,0 +1,1 @@
+window.M.app.start();
