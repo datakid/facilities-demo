@@ -1,505 +1,293 @@
 window.M = window.M || {};
 (function (M) {
   'use strict';
-  const H = M.h, S = H.S, U = M.util, R = M.render, LIMIT = H.LIMIT;
-  const num = v => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
-  const colMax = cid => { const v = S.model.rows.map(r => +r.v[cid]).filter(isFinite); return v.length ? Math.max(...v) : 0; };
+  const U = M.util, H = M.h, S = H.S, R = M.render, MD = M.model, ST = M.store;
+  let lastFx = null;
 
-  function parseCSV(text) {
-    const rows = []; let row = [], cell = '', q = false;
-    for (let i = 0; i < text.length; i++) {
-      const ch = text[i];
-      if (q) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; }
-      else if (ch === '"') q = true;
-      else if (ch === ',' || ch === '\t') { row.push(cell); cell = ''; }
-      else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
-      else cell += ch;
+  const num = v => U.parseNum(v);
+  const setP = (el, v, lo, hi) => { el.style.setProperty('--p', ((v - lo) / ((hi - lo) || 1) * 100) + '%'); };
+  const focusLater = sel => requestAnimationFrame(() => { const el = document.querySelector(sel); if (el) { el.focus(); if (el.select) el.select(); el.scrollIntoView({ block: 'nearest' }); } });
+  const exp = () => (S.ui.exp = S.ui.exp || {});
+
+  function relabel(kind, id, label) {
+    const m = S.model, list = kind === 'col' ? m.columns : m.knobs, obj = list.find(x => x.id === id);
+    if (!obj) return;
+    const clean = String(label);
+    const clash = clean.trim() && [...m.columns, ...m.knobs].some(x => x !== obj && x.label.trim().toLowerCase() === clean.trim().toLowerCase());
+    if (!clean.trim() || clash) { obj.label = clean; return; }
+    ST.rewrite(() => { obj.label = clean; });
+  }
+
+  function catsOf(colId) { return [...new Set(S.model.rows.map(r => r.v[colId]).filter(x => x != null && x !== '').map(String))]; }
+
+  function newCrit(colId) {
+    const m = S.model, col = m.columns.find(c => c.id === colId);
+    const id = m.criteria.some(c => c.id === colId) ? U.uid(colId + '_', m.criteria) : colId;
+    const c = MD.crit(id, colId, 5, { want: col.type === 'number' ? U.guessDir(col.label) : 'more' });
+    if (col.type === 'text') catsOf(colId).forEach((k, i, a) => { c.points[k] = a.length > 1 ? Math.round(i / (a.length - 1) * 10) : 5; });
+    return c;
+  }
+
+  function onInput(e) {
+    const el = e.target, k = el.getAttribute && el.getAttribute('data-in'); if (!k) return;
+    const id = el.getAttribute('data-id'), v = el.value;
+    const live = e.type === 'input';
+    const L = { live };
+    if (el.matches('.fx-in')) lastFx = el.getAttribute('data-fk');
+    switch (k) {
+      case 'name': ST.change(m => { m.name = v; }, L); break;
+      case 'question': ST.change(m => { m.question = v; }, L); break;
+      case 'weight': setP(el, +v, 0, 10); ST.change(() => { H.crit(id).weight = +v; }, L); break;
+      case 'crit-col': ST.change(m => { const c = H.crit(id), col = H.col(v); c.col = v; if (col.type === 'text') { c.points = {}; catsOf(v).forEach((x, i, a) => { c.points[x] = a.length > 1 ? Math.round(i / (a.length - 1) * 10) : 5; }); } c.want = col.type === 'number' ? U.guessDir(col.label) : 'more'; c.curve = 'even'; c.at = null; c.tol = null; c.range = { auto: true, lo: null, hi: null }; void m; }, { setup: true }); break;
+      case 'points': setP(el, +v, 0, 10); ST.change(() => { H.crit(id).points[el.getAttribute('data-k')] = +v; }, L); break;
+      case 'crit-at': ST.change(() => { H.crit(id).at = num(v); }, L); break;
+      case 'crit-tol': ST.change(() => { const n = num(v); H.crit(id).tol = n && n > 0 ? n : null; }, L); break;
+      case 'range-lo': ST.change(() => { H.crit(id).range.lo = num(v); }, L); break;
+      case 'range-hi': ST.change(() => { H.crit(id).range.hi = num(v); }, L); break;
+      case 'rule-label': ST.change(() => { H.rule(id).label = v; }, L); break;
+      case 'rule-fx': ST.change(() => { H.rule(id).formula = v; }, L); el.classList.toggle('bad', !!S.res.issues.find(x => x.where === 'rule' && x.id === id)); break;
+      case 'rule-col': case 'rule-op': case 'rule-val': case 'rule-src': ruleEdit(k, id, v); break;
+      case 'knob': {
+        const kn = H.knob(id); setP(el, +v, kn.min, kn.max);
+        ST.change(() => { kn.value = +v; }, L);
+        const n = document.querySelector(`[data-in="knob-num"][data-id="${CSS.escape(id)}"]`); if (n) n.value = U.fmtNum(+v).replace(/,/g, '');
+        moveStrip(id);
+        break;
+      }
+      case 'knob-num': {
+        const n = num(v); if (n == null) break;
+        const kn = H.knob(id);
+        ST.change(() => { kn.value = n; if (n < kn.min) kn.min = n; if (n > kn.max) kn.max = n; }, L);
+        const r = document.querySelector(`[data-in="knob"][data-id="${CSS.escape(id)}"]`); if (r) { r.min = kn.min; r.max = kn.max; r.value = n; setP(r, n, kn.min, kn.max); }
+        moveStrip(id);
+        break;
+      }
+      case 'knob-label': ST.change(() => relabel('knob', id, v), L); break;
+      case 'knob-min': case 'knob-max': case 'knob-step': if (!live) { const n = num(v); if (n == null) break; ST.change(() => { const kn = H.knob(id); kn[k.slice(5)] = k === 'knob-step' ? Math.max(n, 1e-6) : n; if (kn.min > kn.max) [kn.min, kn.max] = [kn.max, kn.min]; kn.value = U.clamp(kn.value, kn.min, kn.max); }, { setup: true }); } break;
+      case 'knob-unit': ST.change(() => { H.knob(id).unit = v.trim(); }, live ? L : { setup: true }); break;
+      case 'col-label': ST.change(() => relabel('col', id, v), L); break;
+      case 'col-unit': ST.change(() => { H.col(id).unit = v.trim(); }, L); break;
+      case 'col-type': ST.change(m => {
+        const c = H.col(id);
+        m.rows.forEach(r => { const x = r.v[id]; r.v[id] = x == null ? null : U.castCell(typeof x === 'boolean' ? (x ? 'yes' : 'no') : x, v); });
+        c.type = v; if (v !== 'number') c.unit = '';
+        m.criteria.filter(x => x.col === id).forEach(x => { const n = newCrit(id); Object.assign(x, { want: n.want, points: n.points, curve: 'even', at: null, tol: null }); });
+      }, { setup: true }); break;
+      case 'col-fx': autoGrow(el); ST.change(() => { H.col(id).formula = v; }, L); el.classList.toggle('bad', !!S.res.issues.find(x => x.where === 'column' && x.id === id)); break;
+      case 'cell': {
+        const col = H.col(el.getAttribute('data-col'));
+        ST.change(() => { const r = S.model.rows.find(x => x.id === id); const t = v.trim(); r.v[col.id] = col.type === 'number' ? (t === '' ? null : (num(t) ?? t)) : (t === '' ? null : v); }, L);
+        el.classList.toggle('bad', col.type === 'number' && v.trim() !== '' && num(v) == null);
+        break;
+      }
+      case 'cell-yn': ST.change(() => { S.model.rows.find(x => x.id === id).v[el.getAttribute('data-col')] = el.checked; }); if (el.nextElementSibling) el.nextElementSibling.textContent = el.checked ? 'yes' : 'no'; break;
+      case 'row-label': ST.change(() => { S.model.rows.find(x => x.id === id).label = v; }, L); break;
+      case 'paste': S.ui.paste = v; R.pastePreview(); break;
+      case 'q': S.ui.q = v; R.setup(); break;
+      case 'sit-label': ST.change(m => { const s = m.scenarios.find(x => x.id === id); if (s) s.label = v; }, L); break;
     }
-    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
-    return rows.filter(r => r.some(c => c.trim() !== ''));
-  }
-  function applyCSV(text) {
-    const t = parseCSV(text.trim());
-    if (t.length < 2 || t[0].length < 2) { H.toast('Need a header line and at least one row, with two or more columns'); return false; }
-    const head = t[0].map(s => s.trim()), body = t.slice(1, 1 + LIMIT.rows);
-    if (t.length - 1 > LIMIT.rows) H.toast('Up to 1000 rows. Extra rows were dropped');
-    const taken = new Set([...S.model.params.map(p => p.id), ...S.model.calcs.map(k => k.id)]);
-    const cols = head.slice(1, 1 + LIMIT.columns).map((hd, j) => {
-      const id = U.uniqueId(hd || 'col', taken); taken.add(id);
-      const vals = body.map(r => (r[j + 1] ?? '').trim()).filter(v => v !== '');
-      const type = vals.length && vals.every(v => isFinite(+v.replace(/,/g, ''))) ? 'number' : vals.length && vals.every(v => /^(true|false)$/i.test(v)) ? 'boolean' : 'category';
-      return { id, label: hd || id, type, unit: '' };
-    });
-    const rows = body.map((r, i) => {
-      const v = {};
-      cols.forEach((c, j) => { const x = (r[j + 1] ?? '').trim(); v[c.id] = x === '' ? null : c.type === 'number' ? +x.replace(/,/g, '') : c.type === 'boolean' ? /^true$/i.test(x) : x; });
-      return { id: 'r' + (i + 1), label: (r[0] || 'Row ' + (i + 1)).trim(), v };
-    });
-    M.commit('Paste CSV', m => {
-      m.columns = cols; m.rows = rows;
-      const ids = new Set(cols.map(c => c.id));
-      const before = m.criteria.length + m.gates.length;
-      m.criteria = m.criteria.filter(c => c.source.kind !== 'column' || ids.has(c.source.column));
-      m.gates = m.gates.filter(g => !g.simple || ids.has(g.simple.column));
-      const dropped = before - m.criteria.length - m.gates.length;
-      if (dropped) setTimeout(() => H.toast(`${dropped} criteria or rules used old columns and were removed`), 50);
-    });
-    return true;
+    if (!live && k !== 'paste' && k !== 'q') ST.settle();
   }
 
-  function validNewId(neu, old) {
-    const m = S.model;
-    if (!U.ID_RE.test(neu)) return 'Ids use a–z, 0–9 and _, and start with a letter';
-    if (M.expr.RESERVED.has(neu)) return `'${neu}' is a reserved word`;
-    const others = [...m.columns.map(c => c.id), ...m.params.map(p => p.id), ...m.calcs.map(k => k.id), ...m.criteria.map(c => c.id)].filter(x => x !== old);
-    if (others.includes(neu)) return `'${neu}' is already used`;
-    return null;
+  function moveStrip(id) {
+    const kn = H.knob(id), el = document.querySelector(`[data-strip="${CSS.escape(id)}"] i`);
+    if (el) el.style.left = ((kn.value - kn.min) / ((kn.max - kn.min) || 1) * 100) + '%';
   }
-  function renameIn(m, old, neu, kind) {
-    m.gates.forEach(g => { g.expr = M.expr.rename(g.expr, old, neu); if (g.simple && g.simple.column === old) g.simple.column = neu; });
-    m.calcs.forEach(k => { k.expr = M.expr.rename(k.expr, old, neu); });
-    m.criteria.forEach(c => {
-      if (c.source.kind === 'expr') c.source.expr = M.expr.rename(c.source.expr, old, neu);
-      else if (kind === 'column' && c.source.kind === 'column' && c.source.column === old) c.source.column = neu;
-      else if (kind === 'calc' && c.source.kind === 'calc' && c.source.calc === old) c.source.calc = neu;
-    });
-    if (kind === 'param') {
-      m.combine.expr = M.expr.rename(m.combine.expr, old, neu);
-      m.stress = m.stress.map(x => x === old ? neu : x);
-      m.scenarios.forEach(s => { if (s.values && old in s.values) { s.values[neu] = s.values[old]; delete s.values[old]; } });
+
+  function autoGrow(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+
+  function ruleEdit(k, id, v) {
+    const m = S.model, r = H.rule(id), p = MD.ruleParts(m, r.formula); if (!p) return;
+    if (k === 'rule-col') {
+      const col = H.col(v); p.col = v; delete p.knob;
+      if (col.type === 'number') { p.op = '<='; const vals = m.rows.map(x => x.v[v]).filter(x => typeof x === 'number'); p.value = vals.length ? Math.max(...vals) : 0; }
+      else if (col.type === 'text') { p.op = '=='; p.value = catsOf(v)[0] || ''; }
+      else { p.op = '=='; p.value = true; }
     }
+    if (k === 'rule-op') p.op = v;
+    if (k === 'rule-src') { if (v) { p.knob = v; } else { delete p.knob; const kn = H.knob(MD.ruleParts(m, r.formula).knob); p.value = kn ? kn.value : 0; } }
+    if (k === 'rule-val') { const col = H.col(p.col); p.value = col.type === 'number' ? (num(v) ?? 0) : col.type === 'yesno' ? v === 'true' : v; }
+    const structural = k !== 'rule-val';
+    ST.change(() => { r.formula = MD.ruleFormula(m, p); }, structural ? { setup: true } : { live: true });
   }
-  const guessLower = s => /wait|cost|load|slip|error|downtime|latency|time|loss|density|util|price|queue|busiest/i.test(s);
 
-  const IN = {
-    'model-name': (m, el) => { m.name = el.value.trim() || 'Untitled model'; },
-    'weight': (m, el) => { m.criteria.find(c => c.id === el.dataset.id).weight = +el.value; },
-    'gate-col': (m, el) => {
-      const g = m.gates.find(x => x.id === el.dataset.id), c = H.col(el.value); if (!c) return false;
-      g.simple = c.type === 'category' ? { column: c.id, op: '==', value: H.distinct(c.id)[0] || '' } : c.type === 'boolean' ? { column: c.id, op: '==', value: 1 } : { column: c.id, op: '<=', value: colMax(c.id) };
-      g.expr = R.gateExpr(g.simple); g.label = c.label + ' rule';
-    },
-    'gate-op': (m, el) => { const g = m.gates.find(x => x.id === el.dataset.id); g.simple.op = el.value; g.expr = R.gateExpr(g.simple); },
-    'gate-val': (m, el) => {
-      const g = m.gates.find(x => x.id === el.dataset.id), c = H.col(g.simple.column);
-      g.simple.value = c.type === 'number' ? num(el.value) : c.type === 'boolean' ? +el.value : el.value;
-      g.expr = R.gateExpr(g.simple);
-    },
-    'param-value': (m, el) => { H.setKnob(m, el.dataset.id, +el.value); },
-    'param-exact': (m, el) => {
-      const v = parseFloat(String(el.value).replace(/,/g, '')); if (!isFinite(v)) return false;
-      H.setKnob(m, el.dataset.id, v);
-    },
-    'param-stress': (m, el) => { const id = el.dataset.id; m.stress = m.stress.filter(x => x !== id); if (el.checked) m.stress.push(id); },
-    'param-group': (m, el) => { m.params.find(p => p.id === el.dataset.id).group = el.value.trim() || 'Knobs'; },
-    'param-unit': (m, el) => { m.params.find(p => p.id === el.dataset.id).unit = el.value.trim(); },
-    'crit-label': (m, el) => { m.criteria.find(c => c.id === el.dataset.id).label = el.value || 'Untitled'; },
-    'crit-source': (m, el) => {
-      const c = m.criteria.find(x => x.id === el.dataset.id);
-      if (el.value === 'expr') { const was = c.source.kind === 'column' ? c.source.column : c.source.kind === 'calc' ? c.source.calc : '0'; c.source = { kind: 'expr', expr: was }; if (c.shape.type === 'map') c.shape.type = 'linear'; return; }
-      c.range = { auto: true, lo: null, hi: null };
-      if (el.value.startsWith('calc:')) { c.source = { kind: 'calc', calc: el.value.slice(5) }; if (c.shape.type === 'map') c.shape.type = 'linear'; return; }
-      const cid = el.value.slice(4), k = H.col(cid);
-      c.source = { kind: 'column', column: cid };
-      if (k.type === 'category') { c.shape.type = 'map'; const mp = {}; [...H.distinct(cid), ...(k.choices || [])].forEach(v => { mp[v] = c.shape.map[v] ?? 0.5; }); c.shape.map = mp; }
-      else if (c.shape.type === 'map') c.shape.type = 'linear';
-    },
-    'crit-missing': (m, el) => { m.criteria.find(c => c.id === el.dataset.id).missing = el.value; },
-    'crit-noise': (m, el) => { m.criteria.find(c => c.id === el.dataset.id).noise = +el.value; },
-    'crit-expr': (m, el) => { m.criteria.find(c => c.id === el.dataset.id).source.expr = el.value; },
-    'shape-param': (m, el) => { m.criteria.find(c => c.id === el.dataset.id).shape[el.dataset.k] = +el.value; },
-    'shape-raw': (m, el) => {
-      const c = m.criteria.find(x => x.id === el.dataset.id), Rg = S.result.ranges[c.id]; if (!Rg || Rg.hi === Rg.lo) return;
-      const span = Rg.hi - Rg.lo, v = num(el.value);
-      if (el.dataset.k === 'width') c.shape.width = U.clamp(v / span, 0.05, 1);
-      else { let t = (v - Rg.lo) / span; if (c.direction === 'lower' && c.shape.type !== 'target') t = 1 - t; c.shape.c = U.clamp(t, 0, 1); }
-    },
-    'range-auto': (m, el) => { const c = m.criteria.find(x => x.id === el.dataset.id), Rg = S.result.ranges[c.id]; c.range.auto = el.checked; if (!el.checked && Rg) { c.range.lo = isFinite(Rg.lo) ? Rg.lo : 0; c.range.hi = isFinite(Rg.hi) ? Rg.hi : 1; } },
-    'range-lo': (m, el) => { m.criteria.find(c => c.id === el.dataset.id).range.lo = num(el.value); },
-    'range-hi': (m, el) => { m.criteria.find(c => c.id === el.dataset.id).range.hi = num(el.value); },
-    'map-val': (m, el) => { m.criteria.find(c => c.id === el.dataset.id).shape.map[el.dataset.cat] = +el.value; },
-    'gate-label': (m, el) => { m.gates.find(g => g.id === el.dataset.id).label = el.value; },
-    'gate-expr': (m, el) => { const g = m.gates.find(x => x.id === el.dataset.id); g.expr = el.value; g.simple = null; },
-    'param-label': (m, el) => { m.params.find(p => p.id === el.dataset.id).label = el.value || 'Knob'; },
-    'param-min': (m, el) => { m.params.find(p => p.id === el.dataset.id).min = num(el.value); },
-    'param-max': (m, el) => { m.params.find(p => p.id === el.dataset.id).max = num(el.value); },
-    'param-step': (m, el) => { const v = num(el.value); m.params.find(p => p.id === el.dataset.id).step = v > 0 ? v : 1; },
-    'param-id': (m, el) => {
-      const old = el.dataset.id, neu = el.value.trim(); if (neu === old) return;
-      const e = validNewId(neu, old); if (e) { H.toast(e); return false; }
-      m.params.find(p => p.id === old).id = neu; renameIn(m, old, neu, 'param');
-      if (S.ui.inspector && S.ui.inspector.id === old) S.ui.inspector.id = neu;
-    },
-    'calc-expr': (m, el) => { m.calcs.find(k => k.id === el.dataset.id).expr = el.value; },
-    'calc-label': (m, el) => { m.calcs.find(k => k.id === el.dataset.id).label = el.value || 'Calculation'; },
-    'calc-unit': (m, el) => { m.calcs.find(k => k.id === el.dataset.id).unit = el.value.trim(); },
-    'calc-group': (m, el) => { m.calcs.find(k => k.id === el.dataset.id).group = el.value.trim(); },
-    'calc-format': (m, el) => { m.calcs.find(k => k.id === el.dataset.id).format = el.value; },
-    'calc-pin': (m, el) => { m.calcs.find(k => k.id === el.dataset.id).pin = el.checked; },
-    'calc-id': (m, el) => {
-      const old = el.dataset.id, neu = el.value.trim(); if (neu === old) return;
-      const e = validNewId(neu, old); if (e) { H.toast(e); return false; }
-      m.calcs.find(k => k.id === old).id = neu; renameIn(m, old, neu, 'calc');
-      if (S.ui.inspector && S.ui.inspector.id === old) S.ui.inspector.id = neu;
-    },
-
-    'combine-expr': (m, el) => { m.combine.expr = el.value; },
-    'cell': (m, el) => {
-      const r = m.rows.find(x => x.id === el.dataset.id), c = m.columns.find(x => x.id === el.dataset.col), s = el.value.trim();
-      r.v[c.id] = s === '' ? null : c.type === 'number' ? (isFinite(+s.replace(/,/g, '')) ? +s.replace(/,/g, '') : null) : c.type === 'boolean' ? /^(true|yes|1|y)$/i.test(s) : s;
-      if (c.type === 'number' && s !== '' && r.v[c.id] === null) setTimeout(() => H.toast('That is not a number, so the cell is now empty'), 30);
-    },
-    'row-label': (m, el) => { m.rows.find(x => x.id === el.dataset.id).label = el.value.trim() || 'Untitled'; },
-    'col-label': (m, el) => { m.columns.find(x => x.id === el.dataset.id).label = el.value.trim() || el.dataset.id; },
-    'col-unit': (m, el) => { m.columns.find(x => x.id === el.dataset.id).unit = el.value.trim(); },
-    'col-id': (m, el) => {
-      const old = el.dataset.id, neu = el.value.trim(); if (neu === old) return;
-      const e = validNewId(neu, old); if (e) { H.toast(e); return false; }
-      m.columns.find(c => c.id === old).id = neu;
-      m.rows.forEach(r => { r.v[neu] = r.v[old]; delete r.v[old]; });
-      renameIn(m, old, neu, 'column');
-    },
-    'col-type': (m, el) => {
-      const c = m.columns.find(x => x.id === el.dataset.id), t = el.value; c.type = t; if (t !== 'category') delete c.choices;
-      m.rows.forEach(r => { const v = r.v[c.id]; if (v === null || v === undefined) return; r.v[c.id] = t === 'number' ? (isFinite(+v) ? +v : null) : t === 'boolean' ? /^(true|yes|1)$/i.test(String(v)) : String(v); });
-      m.criteria.forEach(k => {
-        if (k.source.kind !== 'column' || k.source.column !== c.id) return;
-        if (t === 'category') { k.shape.type = 'map'; const mp = {}; H.distinct(c.id).forEach(v => { mp[v] = 0.5; }); k.shape.map = mp; } else if (k.shape.type === 'map') k.shape.type = 'linear';
-      });
-      m.gates.forEach(g => { if (g.simple && g.simple.column === c.id) { g.simple = t === 'category' ? { column: c.id, op: '==', value: '' } : t === 'boolean' ? { column: c.id, op: '==', value: 1 } : { column: c.id, op: '<=', value: 0 }; g.expr = R.gateExpr(g.simple); } });
-    }
-  };
-  const COMMIT_ONLY = new Set(['cell', 'row-label', 'col-label', 'col-id', 'col-unit', 'param-id', 'col-type', 'crit-source', 'range-auto', 'gate-col', 'gate-op',
-    'param-exact', 'param-group', 'param-unit', 'calc-label', 'calc-unit', 'calc-group', 'calc-id', 'param-label', 'param-min', 'param-max', 'param-step']);
-
-  function blockLive() {
-    const b = S.ui.block && M.blocks.get(S.ui.block.id); if (!b) return;
-    const built = M.blocks.build(b, S.ui.block.vals), taken = H.taken().has(S.ui.block.outId);
-    const pv = document.querySelector('.formula-preview'); if (pv) pv.textContent = `${S.ui.block.outId} = ${built.expr}`;
-    const btn = document.querySelector('[data-action="add-block"]'); if (btn) btn.disabled = !built.ok || taken;
+  function insertText(txt) {
+    const el = lastFx && document.querySelector(`[data-fk="${CSS.escape(lastFx)}"]`);
+    if (!el) { ST.toast('Click into a formula first'); return; }
+    const a = el.selectionStart ?? el.value.length, b = el.selectionEnd ?? a;
+    const before = el.value.slice(0, a), pad = before && !/[\s([,]$/.test(before) && !txt.endsWith('(') ? ' ' : '';
+    el.value = before + pad + txt + el.value.slice(b);
+    const pos = a + pad.length + txt.length;
+    el.focus(); el.setSelectionRange(pos, pos);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
   }
-  document.addEventListener('input', e => {
-    const el = e.target, k = el.dataset && el.dataset.in;
-    if (k === 'block-in') { S.ui.block.vals[el.dataset.k] = el.value; blockLive(); return; }
-    if (k === 'block-label') { S.ui.block.label = el.value; return; }
-    if (k === 'block-id') { S.ui.block.outId = el.value.trim(); blockLive(); return; }
-    if (k === 'knob-q') { S.ui.knobQ = el.value; M.store.frame(); return; }
-    if (!k || !IN[k]) return;
-    if (el.tagName === 'SELECT' || el.type === 'checkbox' || COMMIT_ONLY.has(k)) return;
-    if (el.type === 'range') el.style.setProperty('--pct', ((el.value - el.min) / ((el.max - el.min) || 1) * 100) + '%');
-    if (k === 'model-name') return;
-    M.peek(null);
-    M.preview(m => IN[k](m, el));
-  });
-  document.addEventListener('change', e => {
-    const el = e.target, k = el.dataset && el.dataset.in;
-    if (k === 'block-id' || k === 'block-in') { R.all(); return; }
-    if (k === 'knob-q') return;
-    if (!k || !IN[k]) return;
-    if (el.tagName === 'SELECT' || el.type === 'checkbox' || COMMIT_ONLY.has(k) || k === 'model-name') M.commit(k, m => IN[k](m, el));
-    else { M.preview(m => IN[k](m, el)); M.endGesture(); }
-  });
-  document.addEventListener('toggle', e => { if (e.target.id === 'out-details') S.ui.outOpen = e.target.open; }, true);
 
-  const scenPeek = id => {
-    const live = (S.live || []).find(x => !x.now && x.id === id);
-    if (id === '') return { key: 's:', id: '', label: 'Baseline', values: H.scenValues(null), res: live && live.res };
-    const s = H.scen(id); if (!s) return null;
-    return { key: 's:' + id, id, label: s.label, values: H.scenValues(s), res: live && live.res };
-  };
-  let peekT = null, peekEl = null;
-  const canHover = e => e.pointerType === 'mouse' && !M.inGesture();
-  document.addEventListener('pointerover', e => {
-    if (!canHover(e)) return;
-    const el = e.target.closest('[data-peek]'); if (!el || el === peekEl) return;
-    peekEl = el; clearTimeout(peekT);
-    const id = el.dataset.peek, act = S.model.active || '';
-    if (id === act && !H.diffs().length) { M.peek(null); return; }
-    peekT = setTimeout(() => { const p = scenPeek(id); if (p) M.peek(p); }, S.peek ? 30 : 140);
-  });
-  document.addEventListener('pointerout', e => {
-    const el = e.target.closest('[data-peek]'); if (!el || (e.relatedTarget && el.contains(e.relatedTarget))) return;
-    const to = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('[data-peek]');
-    if (to) return;
-    peekEl = null; clearTimeout(peekT); peekT = setTimeout(() => M.peek(null), 60);
-  });
-
-  function scrubInfo(e) {
-    const sp = e.target.closest('[data-spark],[data-curve]'); if (!sp) return null;
-    const id = sp.dataset.spark || sp.dataset.curve, p = H.param(id); if (!p) return null;
-    const r = sp.getBoundingClientRect();
-    let lo = +p.min, hi = +p.max, x0 = r.left, w = r.width;
-    if (sp.dataset.curve) {
-      const W = +sp.dataset.w, k = r.width / W; lo = +sp.dataset.lo; hi = +sp.dataset.hi;
-      x0 = r.left + +sp.dataset.pl * k; w = r.width - (+sp.dataset.pl + +sp.dataset.pr) * k;
-    } else if (S.knobs[id]) { lo = S.knobs[id].lo; hi = S.knobs[id].hi; }
-    else if (S.impact && S.impact.byId[id]) { lo = S.impact.byId[id].lo; hi = S.impact.byId[id].hi; }
-    const t = U.clamp((e.clientX - x0) / (w || 1), 0, 1), st = +p.step || 1;
-    let v = lo + t * (hi - lo); v = +(Math.round(v / st) * st).toFixed(6); v = U.clamp(v, lo, hi);
-    return { p, v, el: sp };
+  function goTo(kind, id) {
+    const map = { tab: [id, null], criterion: ['matters', 'crit:' + id], rule: ['rules', 'rule:' + id], column: ['formulas', 'col:' + id], knob: ['formulas', 'knob:' + id] };
+    const [tab, g] = map[kind] || [];
+    if (!tab) return;
+    if (kind === 'criterion') exp()['c:' + id] = true;
+    S.ui.tab = tab; S.ui.pane = 'build'; R.pane(); R.setup();
+    if (g) requestAnimationFrame(() => { const el = document.querySelector(`[data-g="${CSS.escape(g)}"]`); if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1400); } });
   }
-  let scrubQ = null, scrubF = false;
-  document.addEventListener('pointermove', e => {
-    if (e.pointerType !== 'mouse' || M.inGesture()) return;
-    const s = scrubInfo(e);
-    if (!s) { if (S.peek && String(S.peek.key).startsWith('k:')) M.peek(null); return; }
-    scrubQ = s; if (scrubF) return; scrubF = true;
-    requestAnimationFrame(() => {
-      scrubF = false; const q = scrubQ; if (!q) return;
-      const P = Object.assign({}, S.result.P, { [q.p.id]: q.v });
-      M.peek({ key: 'k:' + q.p.id + ':' + q.v, id: null, label: `${q.p.label} = ${U.fmtN(q.v)}${q.p.unit ? ' ' + q.p.unit : ''}`, values: P });
-    });
-  });
-  document.documentElement.addEventListener('pointerleave', () => { M.peek(null); });
-  document.addEventListener('click', e => {
-    const s = scrubInfo(e); if (!s) return;
-    M.peek(null);
-    M.commit('Set knob', m => { H.setKnob(m, s.p.id, s.v); });
-  });
-
-  document.addEventListener('keydown', e => {
-    const el = e.target;
-    if (!el.dataset || el.dataset.in !== 'param-exact' || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
-    e.preventDefault();
-    const p = H.param(el.dataset.id); if (!p) return;
-    const st = (+p.step || 1) * (e.shiftKey ? 10 : 1), v = +((+p.value + (e.key === 'ArrowUp' ? st : -st)).toFixed(6));
-    el.value = U.fmtN(v);
-    M.preview(m => { H.setKnob(m, p.id, v); });
-    clearTimeout(el._t); el._t = setTimeout(() => M.endGesture(), 450);
-  });
 
   function download(name, text, type) {
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name;
-    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type }));
+    a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
   }
-  async function copy(text, msg) { try { await navigator.clipboard.writeText(text); H.toast(msg || 'Copied'); } catch (e) { H.toast('Copy failed. Select the text and copy it by hand'); } }
-  function ui(fn) { fn(S.ui); R.all(); }
-  function newCritFor(m) {
-    const used = new Set(m.criteria.filter(c => c.source.kind === 'column').map(c => c.source.column));
-    const taken = new Set([...m.criteria.map(c => c.id), ...m.params.map(p => p.id), ...m.calcs.map(k => k.id)]);
-    const pick = m.columns.find(c => c.type === 'number' && !used.has(c.id)) || m.columns.find(c => !used.has(c.id));
-    if (!pick) return null;
-    const id = U.uniqueId('c_' + pick.id, taken);
-    const shape = { type: 'linear', k: 2, a: 10, c: 0.5, width: 0.2, map: {} };
-    if (pick.type === 'category') { shape.type = 'map'; H.distinct(pick.id).forEach(v => { shape.map[v] = 0.5; }); }
-    return { id, label: pick.label, enabled: true, weight: 20, source: { kind: 'column', column: pick.id }, direction: 'higher', range: { auto: true, lo: null, hi: null }, shape, missing: 'worst', noise: 0 };
+  const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'ranking';
+  async function copy(text, ok) {
+    try { await navigator.clipboard.writeText(text); ST.toast(ok); }
+    catch (e) { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); ST.toast(ok); } catch (x) { ST.toast('Copy failed'); } t.remove(); }
   }
-  const allIds = () => new Set([...S.model.columns.map(c => c.id), ...S.model.params.map(p => p.id), ...S.model.calcs.map(k => k.id), ...S.model.criteria.map(c => c.id)]);
 
-  const A = {
-    'set-view': el => ui(u => { u.view = el.dataset.v; }),
-    'set-pane': el => ui(u => { u.pane = el.dataset.v; }),
-    'toggle-open': el => ui(u => { u.open[el.dataset.key] = el.getAttribute('aria-expanded') !== 'true'; }),
-    'toggle-advanced': () => { S.ui.advanced = !S.ui.advanced; M.store.save(); R.all(); M.store.runAnalysis(); },
-    'undo': () => M.undo(), 'redo': () => M.redo(),
-    'open-export': () => ui(u => { u.modal = 'export'; }),
-    'open-gallery': () => ui(u => { u.modal = 'gallery'; }),
-    'open-blocks': () => ui(u => { u.modal = 'blocks'; u.block = null; }),
-    'close-modal': () => ui(u => { u.modal = null; u.block = null; }),
-    'scrim': (el, id, e) => { if (e.target === el) ui(u => { u.modal = null; u.block = null; }); },
-    'export-tab': el => ui(u => { u.exportTab = el.dataset.v; }),
-    'copy-export': () => copy(R.exportText(S.ui.exportTab)),
-    'download-export': () => {
-      const t = S.ui.exportTab, ext = { json: 'json', js: 'js', formula: 'txt', csv: 'csv' }[t];
-      download(U.slug(S.model.name) + '.' + ext, R.exportText(t), { json: 'application/json', js: 'text/javascript', formula: 'text/plain', csv: 'text/csv' }[t]);
+  function closeModal() { S.ui.modal = null; S.ui.fresh = false; R.modal(); }
+
+  const ACT = {
+    tab: v => { S.ui.tab = v; S.ui.colSel = null; R.setup(); ST.save(); if (S.ui.guide != null) M.guide.refresh(); },
+    pane: v => { S.ui.pane = v; R.pane(); window.scrollTo(0, 0); },
+    method: v => ST.change(m => { m.method = v; }, { setup: true }),
+    'crit-on': (v, id) => ST.change(() => { const c = H.crit(id); c.on = !c.on; }, { setup: true }),
+    'crit-del': (v, id) => { const name = R.critName(H.crit(id)); ST.change(m => { m.criteria = m.criteria.filter(c => c.id !== id); }, { setup: true }); ST.toast(`Removed ${name}. Ctrl+Z brings it back`); },
+    want: (v, id) => ST.change(() => { const c = H.crit(id); c.want = v; c.at = null; }, { setup: true }),
+    exp: v => { exp()[v] = !exp()[v]; R.setup(); },
+    grp: (v, id, el) => { const cur = v in exp() ? exp()[v] : el.getAttribute('data-d') === '1'; exp()[v] = !cur; R.setup(); },
+    sit: (v, id) => {
+      const m = S.model, vals = id === 'base' ? {} : (m.scenarios.find(s => s.id === id) || {}).values || {};
+      ST.change(mm => { mm.knobs.forEach(k => { k.value = vals[k.id] ?? mm.base[k.id] ?? k.value; }); }, { setup: true });
+      R.situations();
     },
-    'import-json': () => document.getElementById('import-file').click(),
-    'share-link': () => {
-      const url = location.href.split('#')[0] + '#m=' + M.store.b64enc(JSON.stringify(S.model));
-      if (url.length > 8000) H.toast('This link is very long and may not open everywhere. Export JSON instead');
-      copy(url, 'Share link copied');
+    'sit-save': () => {
+      const m = S.model; if (m.scenarios.length >= H.LIMIT.scenarios) return ST.toast('Up to 24 situations');
+      const vals = {}; m.knobs.forEach(k => { if (Math.abs(k.value - m.base[k.id]) > 1e-9) vals[k.id] = k.value; });
+      const first = Object.keys(vals)[0], kn = first && H.knob(first);
+      const label = kn ? `${kn.label} ${U.withUnit(vals[first], kn.unit)}` : 'New situation';
+      const id = U.uid('s', m.scenarios);
+      ST.change(mm => { mm.scenarios.push({ id, label, values: vals }); });
+      R.situations(); focusLater('[data-fk="sitl"]'); ST.toast('Saved. Give it a name');
     },
-    'load-template': async (el, id) => {
-      const t = M.templates.list.find(x => x.id === id);
-      const ok = await M.ui.confirm({ title: `Load “${t.label}”?`, body: 'This replaces the current model. You can undo it.', ok: 'Load template' });
-      if (ok) { S.ui.modal = null; M.store.replaceModel(M.templates.get(id)); H.toastUndo(`Loaded ${t.label}`); }
+    'sit-base': () => { ST.change(m => { m.knobs.forEach(k => { m.base[k.id] = k.value; }); }); R.situations(); ST.toast('These settings are the new baseline'); },
+    'sit-del': (v, id) => { ST.change(m => { m.scenarios = m.scenarios.filter(s => s.id !== id); }); R.situations(); ST.toast('Situation removed. Ctrl+Z brings it back'); },
+    curve: (v, id) => ST.change(() => { const c = H.crit(id); c.curve = v; if (v === 'target') { const r = S.res.ranges[id]; c.at = c.at ?? +((r.lo + r.hi) / 2).toPrecision(3); c.tol = c.tol ?? +(Math.max((r.hi - r.lo) / 2, 1)).toPrecision(3); } if (v === 'enough') { const r = S.res.ranges[id]; c.at = +(r.lo + (r.hi - r.lo) * (c.want === 'less' ? 0.3 : 0.7)).toPrecision(3); } }, { setup: true }),
+    'range-fix': (v, id) => ST.change(() => { const c = H.crit(id), r = S.res.ranges[id]; c.range = { auto: false, lo: r.lo, hi: r.hi }; }, { setup: true }),
+    'range-auto': (v, id) => ST.change(() => { H.crit(id).range = { auto: true, lo: null, hi: null }; }, { setup: true }),
+    'add-crit': (v, id) => { if (S.model.criteria.length >= H.LIMIT.criteria) return ST.toast('Up to 8 things can matter'); ST.change(m => { m.criteria.push(newCrit(id)); }); S.ui.tab = 'matters'; R.setup(); },
+    'new-col-crit': () => {
+      if (S.model.columns.length >= H.LIMIT.columns) return ST.toast('Up to 80 columns');
+      const id = U.toId('New column', H.taken());
+      ST.change(m => { m.columns.push({ id, label: 'New column', type: 'number', unit: '', formula: '' }); m.criteria.push(MD.crit(id, id, 5)); });
+      S.ui.tab = 'options'; R.setup(); focusLater(`[data-fk="h-${id}"]`); ST.toast('Name the column and fill in a value for each option');
     },
-    'pick-block': (el, id) => {
-      if (!id) return ui(u => { u.block = null; });
-      const b = M.blocks.get(id), names = H.names().map(n => n.id), vals = {};
-      b.inputs.forEach(inp => { vals[inp.key] = M.blocks.guessFor(inp, names); });
-      ui(u => { u.block = { id, vals, label: b.out.label, outId: U.uniqueId(b.out.id, allIds()) }; });
+    'rule-add': () => {
+      const m = S.model, id = U.uid('g', m.rules), col = m.columns.find(c => c.type === 'number' && !c.formula) || m.columns[0];
+      let f = '';
+      if (col) { const p = { col: col.id, op: col.type === 'number' ? '<=' : '==', value: col.type === 'number' ? Math.max(0, ...m.rows.map(r => r.v[col.id]).filter(x => typeof x === 'number')) : col.type === 'yesno' ? true : (catsOf(col.id)[0] || '') }; f = MD.ruleFormula(m, p); }
+      ST.change(mm => { mm.rules.push({ id, label: '', formula: f, on: true }); }, { setup: true });
+      focusLater(`[data-fk="rl-${id}"]`);
     },
-    'add-block': () => {
-      const st = S.ui.block, b = M.blocks.get(st.id), built = M.blocks.build(b, st.vals);
-      if (S.model.calcs.length >= LIMIT.calcs) return H.toast('Up to 60 calculations');
-      const e = validNewId(st.outId, null); if (e) return H.toast(e);
-      M.commit('Add block', m => { m.calcs.push({ id: st.outId, label: st.label || b.out.label, expr: built.expr, unit: b.out.unit, format: b.out.format, group: b.group, pin: false, note: b.line }); });
-      ui(u => { u.modal = null; u.block = null; u.inspector = { kind: 'calc', id: st.outId }; u.open['c:' + b.group] = true; });
-      H.toastUndo(`Added ${st.label || b.out.label}`);
+    'rule-on': (v, id) => ST.change(() => { const r = H.rule(id); r.on = !r.on; }, { setup: true }),
+    'rule-del': (v, id) => { ST.change(m => { m.rules = m.rules.filter(r => r.id !== id); }, { setup: true }); ST.toast('Must-have removed. Ctrl+Z brings it back'); },
+    'rule-mode': (v, id) => { exp()['rf:' + id] = !exp()['rf:' + id]; R.setup(); if (exp()['rf:' + id]) focusLater(`[data-fk="rf-${id}"]`); },
+    'knob-add': () => {
+      if (S.model.knobs.length >= H.LIMIT.knobs) return ST.toast('Up to 80 settings');
+      const label = 'Setting ' + (S.model.knobs.length + 1), id = U.toId(label, H.taken());
+      ST.change(m => { m.knobs.push({ id, label, value: 50, min: 0, max: 100, step: 1, unit: '', note: '' }); }, { setup: true });
+      exp()['k:' + id] = true; R.setup(); focusLater(`[data-fk="kl-${id}"]`);
     },
-    'add-calc': () => {
-      if (S.model.calcs.length >= LIMIT.calcs) return H.toast('Up to 60 calculations');
-      const id = U.uniqueId('calc', allIds());
-      const first = S.model.params[0] || S.model.columns.find(c => c.type === 'number');
-      M.commit('Add calculation', m => { m.calcs.push({ id, label: 'New calculation', expr: first ? first.id + ' * 1' : '1', unit: '', format: 'num', group: '', pin: false, note: '' }); });
-      ui(u => { u.inspector = { kind: 'calc', id }; });
+    'knob-del': (v, id) => { ST.change(m => { m.knobs = m.knobs.filter(k => k.id !== id); }, { setup: true }); ST.toast('Setting removed. Ctrl+Z brings it back'); },
+    'calc-add': () => {
+      if (S.model.columns.length >= H.LIMIT.columns) return ST.toast('Up to 80 columns');
+      const label = 'New result', id = U.toId(label, H.taken());
+      const base = S.model.columns.find(c => c.type === 'number') || null;
+      const seed = base ? MD.nameRef(S.model, base.id) + ' * 1' : '1';
+      ST.change(m => { m.columns.push({ id, label, type: 'number', unit: '', formula: seed }); }, { setup: true });
+      focusLater(`[data-fk="cf-${id}"]`);
     },
-    'remove-calc': (el, id) => {
-      const k = H.calc(id), users = [...S.model.calcs.map(x => x.expr), ...S.model.gates.map(g => g.expr), ...S.model.criteria.filter(c => c.source.kind === 'expr').map(c => c.source.expr)].filter(s => M.expr.idents(s).some(t => t.name === id)).length
-        + S.model.criteria.filter(c => c.source.kind === 'calc' && c.source.calc === id).length;
-      M.commit('Remove calculation', m => { m.calcs = m.calcs.filter(x => x.id !== id); });
-      H.toastUndo(users ? `Removed ${k.label}. ${users} item${users > 1 ? 's' : ''} now show an error` : `Removed ${k.label}`);
+    'col-del': (v, id) => { const l = H.col(id).label; ST.change(m => { m.columns = m.columns.filter(c => c.id !== id); m.criteria = m.criteria.filter(c => c.col !== id); m.rows.forEach(r => { delete r.v[id]; }); }, { setup: true }); S.ui.colSel = null; ST.toast(`Removed ${l}. Ctrl+Z brings it back`); },
+    insert: v => insertText(v),
+    'row-add': () => {
+      if (S.model.rows.length >= H.LIMIT.rows) return ST.toast('Up to 500 options');
+      const id = U.uid('r', S.model.rows);
+      ST.change(m => { const v0 = {}; m.columns.forEach(c => { if (!c.formula) v0[c.id] = c.type === 'yesno' ? false : null; }); m.rows.push({ id, label: 'Option ' + (m.rows.length + 1), v: v0 }); }, { setup: true });
+      focusLater(`[data-fk="rl-${id}"]`);
     },
-    'criterion-from-calc': (el, id) => {
-      if (S.model.criteria.length >= LIMIT.criteria) return H.toast('Up to 8 criteria');
-      const k = H.calc(id), cid = U.uniqueId('c_' + id, allIds());
-      M.commit('Criterion from calc', m => { m.criteria.push({ id: cid, label: k.label, enabled: true, weight: 20, source: { kind: 'calc', calc: id }, direction: guessLower(k.label) ? 'lower' : 'higher', range: { auto: true, lo: null, hi: null }, shape: { type: 'linear', k: 2, a: 10, c: 0.5, width: 0.2, map: {} }, missing: 'worst', noise: 0 }); });
-      ui(u => { u.inspector = { kind: 'criterion', id: cid }; });
+    'col-add': () => {
+      if (S.model.columns.length >= H.LIMIT.columns) return ST.toast('Up to 80 columns');
+      const label = 'Column ' + (S.model.columns.length + 1), id = U.toId(label, H.taken());
+      ST.change(m => { m.columns.push({ id, label, type: 'number', unit: '', formula: '' }); m.rows.forEach(r => { r.v[id] = null; }); }, { setup: true });
+      focusLater(`[data-fk="h-${id}"]`);
     },
-    'rule-from-calc': (el, id) => {
-      if (S.model.gates.length >= LIMIT.gates) return H.toast('Up to 12 rules');
-      const k = H.calc(id), fr = H.focusRow(), v = fr && S.result.byId[fr].calc[id] ? S.result.byId[fr].calc[id].v : 0;
-      const lower = guessLower(k.label), val = typeof v === 'number' && isFinite(v) ? +v.toPrecision(3) : 1;
-      const ids = new Set(S.model.gates.map(g => g.id)); let n = 1; while (ids.has('g' + n)) n++;
-      M.commit('Rule from calc', m => { m.gates.push({ id: 'g' + n, label: k.label + (lower ? ' low enough' : ' high enough'), expr: `${id} ${lower ? '<=' : '>='} ${val}`, enabled: true, simple: null }); });
-      ui(u => { u.inspector = { kind: 'gate', id: 'g' + n }; });
+    'col-menu': (v, id) => { S.ui.colSel = S.ui.colSel === id ? null : id; R.setup(); },
+    'row-del': (v, id) => { const l = (S.model.rows.find(r => r.id === id) || {}).label; ST.change(m => { m.rows = m.rows.filter(r => r.id !== id); }, { setup: true }); ST.toast(`Removed ${l}. Ctrl+Z brings it back`); },
+    select: (v, id) => { S.ui.sel = id; S.prev = null; R.results(); R.live(); if (window.matchMedia('(max-width: 900px)').matches) requestAnimationFrame(() => { const w = document.getElementById('why'); if (w) w.scrollIntoView({ block: 'start', behavior: 'smooth' }); }); },
+    try: (v, id, el) => { ST.change(m => { m.rows.find(r => r.id === id).v[el.getAttribute('data-col')] = +(+v).toPrecision(4); }, { setup: true }); ST.toast('Changed. Ctrl+Z to go back'); },
+    go: (v, id, el) => goTo(el.getAttribute('data-kind'), id),
+    'all-checks': () => { S.ui.allChecks = true; R.checks(); },
+    'open-start': () => { S.ui.modal = 'start'; R.modal(); },
+    'guide-start': () => M.guide.go(0),
+    'guide-go': v => M.guide.go(+v),
+    'guide-end': () => M.guide.end(),
+    undo: () => ST.undo(), redo: () => ST.redo(),
+    'open-export': () => { S.ui.modal = 'export'; R.modal(); },
+    'close-modal': () => closeModal(),
+    'load-ex': (v, id) => { closeModal(); ST.load(M.examples.get(id)); },
+    'load-blank': () => { closeModal(); ST.load(M.examples.blank(), { guide: false, tab: 'options' }); },
+    'open-paste': v => { S.ui.pasteMode = v === 'rows' ? 'rows' : 'new'; S.ui.paste = ''; S.ui.modal = 'paste'; R.modal(); },
+    'paste-mode': v => { S.ui.pasteMode = v; const t = document.getElementById('paste-in'); S.ui.paste = t ? t.value : S.ui.paste; R.modal(); },
+    'paste-go': () => {
+      const rows = U.parseTable(S.ui.paste); if (rows.length < 2) return;
+      const m = R.fromTable(rows, S.ui.pasteMode);
+      closeModal(); ST.load(m, { guide: false, tab: S.ui.pasteMode === 'rows' ? 'options' : 'matters' });
+      ST.toast(S.ui.pasteMode === 'rows' ? 'Options replaced' : 'Table loaded. Set how much each column matters');
     },
-    'add-criterion': () => {
-      if (S.model.criteria.length >= LIMIT.criteria) return H.toast('Up to 8 criteria');
-      const c = newCritFor(S.model); if (!c) return H.toast(S.model.columns.length ? 'Every column is already used. Add a column in Data' : 'Add a column in Data first');
-      M.commit('Add criterion', m => { m.criteria.push(c); }); ui(u => { u.inspector = { kind: 'criterion', id: c.id }; });
-    },
-    'remove-criterion': (el, id) => { const c = H.crit(id); M.commit('Remove criterion', m => { m.criteria = m.criteria.filter(x => x.id !== id); }); H.toastUndo(`Removed ${c.label}`); },
-    'toggle-criterion': (el, id) => M.commit('Toggle criterion', m => { const c = m.criteria.find(x => x.id === id); c.enabled = !c.enabled; }),
-    'add-gate': () => {
-      const m = S.model; if (m.gates.length >= LIMIT.gates) return H.toast('Up to 12 rules');
-      const ids = new Set(m.gates.map(g => g.id)); let n = 1; while (ids.has('g' + n)) n++;
-      const c = m.columns.find(x => x.type === 'number') || m.columns[0];
-      if (!c) { const k = m.calcs[0]; if (!k) return H.toast('Add a column in Data first'); M.commit('Add rule', mm => { mm.gates.push({ id: 'g' + n, label: 'New rule', expr: `${k.id} > 0`, enabled: true, simple: null }); }); return; }
-      const simple = c.type === 'number' ? { column: c.id, op: '<=', value: colMax(c.id) } : c.type === 'boolean' ? { column: c.id, op: '==', value: 1 } : { column: c.id, op: '==', value: H.distinct(c.id)[0] || '' };
-      M.commit('Add rule', mm => { mm.gates.push({ id: 'g' + n, label: c.label + ' rule', expr: R.gateExpr(simple), enabled: true, simple }); });
-    },
-    'remove-gate': (el, id) => { const g = H.gate(id); M.commit('Remove rule', m => { m.gates = m.gates.filter(x => x.id !== id); }); H.toastUndo(`Removed ${g.label || 'rule'}`); },
-    'toggle-gate': (el, id) => M.commit('Toggle rule', m => { const g = m.gates.find(x => x.id === id); g.enabled = !g.enabled; }),
-    'add-param': () => {
-      const m = S.model; if (m.params.length >= LIMIT.params) return H.toast('Up to 60 knobs');
-      const id = U.uniqueId('k', allIds());
-      M.commit('Add knob', mm => { mm.params.push({ id, label: 'New knob', value: 1, min: 0, max: 10, step: 0.1, group: 'Knobs', unit: '', help: '' }); });
-      ui(u => { u.inspector = { kind: 'param', id }; });
-    },
-    'remove-param': (el, id) => {
-      const p = H.param(id), users = [...S.model.gates.map(g => g.expr), ...S.model.calcs.map(k => k.expr), ...S.model.criteria.filter(c => c.source.kind === 'expr').map(c => c.source.expr), S.model.combine.expr].filter(s => M.expr.idents(s).some(t => t.name === id)).length;
-      M.commit('Remove knob', m => { m.params = m.params.filter(x => x.id !== id); m.stress = m.stress.filter(x => x !== id); });
-      H.toastUndo(users ? `Removed ${p.label}. ${users} formula${users > 1 ? 's' : ''} now show an error` : `Removed ${p.label}`);
-    },
-    'add-scenario': () => A['scen-new'](),
-    'scen-new': () => {
-      const m = S.model; if (m.scenarios.length >= LIMIT.scenarios) return H.toast(`Up to ${LIMIT.scenarios} scenarios`);
-      const ids = new Set(m.scenarios.map(s => s.id)); let n = 1; while (ids.has('s' + n)) n++;
-      const id = 's' + n, values = H.overrides(m), label = Object.keys(values).length ? H.draftLabel(m) : 'Scenario ' + n;
-      M.peek(null);
-      M.commit('New scenario', mm => { mm.scenarios.push({ id, label, values }); mm.active = id; });
-      ui(u => { u.inspector = { kind: 'scenario', id }; });
-      H.toastUndo(Object.keys(values).length ? `Saved “${label}”` : 'New scenario. Move knobs, then Update');
-    },
-    'draft-new': () => A['scen-new'](),
-    'draft-save': () => {
-      const a = H.active();
-      M.commit('Save knobs', m => { H.saveDraft(m); });
-      H.toastUndo(a ? `Updated ${a.label}` : 'Baseline updated');
-    },
-    'draft-discard': () => { M.peek(null); M.commit('Discard changes', m => { H.useScenario(m, m.active); }); H.toastUndo('Changes discarded'); },
-    'use-scen': (el, id) => {
-      id = id || ''; M.peek(null);
-      const cur = S.model.active || '', lost = H.diffs().length;
-      if (id === cur && !lost) { if (id) ui(u => { u.inspector = { kind: 'scenario', id }; }); return; }
-      const s = id ? H.scen(id) : null;
-      M.commit('Use scenario', m => { H.useScenario(m, id || null); });
-      if (lost) H.toastUndo(id !== cur ? `Switched to ${s ? s.label : 'Baseline'}. Unsaved knob changes were dropped` : 'Changes discarded');
-    },
-    'apply-scenario': (el, id) => A['use-scen'](el, id),
-    'remove-scenario': (el, id) => {
-      const s = H.scen(id);
-      M.commit('Remove scenario', m => { m.scenarios = m.scenarios.filter(x => x.id !== id); if (m.active === id) H.useScenario(m, null); });
-      H.toastUndo(`Removed ${s.label}`);
-    },
-    'knob-reset': (el, id) => { const p = H.param(id); if (!p) return; M.commit('Reset knob', m => { H.setKnob(m, id, H.target(m.params.find(x => x.id === id), m)); }); },
-    'knob-step': el => { const p = H.param(el.dataset.id); if (!p) return; const v = +((+p.value + (+el.dataset.d) * (+p.step || 1)).toFixed(6)); M.commit('Step knob', m => { H.setKnob(m, p.id, v); }); },
-    'knob-sort': el => ui(u => { u.knobSort = el.dataset.v; }),
-    'set-tab': el => ui(u => { u.tab = el.dataset.v; u.pane = 'recipe'; }),
-    'set-cmp': el => { S.ui.cmp = el.dataset.v; M.store.save(); R.all(); },
-    'toggle-ui': el => ui(u => { u[el.dataset.k] = !u[el.dataset.k]; }),
-    'insert': el => {
-      const ta = document.getElementById(el.dataset.t); if (!ta) return;
-      const v = el.dataset.v, a = ta.selectionStart ?? ta.value.length, b = ta.selectionEnd ?? a;
-      const pre = ta.value.slice(0, a), post = ta.value.slice(b);
-      const pad = pre && !/[\s(,]$/.test(pre) ? ' ' : '';
-      ta.value = pre + pad + v + (v.endsWith('(') ? ')' : '') + post;
-      const at = (pre + pad + v).length; ta.focus(); ta.setSelectionRange(at, at);
-      const d = el.closest('details'); if (d) d.open = false;
-      ta.dispatchEvent(new Event('input', { bubbles: true }));
-      ta.dispatchEvent(new Event('change', { bubbles: true }));
-    },
-    'open': el => ui(u => { u.inspector = { kind: el.dataset.kind, id: el.dataset.id }; }),
-    'close-inspector': () => ui(u => { if (u.inspector && u.inspector.kind === 'row') u.selectedRow = null; u.inspector = null; }),
-    'select-row': (el, id) => ui(u => { if (u.selectedRow === id && u.inspector && u.inspector.kind === 'row') { u.selectedRow = null; u.inspector = null; } else { u.selectedRow = id; u.inspector = { kind: 'row', id }; } }),
-    'set-combine': el => {
-      const v = el.dataset.v;
-      M.commit('Combine', m => {
-        m.combine.type = v;
-        if (v === 'custom' && !m.combine.expr) m.combine.expr = m.criteria.filter(c => c.enabled).map(c => `w_${c.id} * ${c.id}`).join(' + ') || '0';
-      });
-      if (v === 'custom') ui(u => { u.inspector = { kind: 'combine', id: 'combine' }; });
-    },
-    'set-shape': (el, id) => M.commit('Shape', m => { m.criteria.find(x => x.id === id).shape.type = el.dataset.v; }),
-    'set-direction': (el, id) => M.commit('Direction', m => { m.criteria.find(x => x.id === id).direction = el.dataset.v; }),
-    'add-row': () => {
-      const m = S.model; if (m.rows.length >= LIMIT.rows) return H.toast('Up to 1000 rows');
-      const ids = new Set(m.rows.map(r => r.id)); let n = m.rows.length + 1; while (ids.has('r' + n)) n++;
-      M.commit('Add row', mm => { const v = {}; mm.columns.forEach(c => { v[c.id] = c.choices ? c.choices[0] : null; }); mm.rows.push({ id: 'r' + n, label: 'New option', v }); });
-    },
-    'remove-row': (el, id) => { const r = S.model.rows.find(x => x.id === id); M.commit('Remove row', m => { m.rows = m.rows.filter(x => x.id !== id); }); H.toastUndo(`Removed ${r ? r.label : 'row'}`); },
-    'add-column': () => {
-      const m = S.model; if (m.columns.length >= LIMIT.columns) return H.toast('Up to 24 columns');
-      const id = U.uniqueId('col', allIds());
-      M.commit('Add column', mm => { mm.columns.push({ id, label: 'New column', type: 'number', unit: '' }); mm.rows.forEach(r => { r.v[id] = null; }); });
-    },
-    'remove-column': async (el, id) => {
-      const m = S.model, c = H.col(id), deps = m.criteria.filter(k => k.source.kind === 'column' && k.source.column === id).length + m.gates.filter(g => g.simple && g.simple.column === id).length;
-      if (deps && !(await M.ui.confirm({ title: `Remove “${c.label}”?`, body: `${deps} ${deps > 1 ? 'criteria or rules use' : 'criterion or rule uses'} this column and will be removed with it. You can undo this.`, ok: 'Remove column', danger: true }))) return;
-      setTimeout(() => H.toastUndo(`Removed ${c.label}`), 0);
-      M.commit('Remove column', mm => {
-        mm.columns = mm.columns.filter(x => x.id !== id); mm.rows.forEach(r => { delete r.v[id]; });
-        mm.criteria = mm.criteria.filter(x => !(x.source.kind === 'column' && x.source.column === id));
-        mm.gates = mm.gates.filter(g => !(g.simple && g.simple.column === id));
-      });
-    },
-    'paste-csv': () => ui(u => { u.modal = 'csv'; }),
-    'toast-undo': () => { M.undo(); H.dropToast(); },
-    'csv-apply': () => { const t = document.getElementById('csv-text').value; if (applyCSV(t)) ui(u => { u.modal = null; }); }
+    'exp-tab': v => { S.ui.exportTab = v; R.modal(); },
+    'copy-exp': () => copy(R.exportText().text, 'Copied'),
+    'dl-exp': () => { const x = R.exportText(); download(slug(S.model.name) + '.' + x.ext, x.text, x.ext === 'json' ? 'application/json' : 'text/plain'); },
+    'share-link': () => copy(location.origin + location.pathname + '#m=' + U.b64e(JSON.stringify(S.model)), 'Link copied. Anyone with it sees this ranking'),
+    import: () => document.getElementById('import-file').click()
   };
+
+  document.addEventListener('input', onInput);
+  document.addEventListener('change', e => { if (e.target.matches('[data-in]')) onInput(e); });
+  document.addEventListener('focusin', e => { if (e.target.matches && e.target.matches('.fx-in')) lastFx = e.target.getAttribute('data-fk'); });
+  document.addEventListener('mousedown', e => { if (e.target.closest('[data-act="insert"]')) e.preventDefault(); });
   document.addEventListener('click', e => {
-    const el = e.target.closest('[data-action]');
-    if (!el || el.disabled) return;
-    const f = A[el.dataset.action]; if (f) f(el, el.dataset.id, e);
+    const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
+    const f = ACT[el.getAttribute('data-act')]; if (!f) return;
+    e.preventDefault();
+    f(el.getAttribute('data-v'), el.getAttribute('data-id'), el);
   });
   document.addEventListener('keydown', e => {
-    const tgt = e.target, typing = tgt.matches && tgt.matches('input[type=text],input[type=number],textarea');
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); e.shiftKey ? M.redo() : M.undo(); }
-    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); M.redo(); }
-    else if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === '[' || e.key === ']') && S.model.params.length) {
+    const t = e.target, typing = t && (t.tagName === 'INPUT' && t.type !== 'range' && t.type !== 'checkbox' || t.tagName === 'TEXTAREA');
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); if (e.shiftKey) ST.redo(); else ST.undo(); return; }
+    if (e.key === 'Escape') { if (S.ui.modal && !S.ui.fresh) closeModal(); else if (S.ui.modal) closeModal(); else if (S.ui.colSel) { S.ui.colSel = null; R.setup(); } return; }
+    if (e.key === 'Enter' && t && t.matches && t.matches('input.cell')) {
       e.preventDefault();
-      const ids = [''].concat(S.model.scenarios.map(s => s.id)), i = ids.indexOf(S.model.active || '');
-      A['use-scen'](null, ids[(i + (e.key === ']' ? 1 : -1) + ids.length) % ids.length]);
-    }
-    else if (e.key === 'Escape') {
-      if (M.ui.isListOpen() || document.querySelector('#dialog-root .scrim')) return;
-      if (S.peek) { M.peek(null); return; }
-      if (S.ui.modal) ui(u => { u.modal = null; u.block = null; if (u.finder) { u.finder.busy = false; u.finder.progress = null; } });
-      else if (S.ui.inspector) A['close-inspector']();
+      const td = t.closest('td, th'), tr = td.parentElement, idx = [...tr.children].indexOf(td);
+      const nx = (e.shiftKey ? tr.previousElementSibling : tr.nextElementSibling);
+      const tgt = nx && nx.children[idx] && nx.children[idx].querySelector('input');
+      if (tgt) { tgt.focus(); tgt.select(); } else t.blur();
     }
   });
+  document.getElementById('import-file').addEventListener('change', e => {
+    const f = e.target.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      const txt = String(rd.result);
+      try { const m = JSON.parse(txt); if (!m.columns || !m.rows) throw new Error('x'); closeModal(); ST.load(m, { guide: false }); ST.toast('Opened ' + f.name); }
+      catch (x) { const rows = U.parseTable(txt); if (rows.length >= 2) { closeModal(); ST.load(R.fromTable(rows, 'new'), { guide: false }); ST.toast('Table loaded from ' + f.name); } else ST.toast('That file is not a ranking or a table'); }
+      e.target.value = '';
+    };
+    rd.readAsText(f);
+  });
+  window.addEventListener('hashchange', () => { if (/#m=/.test(location.hash)) location.reload(); });
 
-  function boot() {
-    const f = document.getElementById('import-file');
-    f.addEventListener('change', async () => {
-      const file = f.files[0]; f.value = ''; if (!file) return;
-      try { const m = JSON.parse(await file.text()); if (!M.store.isModel(m)) throw 0; M.store.replaceModel(m); ui(u => { u.modal = null; }); H.toast('Model imported'); }
-      catch (err) { H.toast("That file isn't a Meridian model"); }
-    });
-    M.store.boot();
-  }
-  M.app = { boot, applyCSV, parseCSV, actions: A };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  M.app = { ACT, insertText, goTo };
+  R.pane();
+  ST.boot();
+  document.querySelectorAll('textarea.fx-in').forEach(autoGrow);
+  const mo = new MutationObserver(() => document.querySelectorAll('textarea.fx-in').forEach(el => { if (!el.dataset.g) { el.dataset.g = 1; autoGrow(el); } }));
+  mo.observe(document.getElementById('setup'), { childList: true, subtree: true });
 })(window.M);

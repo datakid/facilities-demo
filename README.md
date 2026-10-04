@@ -1,115 +1,92 @@
-# Meridian Studio
+# Meridian Studio — v4
 
-A workbench for building **equations you can trust**: planning and ranking models made from knobs, step-by-step calculations, rules and weighted criteria. Every number can be traced, and an honesty check says where the model is weak instead of calling it "perfect".
+**Rank anything, and know why.** You build your own ranking: list your options, pick what matters, say how much and which way is better, and add must-haves and formulas if you need them. Every score breaks down into the points behind it, and a plain-language "Can I trust this?" panel says where the ranking is fragile.
+
+## What it is about (the v4 answer)
+Earlier versions were a box of equations: queues, staffing and capacity, all shown at once. v4 starts from one job that everyone has: **I have options and I need to pick one, for reasons I can explain.** Equations still matter, but they are now a tool you reach for, not where you start:
 
 ```
-Knobs        the situation: arrivals/hour, users, pressure, budget …
-Calculations k₁ = f(knobs, columns), k₂ = g(k₁, …) …   (queues, capacity, cost …)
-Score(row)   = Rules(row) × Combine( s₁…sₙ , w₁…wₙ ) × 100
-sᵢ           = Shape( Direction( Normalize( column | calculation | expression ) ) )
+Options      the rows: laptops, flats, staffing plans, architectures …
+What matters columns you score on, each with an importance (0–10) and a direction
+Must-haves   rules that rule an option out before scoring
+Formulas     worked-out columns, like a spreadsheet: [Rent] / [Size], wait(…), pick(…)
+Settings     numbers that apply to every option: budget, order size, patients per hour
+Situations   saved settings (calm morning, viral month) with the winner in each
 ```
+Score = Σ importance share × points (0–10), out of 100. A Balanced method penalises weak spots.
 
-## What changed in v2
-- **Knobs** (old "parameters"), grouped and always visible: sliders with units and help text.
-- **Calculations layer**: named formulas evaluated in order per option. Each one can use knobs, columns and earlier calculations. Rules and criteria can use them too. Click one to see the values plugged in.
-- **Formula blocks**: 26 ready-made pieces in 6 groups (Queues, Staffing, Capacity, Reliability, Crowds, Money). Inputs are guessed from the names already in the model.
-- **Queue maths built in**: `erlangc`, `wait` (M/M/c), `within` (service level), `runway`, `avail`, plus `pick`, `sum`, `avg`, `ceil`, `floor`, `log2`.
-- **Scenarios**: saved knob settings, each re-scored, with the winner shown per scenario ("Calm morning → …, Evening peak → …").
-- **Stress test**: sweeps a knob from min to max and shows who wins along the way. The honesty check warns when you are close to a switch point.
-- **Key figures**: pinned calculations shown as cards and on each ranking row.
-- New rounded, low-chroma design (same hue-300 palette). Mobile gets a Setup/Results switch and a bottom-sheet inspector.
-- The code is split into small files with no comments, as requested.
+## Done in v4
+- **Four tabs in plain words**: What matters · Must-haves · Formulas · Options. A ranking that updates live sits beside them.
+- **What matters**: an importance slider (Ignore … Crucial) with its real % share, More/Less is better, five curves (every bit counts, first steps count most, only the top end counts, good enough is enough, sweet spot) with a live chart that shows every option as a dot. Text columns get points per answer.
+- **Must-haves**: a simple builder (column / at most / value or setting). You can switch to a formula. Each rule says which options it rules out.
+- **Formulas that forgive**: `×` `÷` `−` `≤` `≥` `≠`, `=` for equals, `and/or/not`, `15%`, names with spaces in `[brackets]`, case-insensitive. Errors are human: "I don't know 'pirce'. Did you mean Price?", with the bad part highlighted. Each formula shows itself **worked out for one option with the real numbers plugged in**. Click-to-insert name chips; a built-in function guide. Circular formulas are caught. Renaming a column rewrites every formula.
+- **Functions**: if, min, max, sum, avg, abs, round, floor, ceil, sqrt, log/ln, log2, log10, exp, pow, clamp, **pick** (lookup), **wait / within / erlangc** (M/M/c queues), **runway**, **avail**.
+- **Settings**: a slider plus a typed value, groups that fold for big models, a filter box, and a **who-wins strip** under every setting showing switch points ("$1,350: Borealis 14 takes over").
+- **Situations**: chips with the winner of each. Click one to apply it; change a setting to get "Save as situation" or "Make baseline"; a summary says whether one option wins everywhere.
+- **Why panel**: value → points of 10 → share → points added for any option, the worked-out formulas for that option, and **what it would take** to win or lose first place (click to try it; Ctrl+Z undoes).
+- **Can I trust this?**: close calls, sensitivity to one importance ("set Battery to 3 and Borealis wins"), one-trick winners, options that can never win, two criteria saying the same thing, blanks, broken formulas, and settings near a switch point, each with a **Show me** link.
+- **Options table**: type over values (`$1,299`, `12 kg` understood), yes/no checkboxes, text suggestions, Enter moves down, worked-out cells fill in. Paste from Excel, Sheets or CSV: types and units are detected and "less is better" is guessed from names like price, time and distance.
+- **Guided tours**: every example has a 4–7 step tour that switches tab, spotlights the right card and gives one "Try it" task.
+- **Save & share**: autosave, a share link (`#m=`), and export as a plain-text summary, spreadsheet CSV, JavaScript (tested to give the same scores as the app) or a JSON file. Open file loads JSON or CSV.
+- **Design**: milky lavender-white, one brand hue (300) at low chroma, soft criterion tints, Fraunces italic for titles, mono numbers. A new light favicon (`favicon.svg`).
+- **Responsive**: Build/Ranking switch on phones. The ranking panel uses container queries, so rows reflow (name on top, bar below) whenever the panel is narrow. This fixes the clipped "Borea…" names. Situation chips wrap on phones.
 
-## v2.1: Plan finder, day plan, scenario builder
-- **Plan finder** (`js/core/plan.js` → `generate`). Tick the columns to vary and list the values to try; every combination becomes a candidate row. Candidates are scored with the full equation (calculations, rules, criteria) on the current knobs, on every scenario, or on every hour of the day, and ranked by **average** or **worst case**. Duplicates of existing rows are skipped. The finder compares its best result with your best current option, and **Add** puts found plans into the data. There are hard limits of 4,096 combinations and 60,000 option-runs, and the estimate is shown before you run. Pharmacy: all 625 role splits × 14 hours take about 0.7 s.
-- **Day plan** (`model.day`). One knob changes by hour (typed in or filled from a shape: flat, morning, midday, evening, two peaks). A second knob can follow it (for example, pressure 0.1 → 0.85 from the quietest hour to the busiest). The strip shows the best option per hour and when to switch; it only switches for a gain above a threshold (3 points by default) so near-ties don't flicker. It also names the single plan that holds up best all day. Click an hour to apply its knobs. **As scenarios** turns the hours into scenarios.
-- **Scenario builder**. Pick up to 3 knobs × value lists; every combination becomes a scenario (keep or replace existing ones, limit 24). Each scenario opens in the inspector, where you can rename it, edit or remove its knob values, set more knobs, duplicate it, apply it or remove it.
-- Architecture: one pure core module (`plan.js`: generate, grid, shape, day, judge) and one UI module (`app/plan.js`). They plug into small registries (`R.modals`, `R.inspectors`, `M.app.actions`), so no existing module grew beyond a hook.
-
-## v2.2: Step-by-step search, queue carry-over, speed
-- **Step-by-step search** (`plan.generate`, method `search`). Used automatically when a space is too big to try in full (over 4,096 combinations or 60,000 option-runs), or when forced with *Always search*. It starts from each of your options, then from random plans and small changes to the best plan found so far. From each start it checks every one-column change and moves to the best one while the score improves. Scores use fixed normalisation ranges taken from a sample, so every candidate is scored on the same scale. Ties are broken by passes, then the raw score, then a smaller backlog. Budget: 240,000 option-runs or 4 s. Results say how many plans were checked and from how many starts. Checks: 8 columns × 10 values (100 million combinations) finds the exact best; forcing search on the pharmacy matches the full search.
-- **Runs off the main thread** (`js/core/plan-worker.js`). The finder runs in a Web Worker with a live progress bar and the best plan so far. The worker is started when the finder opens. It falls back to the main thread when workers aren't available (for example on `file://`).
-- **Queue carry-over** (`model.day.carry = { knob, calc }`). The value of a calculation at the end of one hour becomes a knob in the next, separately for each option. Pharmacy: `left` (people still waiting = arrivals × wait, or the excess when overloaded) goes into `backlog`, which adds to the next hour's patients. The day strip shows the carried queue as red stripes and reports the queue at closing. The finder and the day summary judge whole-day plans with the carry-over included, so a plan that lets the line build up is penalised in later hours.
-- **Speed**: parsed formulas are cached; the model is compiled once per search, day, stress test or scenario set; `pick()` no longer creates closures. The full 625 × 14-hour pharmacy search takes about 0.46 s in the engine.
-
-## v3: Live equations, scenarios you switch between, no page refresh
-- **No DOM refresh.** `js/dom.js` patches the page in place: it only touches nodes that changed and matches rows by `data-key`. The slider you are dragging, the element with focus, open `<details>` and scroll position all survive. Updates are batched into one per animation frame (`M.store.frame`). Checked by `ui-check.html`: about 33 ms per drag step on the pharmacy.
-- **Robustness checks run off the main thread** (`js/core/analysis.js`, `js/core/analysis-worker.js`): honesty check, weight sweeps, stress tests, scenarios, day plan and impact. Falls back to the main thread on `file://`. The weight sweep reuses per-criterion scores (`engine.sweepFast`), which is much faster and gives the same results (tested).
-- **Scenario workflow.** Each knob has a `base` value; scenarios store only the knobs that differ from the baseline, and `model.active` is the scenario in use.
-  - The scenario bar is a row of chips: Baseline, each scenario (coloured by its leader), and + New. Click a chip to use it; `[` and `]` step through them.
-  - Hover a chip, a matrix column or a sparkline to **preview** without changing anything (a dark "Previewing" banner appears).
-  - Moving any knob creates a **draft**: "N knobs off baseline" with **Update / Set as baseline**, **Save as new** (auto-named, e.g. "Patients per hour 44 /h") and **Discard**.
-  - The **scenario matrix** shows every option × scenario, plus an unsaved "Now" column, the leader highlighted, and worst · avg with the safest all-round plan.
-  - The grid builder has low · base · high / min · max / 5 steps presets and previews each resulting scenario's leader.
-- **Knobs.** Type an exact value inline (↑/↓ steps it, Shift for ×10), reset button, a baseline tick and orange tipping-point ticks on the track, and an impact bar ("±12, leader changes at 34"). Search and order-by-impact appear when a model has more than 8 knobs.
-- **Live equation.** Under the equation, a breakdown for the selected option shows, per criterion, input → 0–1 score → share → points, with change badges. The badges compare against your last edit, the baseline/scenario, or nothing (Δ vs switch). The ranking shows ▲/▼ rank moves and score changes; key figures and calculations show changes in green or red depending on whether the change helps.
-- **What moves the needle:** each knob swept from min to max, sorted by how much it swings the leader's score. Each row has a sparkline (red where someone else leads) and the point where the leader flips. Hover a sparkline to preview a value, click to set it.
-- **Inspector.** Formulas are shown with the current value next to each name. Insert menus for knobs, calculations, columns and functions. Calculations list **what drives them** (each knob's effect from its min to its max). Each knob shows a response curve for the top options (click to set) and what it feeds into.
-- Setup is split into **Situation** (scenarios + knobs) and **Equation** (calculations, rules, criteria, combine) tabs. A flow line (knobs → calculations → rules → criteria → score) sits above them.
-
-## Built-in templates
-| Template | What it models |
+## Examples (11, all with guides)
+| Everyday | Teaches |
 |---|---|
-| **Pharmacy staffing** (default) | 4 staff: Maya (manager), Omar, Lina and Sam (part-time). Each has their own speed and accuracy, normally and in a rush, plus share of the day and days per week. There are **three tasks**: filling at a window, typing missed-item prescriptions, and **recording**. Each task is either done at the window (multitasking: extra minutes per patient, a switching cost, extra slips) or by a dedicated person. Also covered: people vs windows (3 on 2 ≠ 3 on 3, via "value of an extra person"), manager overhead, a surge knob and an M/M/c queue. Nine staffing plans are ranked on wait, on-time share, slips, load on the busiest station, and the manager's free time. Six scenarios, including peak + surprise and Lina off / Sam off. |
-| **News feed backend** | Server type (VM, containers, bare metal, serverless), app nodes, cache (none, Memcached, Redis, DAX), database (Postgres, Cassandra, DynamoDB), read replicas, shards, feed build (pull, push, hybrid fan-out), backup interval and regions. Knobs cover daily users, the read/write mix, peak factor, followers, growth, required runway, data-loss limit and budget. The model finds what runs out first, the growth runway, availability, downtime, latency and cost. |
-| **Event crowd control** | Gates × lanes queue, screening time, exit width → clearance time, density, steward cover. Safety rules come first, comfort and cost second. |
-| **Coffee shop rush** | A two-step queue (register, then bar). The smallest example. |
-| Care routing, Pick a laptop, Choose a job offer, Prioritize features, Blank | Kept from v1. Care routing still gives Sarema General = 79.3. |
+| Pick a laptop (default) | importance, direction, sweet spot, must-haves, a budget setting |
+| Find a flat | balanced vs add-up, "good enough" commute, points per neighbourhood |
+| Choose a job offer | worked-out columns (real hourly pay), text points |
+| Prioritise features | RICE as a formula, squashing big numbers |
 
-### Pharmacy equation, in short
-```
-presence_i  = share_of_day_i × days_i / days_open
-speed_i     = speed_i × (1 − pressure × (1 − kept_in_rush_i)) × presence_i  [× (1 − manager_load) for the manager]
-jug         = (typing not dedicated) + (recording not dedicated)
-min/patient = fill + [q_miss × type if not dedicated] + [record if not dedicated] + jug × switch
-useful      = window speed, reduced if people > windows: × (windows + help × extra) / people
-μ           = 60 / min_per_patient × useful / windows_in_use
-wait        = M/M/c wait(arrivals × (1 + surge), μ, windows_in_use)
-back load   = arrivals × (q_miss × type + record) / 60 ÷ back-office speed
-slips       = window errors + jug × juggling error + missed-item typing errors
-```
-
-## Honesty check
-Covers errors, unbounded queues, missing data, rules that couldn't be checked, ties, fragile weights, knob switch points, the winner by scenario, weight-free win share, uncertainty, rank reversal, dead or duplicate criteria and dominance.
+| Planning | Teaches |
+|---|---|
+| Pharmacy staffing plan | 4 people × 5 roles, 39 settings in groups, 40+ chained formulas, M/M/c queue, 6 situations |
+| News feed backend | capacity and bottleneck, pick(), text results, runway, availability, 5 situations |
+| Event crowd control | safety must-haves first, gate queues, 4 situations |
+| Coffee shop rush | two-step queue, the bottleneck as a word |
+| Care routing | yes/no service rules, distance decay; Sarema General = 79.3, as in the original demo |
+| Staff a shop shift | chained queue formulas with if() |
+| Choose a supplier | a setting that flips the winner |
 
 ## Entry points
 | Path | Purpose |
 |---|---|
-| `index.html` | The app |
-| `index.html#m=<base64url JSON>` | Opens a shared model |
-| `tests.html` | 94 engine tests (v3 adds fast sweep = full sweep, impact, drivers, baseline-relative scenarios, knob curve) (search, carry-over, worker, compile reuse, plus): queue maths, calculations, templates, plan finder, day plan, scenario grid, codegen = engine for laptop, pharmacy and feed |
-| `ui-check.html` | 49 UI checks (v3: no DOM replacement while dragging, frame time, draft/save/discard, preview, active scenario updates) driving the real app, including finder timing, forced search and carry-over (results go to the console) |
+| `index.html` | The app. A first visit shows the example picker |
+| `index.html#m=<base64url JSON>` | Opens a shared ranking |
+| `index.html#ex=<id>` | Opens an example (`laptop, flat, job, rice, supplier, shift, pharmacy, feed, venue, cafe, care`); add `&view=ranking` to open on the ranking, or `&tour` to start its guided tour |
+| `tests.html` | 166 engine tests: parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
+| `ui-check.html` | 46 checks driving the real app (results go to the console), including drag speed on the pharmacy |
+| `preview-ranking.html` | Opens an example without the start screen, for layout checks (set `data-ex` / `data-view` on `<html>`) |
 
 ## Files
 ```
 css/style.css
-js/core/expr.js       parser, evaluator, queue functions, JS runtime for export
-js/core/shapes.js     shape functions
-js/core/engine.js     compute (calcs → rules → criteria → combine), sweeps, scenarios, trace
-js/core/honesty.js    honesty report, "what would change first place"
-js/core/codegen.js    JSON / JS / formula / CSV export
-js/core/blocks.js     formula block library
-js/core/plan.js       plan finder (full and step-by-step), scenario grid, day shapes, day timeline with carry-over
-js/core/plan-worker.js  Web Worker wrapper for the finder
-js/core/analysis.js   impact (what moves the needle), knob curves, calc drivers, full analysis run
-js/core/analysis-worker.js  Web Worker wrapper for the analysis
-js/dom.js             in-place DOM patcher (keyed, keeps focus and live inputs)
-js/templates/*.js     pharmacy, news feed, crowd control, coffee shop
-js/templates.js       registry + classic templates
-js/ui.js              themed dropdowns, confirm dialog
-js/app/*.js           store, render, recipe, result, inspector, views, events
-docs/                 original spec, demo and rubric
+favicon.svg
+js/core/util.js      escaping, number/unit parsing, table parsing, fuzzy suggestions
+js/core/formula.js   tokenizer, parser, binder (names → ids, suggestions), evaluator, queue maths, printer, JS output
+js/core/model.js     model shape, curves, name resolution, simple-rule ↔ formula
+js/core/engine.js    compute (formulas → must-haves → points → score), overrides, sweeps, situations, what-it-takes, trace
+js/core/insights.js  verdict and trust checks
+js/core/export.js    summary, CSV, JavaScript, JSON
+js/examples.js       everyday examples + guides
+js/examples-ops.js   planning examples (ported from v3) + guides
+js/app/*.js          store, render, setup (tabs), results, modals, guide, events
+js/tests/*.js        engine tests, UI checks, helpers
 ```
 
 ## Data model
-One JSON model: `version, name, note, active (scenario id or null), columns (optional choices), rows, params (knobs, each with value and base), calcs, gates, criteria, combine, scenarios, stress, day {knob, start, values[], link {knob, lo, hi}, sticky, carry {knob, calc}}`. It is saved in `localStorage['meridian.studio.v2']`. No server and no table API are used.
+One JSON model, saved in `localStorage['meridian.studio.v4']`:
+`name, question, about, method (add|balanced), columns[{id,label,type number|yesno|text,unit,formula,group,pct,choices}], rows[{id,label,v}], knobs[{id,label,value,min,max,step,unit,group,note}], base{knobId:value}, scenarios[{id,label,values}], rules[{id,label,formula,on}], criteria[{id,col,on,weight 0–10,want more|less,curve,at,tol,points,range}], guide{level,teaches,steps[]}`.
+No server and no table API are used.
 
 ## Not done yet
-- Within each hour the queue is still steady state (M/M/c); only the backlog carries between hours. Minute-by-minute simulation is not modelled.
-- Step-by-step search can miss the best plan in unusual spaces where the best plan can only be reached through worse ones. Results say so.
-- Fitting weights from examples ranked by hand, and comparing two models side by side.
+- Day plans and queue carry-over between hours (v3) are not in v4; situations cover the main use.
+- The plan finder (trying every role split automatically) is not in v4.
+- No fitting of importances from options you rank by hand, and no side-by-side comparison of two rankings.
 
 ## Suggested next steps
-1. Search plans that change by hour (a different role split per hour, with a cost for switching).
-2. Soft rules (a penalty instead of ruling an option out).
-3. A side-by-side model comparison.
+1. "Find the best option": generate combinations of column values (the old plan finder), using the new engine's overrides.
+2. A matrix of every option × every situation, with "safest all-round" picked out.
+3. Learn importances from a few pairs the user compares ("I'd pick A over B").
+4. Soft must-haves: a penalty instead of ruling an option out.

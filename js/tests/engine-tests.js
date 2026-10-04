@@ -1,0 +1,170 @@
+(function (M) {
+  'use strict';
+  const out = [];
+  const ok = (name, pass, detail) => out.push({ name, pass: !!pass, detail: detail == null ? '' : String(detail) });
+  const near = (a, b, e) => Math.abs(a - b) <= (e ?? 1e-6);
+  const F = M.formula;
+  const ev = (src, scope, names) => {
+    const p = F.parse(src); if (p.error) return 'ERR:' + p.error.msg;
+    const env = { resolve: n => (names || Object.keys(scope || {})).find(k => k.toLowerCase() === n.toLowerCase()) ?? null, suggest: () => names || Object.keys(scope || {}) };
+    const b = F.bind(p.ast, env); if (b.error) return 'ERR:' + b.error.msg;
+    try { return F.evaluate(p.ast, scope || {}); } catch (e) { return 'ERR:' + e.message; }
+  };
+
+  ok('1 + 2 × 3 = 7', ev('1 + 2 × 3') === 7);
+  ok('2^3^2 = 512', ev('2^3^2') === 512);
+  ok('-2^2 = -4', ev('-2^2') === -4);
+  ok('15% = 0.15', near(ev('15%'), 0.15));
+  ok('10 % 3 = 1 (modulo)', ev('10 % 3') === 1);
+  ok('÷ and − symbols', ev('10 ÷ 4 − 1') === 1.5);
+  ok('= means equals', ev('2 = 2') === 1 && ev('2 = 3') === 0);
+  ok('≤ ≥ ≠', ev('2 ≤ 3') === 1 && ev('3 ≥ 4') === 0 && ev('2 ≠ 3') === 1);
+  ok('and / or / not words', ev('1 < 2 and not (3 < 2)') === 1 && ev('0 or 0') === 0);
+  ok('yes / no constants', ev('yes and not no') === 1);
+  ok('if()', ev('if(1 > 2, 5, 6)') === 6);
+  ok('min max sum avg', ev('min(3,1,2)') === 1 && ev('max(3,1)') === 3 && ev('sum(1,2,3)') === 6 && ev('avg(2,4)') === 3);
+  ok('round with digits', ev('round(3.14159, 2)') === 3.14);
+  ok('clamp', ev('clamp(5, 0, 3)') === 3);
+  ok('text compare is case-insensitive', ev('a = "quiet"', { a: 'Quiet' }) === 1);
+  ok('bracket names', ev('[unit price] * 2', { 'unit price': 3 }) === 6);
+  ok('unknown name suggests', /Did you mean price/.test(ev('pirce * 2', { price: 1 })), ev('pirce * 2', { price: 1 }));
+  ok('unknown function suggests', /Did you mean round/.test(ev('roud(2)')), ev('roud(2)'));
+  ok('wrong arg count explains', /clamp needs 3 values/.test(ev('clamp(1, 2)')));
+  ok('missing ) explains', /closing \)/.test(ev('min(1, 2')), ev('min(1, 2'));
+  ok('dangling operator explains', /stops too early/.test(ev('1 +')));
+  ok('two values without operator explains', /Something is missing/.test(ev('2 3')), ev('2 3'));
+  ok('text in maths explains', /is text/.test(ev('a * 2', { a: 'x' })));
+  ok('division by zero', /Division by zero/.test(ev('1 / 0')));
+  ok('error position points at bad char', F.parse('1 + $').error.pos === 4);
+  ok('print round-trips', F.print(F.parse('(a + b) * c').ast, n => n) === '(a + b) * c');
+  ok('print keeps right-assoc minus', F.print(F.parse('a - (b - c)').ast, n => n) === 'a - (b - c)');
+
+  const U = M.util;
+  ok('parseNum handles $1,299', U.parseNum('$1,299') === 1299);
+  ok('parseNum handles 12 kg', U.parseNum('12 kg') === 12);
+  ok('parseNum handles 15%', U.parseNum('15%') === 15);
+  ok('detectType yes/no', U.detectType(['yes', 'no', 'Yes']) === 'yesno');
+  ok('detectUnit from header', U.detectUnit('Price ($)', ['1']) === '$');
+  ok('detectUnit from values', U.detectUnit('Weight', ['1.2 kg', '2 kg']) === 'kg');
+  ok('parseTable tab', U.parseTable('a\tb\n1\t2').length === 2 && U.parseTable('a\tb\n1\t2')[1][1] === '2');
+  ok('parseTable quoted comma', U.parseTable('a,b\n"x, y",2')[1][0] === 'x, y');
+  ok('toId avoids reserved', U.toId('min') === 'min_');
+  ok('guessDir price → less', U.guessDir('Price') === 'less' && U.guessDir('Battery') === 'more');
+
+  const E = M.engine;
+  M.examples.forEach(ex => {
+    const m = M.examples.get(ex.id);
+    const r = E.compute(m);
+    ok(`${m.name}: no formula issues`, !r.issues.length, r.issues.map(i => i.msg).join('; '));
+    ok(`${m.name}: ranks options`, r.ranked.length >= 2, r.ranked.length);
+    ok(`${m.name}: shares add to 100%`, near(Object.values(r.share).reduce((a, b) => a + b, 0), 1));
+    ok(`${m.name}: scores in 0..100`, r.rows.every(x => x.score >= 0 && x.score <= 100));
+    ok(`${m.name}: every computed value finite`, r.rows.every(x => Object.keys(x.errs).length === 0), r.rows.filter(x => Object.keys(x.errs).length).map(x => x.label + ':' + JSON.stringify(x.errs)).join(' '));
+    ok(`${m.name}: has a guide`, m.guide && m.guide.steps.length >= 3);
+    const ins = M.insights.build(m, r);
+    ok(`${m.name}: checks run`, Array.isArray(ins.items));
+    const code = M.exporter.js(m, r);
+    const fn = code.replace('export function score', 'return function score').replace(/^\/\/.*\n/, '');
+    let same = false, why = '';
+    try {
+      const score = (new Function('return (function(){' + fn.replace('return function score', 'return function score') + '})()'))();
+      same = r.rows.every(row => {
+        const raw = Object.assign({}, m.rows.find(x => x.id === row.id).v);
+        const o = score(raw);
+        if (o.pass !== row.pass) { why = row.label + ' pass ' + o.pass; return false; }
+        if (o.pass && !near(o.score, row.score, 1e-6)) { why = row.label + ' ' + o.score + ' vs ' + row.score; return false; }
+        return true;
+      });
+    } catch (e) { why = e.message; }
+    ok(`${m.name}: exported code = engine`, same, why);
+  });
+
+  const lap = M.examples.get('laptop');
+  let r = E.compute(lap);
+  ok('laptop: Ember 15 ruled out by memory', r.out.includes('r5'));
+  ok('laptop: Cirrus 16 ruled out by budget', r.out.includes('r3'));
+  ok('laptop: Dune 14 Pro ruled out by budget', r.out.includes('r4'));
+  ok('laptop: lead has a driver', r.lead && r.lead.driver);
+  const lap2 = E.withModel(lap, m => { m.knobs[0].value = 2000; });
+  ok('laptop: raising budget lets Dune in', E.compute(lap2).ranked.includes('r4'));
+  const sw = E.knobSweep(lap, 'budget', 20);
+  ok('laptop: budget sweep finds switch points', sw.flips.length >= 1, sw.flips.length);
+  const lapW = E.withModel(lap, m => { m.criteria.forEach(c => { c.weight = c.id === 'battery' ? 10 : 0; }); });
+  ok('laptop: only battery matters → Borealis', E.compute(lapW).ranked[0] === 'r2', E.compute(lapW).ranked[0]);
+
+  const sup = M.examples.get('supplier');
+  const small = E.compute(E.withModel(sup, m => { m.knobs[0].value = 500; })).ranked[0];
+  const big = E.compute(E.withModel(sup, m => { m.knobs[0].value = 20000; })).ranked[0];
+  ok('supplier: order size flips the winner', small !== big, small + ' / ' + big);
+  ok('supplier: Delta Fab ruled out (not certified)', E.compute(sup).out.includes('r4'));
+
+  const job = M.examples.get('job');
+  r = E.compute(job);
+  const nw = r.byId.r1;
+  ok('job: commute per year worked out', near(nw.vals.commute_yr, 50 * 2 * 4 * 46 / 60, 1e-9), nw.vals.commute_yr);
+  ok('job: total pay', nw.vals.total === 100000);
+  ok('job: growth text points', near(r.byId.r2.c.growth.s, 1) && near(r.byId.r5.c.growth.s, 0.2));
+  ok('job: remote good-enough at 3 days', near(r.byId.r5.c.remote.s, 1) && near(r.byId.r4.c.remote.s, 1) && r.byId.r1.c.remote.s < 1);
+
+  const shop = M.examples.get('shift');
+  r = E.compute(shop);
+  ok('shop: 2 tills overloaded is ruled out', r.out.includes('r1'));
+  const rush = E.compute(E.withModel(shop, m => { m.knobs[0].value = 120; }));
+  ok('shop: rush rules out more plans', rush.out.length > r.out.length, rush.out.length + ' vs ' + r.out.length);
+
+  const circ = M.model.normalize({ columns: [{ id: 'a', label: 'A', formula: 'B + 1' }, { id: 'b', label: 'B', formula: 'A + 1' }], rows: [{ id: 'r1', label: 'x', v: {} }], criteria: [] });
+  ok('circular formulas are reported', E.compute(circ).issues.some(i => /circle/.test(i.msg)));
+
+  const flatEx = M.examples.get('flat');
+  const bal = E.compute(flatEx), add = E.compute(E.withModel(flatEx, m => { m.method = 'add'; }));
+  ok('balanced penalises weak spots more than add', bal.byId.r4.score < add.byId.r4.score, bal.byId.r4.score + ' vs ' + add.byId.r4.score);
+  ok('balanced: perfect everywhere = 100', near(M.util.clamp((Math.exp(0) - 0.1) / 0.9, 0, 1), 1));
+
+  const t = M.model.normalize({ columns: [{ id: 'x', label: 'X' }], rows: [{ id: 'a', label: 'A', v: { x: 10 } }, { id: 'b', label: 'B', v: { x: 14 } }, { id: 'c', label: 'C', v: { x: 20 } }], criteria: [{ id: 'x', col: 'x', weight: 5, curve: 'target', at: 14, tol: 4 }] });
+  r = E.compute(t);
+  ok('sweet spot: exact = full points', near(r.byId.b.c.x.s, 1));
+  ok('sweet spot: off by tol/… scales', near(r.byId.a.c.x.s, 0) && near(r.byId.c.c.x.s, 0));
+
+  const wit = E.whatItTakes(lap, E.compute(lap), E.compute(lap).ranked[1]);
+  ok('what it takes: finds changes for runner-up', wit.length >= 1, wit.length);
+
+  ok('wait(): M/M/1 at 50% = 1/μ', near(ev('wait(1, 2, 1)'), 0.5));
+  ok('within(): overloaded = 0', ev('within(5, 1, 2, 1)') === 0);
+  ok('pick(): lookup with default', ev('pick(x, "a", 1, "b", 2, 9)', { x: 'B' }) === 2 && ev('pick(x, "a", 1, 9)', { x: 'z' }) === 9);
+  ok('avail(): two 99% copies', near(ev('avail(0.99, 2)'), 0.9999));
+  ok('runway(): headroom 2 at 100%/period = 1', near(ev('runway(2, 1)'), 1));
+
+  const care = M.examples.get('care');
+  r = E.compute(care);
+  ok('care: Sarema General = 79.3 (as in the original demo)', r.byId.sag && Math.abs(r.byId.sag.score - 79.3) < 0.06, r.byId.sag && r.byId.sag.score);
+  ok('care: Sarema General wins', r.ranked[0] === 'sag', r.ranked[0]);
+  const ph = M.examples.get('pharmacy');
+  const t0 = performance.now(); r = E.compute(ph); const dt = performance.now() - t0;
+  ok('pharmacy: computes fast', dt < 60, dt.toFixed(1) + ' ms');
+  ok('pharmacy: some plans pass', r.ranked.length >= 3, r.ranked.length);
+  const sits = E.situations(ph, r.prep);
+  ok('pharmacy: 6 situations scored', sits.length === 6 && sits.every(s => s.winner), sits.map(s => s.winner).join(','));
+  ok('pharmacy: winner changes across the day', new Set(sits.map(s => s.winner)).size >= 2, sits.map(s => s.label + ':' + s.winner).join(' '));
+  const fd = M.examples.get('feed'); r = E.compute(fd);
+  ok('feed: limit is text', typeof r.byId.a1.vals.limit === 'string', r.byId.a1.vals.limit);
+  ok('feed: starter monolith ruled out at today’s traffic', r.out.includes('a1'));
+  const viral = E.situations(fd, r.prep).find(s => s.id === 's3');
+  ok('feed: viral month rules out more', viral.out > r.out.length, viral.out + ' vs ' + r.out.length);
+  const vn = M.examples.get('venue'); r = E.compute(vn);
+  ok('venue: bare minimum unsafe', r.out.includes('v6'));
+  const cf = M.examples.get('cafe'); r = E.compute(cf);
+  ok('cafe: bottleneck named', ['register', 'bar'].includes(r.byId.c1.vals.bottleneck));
+  ok('all 11 examples present', M.examples.length === 11, M.examples.length);
+
+  const parts = M.model.ruleParts(lap, 'Price <= Budget');
+  ok('simple rule parse with setting', parts && parts.col === 'price' && parts.knob === 'budget');
+  ok('simple rule rebuild', M.model.ruleFormula(lap, { col: 'ram', op: '>=', value: 32 }) === 'Memory >= 32');
+
+  const m2 = M.util.clone(lap);
+  M.h = M.h || {};
+  const keep = M.model.compileFormula(m2, m2.rules[1].formula).ast;
+  m2.columns[0].label = 'Sticker price';
+  ok('rename rewrites formulas', M.formula.print(keep, id => M.model.nameRef(m2, id)) === '[Sticker price] <= Budget');
+
+  M.testResults = out;
+})(window.M);

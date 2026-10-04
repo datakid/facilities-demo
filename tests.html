@@ -4,29 +4,28 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Meridian Studio · engine tests</title>
-  <link rel="icon" href="favicon-32.png" type="image/png">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/style.css">
   <style>
     body{padding:32px;max-width:860px;margin:0 auto}
+    ul{padding:0}
     li{font-size:var(--fs-sm);padding:6px 10px;margin-bottom:4px;border-radius:10px;background:var(--surface);list-style:none;display:flex;gap:10px}
-    ul{padding:0}.p{color:var(--ok-k);font-weight:600}.f{color:var(--bad-k);font-weight:700}
+    .p{color:var(--ok-k);font-weight:600}.f{color:var(--bad-k);font-weight:700}
   </style>
 </head>
 <body>
-  <h1 style="font:italic 400 28px var(--serif)">Engine tests</h1>
+  <h1 class="serif" style="font-size:28px">Engine tests</h1>
   <p id="summary" class="muted">Running…</p>
   <ul id="list"></ul>
-  <script src="js/core/expr.js"></script>
-  <script src="js/core/shapes.js"></script>
+  <script src="js/core/util.js"></script>
+  <script src="js/core/formula.js"></script>
+  <script src="js/core/model.js"></script>
   <script src="js/core/engine.js"></script>
-  <script src="js/core/honesty.js"></script>
-  <script src="js/core/codegen.js"></script>
-  <script src="js/core/blocks.js"></script>
-  <script src="js/core/plan.js"></script>
-  <script src="js/core/analysis.js"></script>
-  <script src="js/templates/pharmacy.js"></script>
-  <script src="js/templates/backend.js"></script>
-  <script src="js/templates.js"></script>
-  <script src="js/engine-tests.js"></script>
+  <script src="js/core/insights.js"></script>
+  <script src="js/core/export.js"></script>
+  <script src="js/examples.js"></script>
+  <script src="js/examples-ops.js"></script>
+  <script src="js/tests/engine-tests.js"></script>
+  <script src="js/tests/report.js"></script>
 </body>
 </html>
