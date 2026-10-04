@@ -142,6 +142,9 @@
     const nRows = S.model.rows.length;
     if (addBtn) { addBtn.click(); await wait(80); }
     ok('finder Add puts a plan into options', !addBtn || S.model.rows.length === nRows + 1);
+    click('[data-act="fd-hourly"]');
+    for (let i = 0; i < 60 && !q('[data-act="hf-add"], .fd-res .hint'); i++) await wait(150);
+    ok('plan by hour with new options shows a sequence', document.querySelectorAll('.fd-res .hrly-list li').length >= 1);
     click('[data-act="close-modal"]');
     click('[data-act="hr-run"]');
     for (let i = 0; i < 40 && !q('.hrly'); i++) await wait(150);

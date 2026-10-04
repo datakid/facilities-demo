@@ -50,6 +50,26 @@ window.M = window.M || {};
       <ol class="hrly-list">${Hh.switches.map(s => `<li><span class="num">${esc(s.at)}</span>${dot(s.row)}${esc(rl(s.row))}</li>`).join('')}</ol>
       <p class="hint">${Hh.nSwitch ? `${Hh.nSwitch} switch${Hh.nSwitch > 1 ? 'es' : ''}, average ${U.pts(Hh.avg)}` : `No switch is worth it: stay on ${esc(rl(Hh.plan[0]))}, average ${U.pts(Hh.avg)}`}${Hh.single && Hh.nSwitch ? `, ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} vs keeping ${esc(rl(Hh.single.id))} all day` : ''}${Hh.endQueue != null ? `; ${U.fmtNum(Hh.endQueue)} still waiting at closing` : ''}.</p></div>`;
   }
+  function hfHTML() {
+    const X = T.hf; if (!X) return '';
+    if (X.busy) return '<div class="fd-res"><p class="fd-sum">Finding new options and planning the day…</p></div>';
+    if (X.error) return `<p class="bad-line">${esc(X.error)}</p>`;
+    const lab = id => X.labels[id] || rl(id);
+    const gain = X.single ? X.avg - X.single.avg : 0;
+    return `<div class="fd-res"><p class="fd-sum"><b>Plan by hour</b> from ${X.tried} options (yours plus the best new ones), switching cost ${X.cost}: average <b class="num">${U.pts(X.avg)}</b>${X.single ? `, ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} vs keeping ${esc(rl(X.single.id))} all day` : ''}${X.endQueue != null ? `, ${U.fmtNum(X.endQueue)} waiting at closing` : ''}.</p>
+      <ol class="hrly-list">${X.switches.map(s => `<li><span class="num">${esc(s.at)}</span><b>${esc(lab(s.row))}</b>${s.row.startsWith('__n') ? ' <span class="tag">new</span>' : ''}</li>`).join('')}</ol>
+      ${X.newRows.length ? `<button class="btn sm" data-act="hf-add">${R.I.plus}Add the ${X.newRows.length} new option${X.newRows.length > 1 ? 's' : ''} it uses</button>` : '<p class="hint">It only needs options you already have.</p>'}</div>`;
+  }
+  const hfActs = A => { A['fd-hourly'] = () => {
+    const f = T.find, spec = {}; Object.entries(f.cols).forEach(([k, x]) => { if (x.on && x.vals.length) spec[k] = x.vals; });
+    T.hf = { busy: true }; T.found = null; re();
+    M.runner.run('hourlyFind', S.model, spec, { from: f.from, cost: S.model.day.switchCost ?? 4 }).then(r => { T.hf = r; if (S.ui.modal === 'find') re(); });
+  };
+  A['hf-add'] = () => {
+    const X = T.hf; if (!X || !X.newRows.length) return;
+    ST.change(m => { X.newRows.forEach(n => { m.rows.push({ id: U.uid('r', m.rows), label: n.label.length > 60 ? n.label.slice(0, 57) + '…' : n.label, v: U.clone(n.v) }); }); }, { setup: true });
+    X.newRows = []; T.hourly = null; re(); ST.toast('Added. The day plan uses them now');
+  }; };
   const runHourly = () => {
     T.hourlyBusy = true; R.day();
     M.runner.run('hourly', S.model, null, { cost: S.model.day.switchCost ?? 4 }).then(r => { T.hourly = r; T.hourlyBusy = false; T.hourlySig = JSON.stringify(S.model); R.day(); });
@@ -113,7 +133,7 @@ window.M = window.M || {};
         <label>Judge on ${R.seg('fd-judge', f.judge, judges)}</label>
         ${f.judge !== 'now' ? `<label>Rank by ${R.seg('fd-agg', f.agg, [['avg', 'Average'], ['worst', 'Worst case']])}</label>` : ''}</div>
       <ul class="fd-cols">${colRows}</ul>
-      <div class="modal-foot"><span class="muted num">${total.toLocaleString('en-US')} combinations${nCtx > 1 ? ` × ${nCtx} ${f.judge === 'day' ? 'hours' : 'situations'}` : ''} · ${full ? 'tries them all' : 'searches step by step'}</span><button class="btn primary" data-act="fd-run" ${total && !T.running ? '' : 'disabled'}>${T.running ? 'Finding…' : 'Find'}</button></div>${out}`;
+      <div class="modal-foot"><span class="muted num">${total.toLocaleString('en-US')} combinations${nCtx > 1 ? ` × ${nCtx} ${f.judge === 'day' ? 'hours' : 'situations'}` : ''} · ${full ? 'tries them all' : 'searches step by step'}</span><div>${m.day ? `<button class="btn" data-act="fd-hourly" ${total && !T.running ? '' : 'disabled'} title="Find new options and the best one for each hour">Plan by hour</button>` : ''}<button class="btn primary" data-act="fd-run" ${total && !T.running ? '' : 'disabled'}>${T.running ? 'Finding…' : 'Find'}</button></div></div>${out}${hfHTML()}`;
   };
 
   R.extraModals.day = () => {
@@ -154,6 +174,7 @@ window.M = window.M || {};
   };
 
   const A = M.app.ACT;
+  hfActs(A);
   const re = () => R.modal();
   A['open-find'] = () => { findSpec(); M.runner.warm(); S.ui.modal = 'find'; re(); };
   A['open-matrix'] = () => { S.ui.modal = 'matrix'; re(); };
@@ -163,7 +184,7 @@ window.M = window.M || {};
   A['fd-agg'] = v => { T.find.agg = v; T.found = null; re(); };
   A['fd-run'] = () => {
     const f = T.find, spec = {}; Object.entries(f.cols).forEach(([k, x]) => { if (x.on && x.vals.length) spec[k] = x.vals; });
-    T.running = true; T.prog = null; T.found = null; re();
+    T.running = true; T.prog = null; T.found = null; T.hf = null; re();
     const tick = p => { T.prog = p; if (S.ui.modal === 'find') { const box = document.querySelector('.fd-res'); if (box) { const bar = box.querySelector('.prog span'); if (bar) bar.style.width = (p.frac * 100).toFixed(1) + '%'; const sum = box.querySelector('.fd-sum'); if (sum) sum.innerHTML = `Checked <b class="num">${p.checked.toLocaleString('en-US')}</b>${p.method === 'all' ? ` of ${p.total.toLocaleString('en-US')}` : ', searching step by step'}.${p.best ? ` Best so far: <b class="num">${p.best.s.toFixed(1)}</b> ${esc(p.best.name)}` : ''}`; } } };
     const job = T.job = {};
     M.runner.run('find', S.model, spec, { from: f.from, judge: f.judge, agg: f.agg }, tick).then(r => { if (T.job !== job) return; T.running = false; T.found = r; if (S.ui.modal === 'find') re(); else ST.toast('Search done. Open Find the best option to see it'); });

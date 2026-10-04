@@ -111,6 +111,7 @@ window.M = window.M || {};
     const base = model.rows.find(r => r.id === opt.from) || model.rows[0];
     const { keys, total } = product(spec);
     if (!keys.length || !base) return { error: 'Pick at least one column to vary.' };
+    if (opt.judge === 'situations-day') opt = Object.assign({}, opt, { judge: model.day ? 'day' : 'now' });
     const ctx = opt.judge === 'day' ? null : contexts(model, opt.judge);
     const nCtx = opt.judge === 'day' ? model.day.values.length : ctx.length;
     const sig = v => keys.map(k => String(v[k])).join('|');
@@ -258,7 +259,7 @@ window.M = window.M || {};
     const ctx = dayContexts(model), H = ctx.length;
     const list = (opt.rows || model.rows).slice(0, 60), n = list.length;
     const carry = d.carry && model.knobs.some(k => k.id === d.carry.knob) && model.columns.some(c => c.id === d.carry.col) ? d.carry : null;
-    const BUCKETS = carry ? 6 : 1;
+    const MAXS = opt.maxStates || 4000;
     const step = (h, q) => {
       const RK = carry ? Object.fromEntries(list.map(r => [r.id, { [d.carry.knob]: q }])) : null;
       const res = E.compute(model, { prep, K: ctx[h].K, RK, rows: list });
@@ -276,13 +277,17 @@ window.M = window.M || {};
           next.push({ q: o.q, total: st.total + o.s - sw, path: st.path.concat(i), qs: st.qs.concat(o.q), last: i, sc: o.s });
         });
       });
-      const keep = new Map();
-      next.forEach(s => {
-        const key = s.last + '|' + (carry ? Math.min(BUCKETS - 1, Math.floor(Math.log2(1 + s.q))) : 0);
-        const cur = keep.get(key);
-        if (!cur || s.total > cur.total || (s.total === cur.total && s.q < cur.q)) keep.set(key, s);
+      const byLast = new Map();
+      next.forEach(s => { if (!byLast.has(s.last)) byLast.set(s.last, []); byLast.get(s.last).push(s); });
+      states = [];
+      byLast.forEach(arr => {
+        if (!carry) { states.push(arr.reduce((a, b) => (b.total > a.total ? b : a))); return; }
+        arr.sort((a, b) => a.q - b.q || b.total - a.total);
+        let best = -Infinity;
+        arr.forEach(s => { if (s.total > best + 1e-9) { states.push(s); best = s.total; } });
       });
-      states = [...keep.values()].sort((a, b) => b.total - a.total).slice(0, Math.max(n * 2, 24));
+      states.sort((a, b) => b.total - a.total);
+      if (states.length > MAXS) states = states.slice(0, MAXS);
     }
     const best = states.sort((a, b) => b.total - a.total || a.q - b.q)[0];
     const scores = [];
@@ -294,6 +299,45 @@ window.M = window.M || {};
     const single = dr.per.find(p => p.id === dr.allDay);
     return { plan: best.path.map(i => list[i].id), scores, avg: scores.reduce((a, b) => a + b, 0) / H, total: best.total, switches, nSwitch: switches.length - 1, cost, endQueue: carry ? q : null,
       single: single ? { id: single.id, avg: single.avg, endQueue: single.endQueue } : null, hours: ctx.map(c => c.label), carry: !!carry };
+  }
+
+  function hourlyFind(model, spec, opt) {
+    opt = opt || {};
+    const f = find(model, spec, Object.assign({}, opt, { judge: 'situations-day' }));
+    const extra = [];
+    const seenSig = new Set(model.rows.map(r => JSON.stringify(r.v)));
+    const per = hourCandidates(model, spec, opt);
+    per.forEach(v => { const k = JSON.stringify(v); if (!seenSig.has(k)) { seenSig.add(k); extra.push(v); } });
+    f.top.forEach(t => { const k = JSON.stringify(t.v); if (!seenSig.has(k)) { seenSig.add(k); extra.push(t.v); } });
+    const base = model.rows.find(r => r.id === opt.from) || model.rows[0], keys = Object.keys(spec);
+    const cand = extra.slice(0, 30).map((v, i) => ({ id: '__n' + i, label: nameOf(model, v, keys, base), v, fresh: true }));
+    const rows = model.rows.concat(cand);
+    const h = hourly(model, { prep: opt.prep, cost: opt.cost, rows });
+    const labelOf = id => (rows.find(r => r.id === id) || {}).label;
+    h.newRows = cand.filter(c => h.plan.includes(c.id)).map(c => ({ id: c.id, label: c.label, v: c.v }));
+    h.labels = Object.fromEntries(rows.map(r => [r.id, r.label]));
+    h.switches.forEach(s => { s.label = labelOf(s.row); });
+    h.tried = rows.length;
+    return h;
+  }
+
+  function hourCandidates(model, spec, opt) {
+    if (!model.day) return [];
+    const prep = opt.prep || E.prepare(model), ctx = dayContexts(model), out = [];
+    const base = model.rows.find(r => r.id === opt.from) || model.rows[0];
+    const { total } = product(spec);
+    if (total > LIMIT.full) return [];
+    const keys = Object.keys(spec), all = [];
+    const rec = (i, acc) => { if (i === keys.length) { all.push(Object.assign({}, base.v, acc)); return; } spec[keys[i]].forEach(x => rec(i + 1, Object.assign({}, acc, { [keys[i]]: x }))); };
+    rec(0, {});
+    const rows = all.map((v, i) => ({ id: '__h' + i, label: '', v }));
+    const picks = new Set();
+    ctx.forEach(c => {
+      const r = E.compute(model, { prep, K: c.K, rows });
+      r.ranked.slice(0, 2).forEach(id => picks.add(+id.slice(3)));
+    });
+    picks.forEach(i => out.push(all[i]));
+    return out;
   }
 
   const CURVE_LIST = ['even', 'gentle', 'steep', 'enough'];
@@ -361,5 +405,5 @@ window.M = window.M || {};
   }
   const MD = () => M.model;
 
-  M.plan = { matrix, dayRun, dayContexts, shape, SHAPES, find, spaceFor, fit, fitAll, agreement, product, hourly, compare, LIMIT, hh };
+  M.plan = { matrix, dayRun, dayContexts, shape, SHAPES, find, spaceFor, fit, fitAll, agreement, product, hourly, hourlyFind, compare, LIMIT, hh };
 })(window.M);

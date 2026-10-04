@@ -6,6 +6,7 @@ self.onmessage = e => {
     let out;
     if (job === 'find') out = M.plan.find(model, spec, Object.assign({}, opt, { progress: p => self.postMessage({ id, progress: p }) }));
     else if (job === 'hourly') out = M.plan.hourly(model, opt);
+    else if (job === 'hourlyFind') out = M.plan.hourlyFind(model, spec, opt);
     else if (job === 'fitAll') out = M.plan.fitAll(model, spec);
     self.postMessage({ id, done: out });
   } catch (err) { self.postMessage({ id, done: { error: String(err && err.message || err) } }); }

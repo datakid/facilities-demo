@@ -228,6 +228,26 @@
   ok('fitAll: importances alone cannot make the all-rounder win', fw.after.ok < 2, fw.after.ok);
   ok('fitAll: changing curves makes it win both', fa.after.ok === 2 && fa.curves.length >= 1, JSON.stringify(fa.curves));
 
+  const hfR = P.hourlyFind(ph, sp2, { cost: 4 });
+  ok('hourlyFind: plans 14 hours from yours plus new options', hfR.plan.length === 14 && hfR.tried > ph.rows.length, hfR.tried);
+  ok('hourlyFind: at least as good as hourly over your list', hfR.avg >= hy.avg - 1e-6, hfR.avg + ' vs ' + hy.avg);
+  const brute = (() => {
+    const m = E.withModel(ph, x => { x.rows = x.rows.slice(0, 3); x.day.values = x.day.values.slice(9, 13); });
+    const ids = m.rows.map(r => r.id), Hn = m.day.values.length, prep = E.prepare(m), ctx = P.dayContexts(m);
+    let best = -Infinity;
+    const rec = (h, path) => {
+      if (h === Hn) {
+        let q = 0, tot = 0;
+        path.forEach((id, i) => { const r = E.compute(m, { prep, K: ctx[i].K, RK: Object.fromEntries(ids.map(x => [x, { backlog: q }])) }); const x = r.byId[id]; tot += x.pass ? x.score : 0; q = Math.max(0, +x.vals.left || 0); if (i && id !== path[i - 1]) tot -= 4; });
+        best = Math.max(best, tot); return;
+      }
+      ids.forEach(id => rec(h + 1, path.concat(id)));
+    };
+    rec(0, []);
+    return { best, got: P.hourly(m, { cost: 4 }).total };
+  })();
+  ok('hourly: exact (matches brute force with carry-over)', Math.abs(brute.best - brute.got) < 1e-6, brute.best + ' vs ' + brute.got);
+
   const cA = M.examples.get('laptop'), cB = E.withModel(cA, m => { m.criteria.find(c => c.id === 'battery').weight = 10; m.knobs[0].value = 2000; });
   const cmp = P.compare(cA, cB);
   ok('compare: lists importance and setting changes', cmp.diffs.some(d => /Battery importance 6 → 10/.test(d)) && cmp.diffs.some(d => /Budget/.test(d)), cmp.diffs.join(' | '));

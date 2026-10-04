@@ -47,6 +47,10 @@ All four live in a **Go further** panel under the ranking, use the same engine (
 - **Teach it my taste fits curves too** (`M.plan.fitAll`): when importances alone can't agree with your choices, it also tries each number column's curve (every bit counts, first steps count most, only the top end counts, good enough) and fits the importances again. Suggestions name both kinds of change. Tested: with options A (5,5), B (10,0) and C (0,10) and “A over B, A over C”, importances alone fail and a curve change fixes both.
 - Section links (Show me, guide steps) now scroll with room for the sticky bars, so headings are never hidden under them. The app starts from `js/app/main.js` after every module has loaded.
 
+## Done in v4.3
+- **Plan by hour with new options** (`M.plan.hourlyFind`): in Find the best option, **Plan by hour** finds new options and the best one for each hour in one go. It collects the top two new combinations for every hour plus the overall best, adds them to your list as candidates (up to 30), then runs the change-by-hour search over all of them. The result marks which hours use a **new** option, and **Add** puts those options into your list.
+- **Change by hour is exact**: the search no longer groups the carried queue into bands. For each option it keeps every plan that no other plan beats on both score so far and queue length, so it can't miss a better plan. A test checks it against brute force (every sequence of 3 options over 4 hours, with carry-over).
+
 ## Examples (11, all with guides)
 | Everyday | Teaches |
 |---|---|
@@ -71,8 +75,8 @@ All four live in a **Go further** panel under the ranking, use the same engine (
 | `index.html` | The app. A first visit shows the example picker |
 | `index.html#m=<base64url JSON>` | Opens a shared ranking |
 | `index.html#ex=<id>` | Opens an example (`laptop, flat, job, rice, supplier, shift, pharmacy, feed, venue, cafe, care`); add `&view=ranking` to open on the ranking, or `&tour` to start its guided tour |
-| `tests.html` | 203 engine tests (v4.2 adds finder progress, change-by-hour, curve fitting, version compare): parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
-| `ui-check.html` | 60 checks (v4.2: progress bar, the finder really running in the worker, change-by-hour, pin + compare) driving the real app (results go to the console), including drag speed on the pharmacy |
+| `tests.html` | 206 engine tests (v4.3: plan by hour with new options, change-by-hour = brute force) (v4.2 adds finder progress, change-by-hour, curve fitting, version compare): parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
+| `ui-check.html` | 61 checks (v4.2: progress bar, the finder really running in the worker, change-by-hour, pin + compare) driving the real app (results go to the console), including drag speed on the pharmacy |
 | `preview-ranking.html` | Opens an example without the start screen, for layout checks (set `data-ex` / `data-view` on `<html>`) |
 
 ## Files
@@ -103,10 +107,8 @@ No server and no table API are used.
 
 ## Not done yet
 - Within an hour the queue is steady state (M/M/c); only the carried-over value links hours. A minute-by-minute simulation isn't modelled.
-- Change-by-hour plans choose among the options in your list (up to 60). To include new role splits, find them first and Add them.
-- The queue level in the change-by-hour search is grouped into a few bands, so in rare cases a slightly better plan can be missed.
+- Plan by hour considers the best new options per hour, not every combination in every hour. For spaces over 4,096 combinations, it uses only the overall best ones.
 
 ## Suggested next steps
-1. Combine the two searches: find new options and their hourly sequence in one go.
-2. Compare more than two versions (a version history with named checkpoints).
+1. Compare more than two versions (a version history with named checkpoints).
 3. Let soft must-haves and sweet-spot positions be fitted from your choices too.
