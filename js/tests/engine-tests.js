@@ -231,6 +231,15 @@
   const hfR = P.hourlyFind(ph, sp2, { cost: 4 });
   ok('hourlyFind: plans 14 hours from yours plus new options', hfR.plan.length === 14 && hfR.tried > ph.rows.length, hfR.tried);
   ok('hourlyFind: at least as good as hourly over your list', hfR.avg >= hy.avg - 1e-6, hfR.avg + ' vs ' + hy.avg);
+  ok('hourlyFind: refinement ran', hfR.rounds >= 1, hfR.rounds + ' rounds, ' + hfR.ms + 'ms');
+  const shopBig = E.withModel(M.examples.get('shift'), m => { m.day = { knob: 'cph', start: 9, values: [30, 50, 80, 120, 140, 110, 70, 40], link: null, carry: null, sticky: 3, switchCost: 2 }; m.columns.push({ id: 'pad1', label: 'Pad A', type: 'number', unit: '', formula: '' }, { id: 'pad2', label: 'Pad B', type: 'number', unit: '', formula: '' }, { id: 'pad3', label: 'Pad C', type: 'number', unit: '', formula: '' }); m.rows.forEach(r => { r.v.pad1 = 0; r.v.pad2 = 0; r.v.pad3 = 0; }); });
+  const bigSpec = { tills: [1, 2, 3, 4, 5, 6, 7, 8], floor_staff: [0, 1, 2, 3, 4], pad1: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], pad2: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], pad3: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] };
+  const big2 = P.hourlyFind(M.model.normalize(shopBig), bigSpec, { cost: 2, ms: 5000 });
+  ok('hourlyFind: works past 4,096 combinations (40,000 here)', big2.total0 === 40000 && big2.plan.length === 8, big2.total0 + ' / ' + big2.ms + 'ms');
+  const tillsAt = i => (big2.newRows.concat(shopBig.rows).find(r => r.id === big2.plan[i]) || { v: {} }).v.tills;
+  ok('hourlyFind: more tills at the 140/h peak than at 30/h', tillsAt(4) > tillsAt(0), tillsAt(0) + ' → ' + tillsAt(4));
+  const exactPeak = (() => { const m = M.model.normalize(shopBig); const K = Object.assign({}, m.base, { cph: 140 }); const f = P.find(m, { tills: bigSpec.tills, floor_staff: bigSpec.floor_staff }, { ctxK: K }); return f.top[0].v.tills; })();
+  ok('hourlyFind: peak-hour tills match an exhaustive search', tillsAt(4) === exactPeak, tillsAt(4) + ' vs ' + exactPeak);
   const brute = (() => {
     const m = E.withModel(ph, x => { x.rows = x.rows.slice(0, 3); x.day.values = x.day.values.slice(9, 13); });
     const ids = m.rows.map(r => r.id), Hn = m.day.values.length, prep = E.prepare(m), ctx = P.dayContexts(m);

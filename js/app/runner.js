@@ -18,7 +18,7 @@ window.M = window.M || {};
   const local = (job, model, spec, opt, onP) => {
     if (job === 'find') return M.plan.find(model, spec, Object.assign({}, opt, { progress: onP }));
     if (job === 'hourly') return M.plan.hourly(model, opt);
-    if (job === 'hourlyFind') return M.plan.hourlyFind(model, spec, opt);
+    if (job === 'hourlyFind') return M.plan.hourlyFind(model, spec, Object.assign({}, opt, { progress: onP }));
     return M.plan.fitAll(model, spec);
   };
   function run(job, model, spec, opt, onP) {

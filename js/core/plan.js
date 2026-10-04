@@ -100,19 +100,20 @@ window.M = window.M || {};
   function find(model, spec, opt) {
     opt = opt || {};
     const t0 = now(), onP = typeof opt.progress === 'function' ? opt.progress : null;
+    const LIM = { search: opt.runs || LIMIT.search, ms: opt.ms || LIMIT.ms };
     let lastP = 0;
     const report = force => {
       if (!onP) return;
       const t = now(); if (!force && t - lastP < 120) return; lastP = t;
       let best = null; seen.forEach(x => { if (!best || x.s > best.s) best = x; });
-      onP({ checked: seen.size, total, method, frac: method === 'all' ? seen.size / total : Math.min(0.99, Math.max(runs / LIMIT.search, (t - t0) / LIMIT.ms)), best: best ? { s: best.s, name: nameOf(model, best.v, keys, base) } : null });
+      onP({ checked: seen.size, total, method, frac: method === 'all' ? seen.size / total : Math.min(0.99, Math.max(runs / LIM.search, (t - t0) / LIM.ms)), best: best ? { s: best.s, name: nameOf(model, best.v, keys, base) } : null });
     };
     const prep = E.prepare(model);
     const base = model.rows.find(r => r.id === opt.from) || model.rows[0];
     const { keys, total } = product(spec);
     if (!keys.length || !base) return { error: 'Pick at least one column to vary.' };
     if (opt.judge === 'situations-day') opt = Object.assign({}, opt, { judge: model.day ? 'day' : 'now' });
-    const ctx = opt.judge === 'day' ? null : contexts(model, opt.judge);
+    const ctx = opt.ctxK ? [{ id: 'k', label: '', K: opt.ctxK }] : opt.judge === 'day' ? null : contexts(model, opt.judge);
     const nCtx = opt.judge === 'day' ? model.day.values.length : ctx.length;
     const sig = v => keys.map(k => String(v[k])).join('|');
     const existing = new Map(model.rows.map(r => [sig(r.v), r.id]));
@@ -160,13 +161,13 @@ window.M = window.M || {};
           evalBatch(nb);
           let best = null, bs = cs;
           nb.forEach(n => { const s = seen.get(sig(n)).s; if (s > bs + 1e-9) { bs = s; best = n; } });
-          if (!best || runs > LIMIT.search || now() - t0 > LIMIT.ms) break;
+          if (!best || runs > LIM.search || now() - t0 > LIM.ms) break;
           cur = best; cs = bs;
         }
         climbs++;
       };
-      starts.forEach(s => { if (runs < LIMIT.search && now() - t0 < LIMIT.ms) climb(s); });
-      while (runs < LIMIT.search && now() - t0 < LIMIT.ms) {
+      starts.forEach(s => { if (runs < LIM.search && now() - t0 < LIM.ms) climb(s); });
+      while (runs < LIM.search && now() - t0 < LIM.ms) {
         const top = [...seen.values()].sort((a, b) => b.s - a.s)[0].v;
         const kick = Object.assign({}, top);
         keys.forEach(k => { if (rnd() < 0.35) kick[k] = spec[k][Math.floor(rnd() * spec[k].length)]; });
@@ -257,12 +258,12 @@ window.M = window.M || {};
     const d = model.day; if (!d || !d.values.length) return { error: 'Set up a day plan first.' };
     const cost = Math.max(0, opt.cost ?? d.switchCost ?? 4);
     const ctx = dayContexts(model), H = ctx.length;
-    const list = (opt.rows || model.rows).slice(0, 60), n = list.length;
+    const list = (opt.rows || model.rows).slice(0, 120), n = list.length; void n;
     const carry = d.carry && model.knobs.some(k => k.id === d.carry.knob) && model.columns.some(c => c.id === d.carry.col) ? d.carry : null;
     const MAXS = opt.maxStates || 4000;
     const step = (h, q) => {
       const RK = carry ? Object.fromEntries(list.map(r => [r.id, { [d.carry.knob]: q }])) : null;
-      const res = E.compute(model, { prep, K: ctx[h].K, RK, rows: list });
+      const res = E.compute(model, { prep, K: ctx[h].K, RK, rows: list, R: opt.R });
       return list.map(r => { const x = res.byId[r.id]; const nq = carry ? Math.max(0, +x.vals[d.carry.col] || 0) : 0; return { s: x.pass ? x.score : 0, q: isFinite(nq) ? nq : 1e6 }; });
     };
     let states = [{ q: 0, total: 0, path: [], qs: [], last: -1 }];
@@ -295,7 +296,7 @@ window.M = window.M || {};
     best.path.forEach((i, h) => { const o = at(h, q)[i]; scores.push(o.s); q = o.q; });
     const switches = [];
     best.path.forEach((i, h) => { if (h === 0 || i !== best.path[h - 1]) switches.push({ i: h, at: ctx[h].label, row: list[i].id }); });
-    const dr = dayRun(model, prep, list);
+    const dr = dayRun(model, prep, opt.R ? model.rows : list, opt.R);
     const single = dr.per.find(p => p.id === dr.allDay);
     return { plan: best.path.map(i => list[i].id), scores, avg: scores.reduce((a, b) => a + b, 0) / H, total: best.total, switches, nSwitch: switches.length - 1, cost, endQueue: carry ? q : null,
       single: single ? { id: single.id, avg: single.avg, endQueue: single.endQueue } : null, hours: ctx.map(c => c.label), carry: !!carry };
@@ -303,41 +304,61 @@ window.M = window.M || {};
 
   function hourlyFind(model, spec, opt) {
     opt = opt || {};
-    const f = find(model, spec, Object.assign({}, opt, { judge: 'situations-day' }));
-    const extra = [];
-    const seenSig = new Set(model.rows.map(r => JSON.stringify(r.v)));
-    const per = hourCandidates(model, spec, opt);
-    per.forEach(v => { const k = JSON.stringify(v); if (!seenSig.has(k)) { seenSig.add(k); extra.push(v); } });
-    f.top.forEach(t => { const k = JSON.stringify(t.v); if (!seenSig.has(k)) { seenSig.add(k); extra.push(t.v); } });
-    const base = model.rows.find(r => r.id === opt.from) || model.rows[0], keys = Object.keys(spec);
-    const cand = extra.slice(0, 30).map((v, i) => ({ id: '__n' + i, label: nameOf(model, v, keys, base), v, fresh: true }));
-    const rows = model.rows.concat(cand);
-    const h = hourly(model, { prep: opt.prep, cost: opt.cost, rows });
-    const labelOf = id => (rows.find(r => r.id === id) || {}).label;
+    if (!model.day) return { error: 'Set up a day plan first.' };
+    const t0 = now(), onP = typeof opt.progress === 'function' ? opt.progress : null;
+    const prep = opt.prep || E.prepare(model), keys = Object.keys(spec).filter(k => spec[k] && spec[k].length);
+    const base = model.rows.find(r => r.id === opt.from) || model.rows[0];
+    const sig = v => JSON.stringify(keys.map(k => v[k]));
+    const known = new Map(), cand = [];
+    model.rows.forEach(r => known.set(sig(r.v), r.id));
+    const addV = v => { const k = sig(v); if (known.has(k)) return known.get(k); const id = '__n' + cand.length; known.set(k, id); cand.push({ id, label: nameOf(model, v, keys, base), v: Object.assign({}, v) }); return id; };
+    const ctx = dayContexts(model), budget = opt.ms || 6000, per = Math.max(250, Math.floor(budget * 0.5 / ctx.length));
+    const say = (stage, frac) => onP && onP({ stage, frac, checked: cand.length });
+    const { total } = product(spec);
+    say('Finding the best option for each hour', 0);
+    ctx.forEach((c, i) => {
+      const f = find(model, spec, { from: opt.from, ctxK: c.K, ms: per, runs: total > LIMIT.full ? 40000 : undefined });
+      (f.top || []).slice(0, 3).forEach(t => addV(t.v));
+      say('Finding the best option for each hour', 0.5 * (i + 1) / ctx.length);
+    });
+    const fd = find(model, spec, { from: opt.from, judge: 'day', ms: per * 2 });
+    (fd.top || []).slice(0, 3).forEach(t => addV(t.v));
+    let rows = model.rows.concat(cand);
+    const R0 = rangesFor(model, prep, ctx, rows);
+    let h = hourly(model, { prep, cost: opt.cost, rows, R: R0 }), rounds = 0;
+    while (now() - t0 < budget && rounds < 6) {
+      rounds++;
+      const used = [...new Set(h.plan)].map(id => rows.find(r => r.id === id));
+      const before = cand.length;
+      used.forEach(r => keys.forEach(k => spec[k].forEach(x => { if (x !== r.v[k]) addV(Object.assign({}, r.v, { [k]: x })); })));
+      if (cand.length === before) break;
+      rows = model.rows.concat(prune(model, prep, ctx, cand, h, R0));
+      const h2 = hourly(model, { prep, cost: opt.cost, rows, R: R0 });
+      say('Improving the day plan', 0.5 + 0.5 * Math.min(1, (now() - t0) / budget));
+      if (h2.total <= h.total + 1e-9) break;
+      h = h2;
+    }
+    const lab = Object.fromEntries(model.rows.concat(cand).map(r => [r.id, r.label]));
     h.newRows = cand.filter(c => h.plan.includes(c.id)).map(c => ({ id: c.id, label: c.label, v: c.v }));
-    h.labels = Object.fromEntries(rows.map(r => [r.id, r.label]));
-    h.switches.forEach(s => { s.label = labelOf(s.row); });
-    h.tried = rows.length;
+    h.labels = lab; h.switches.forEach(s => { s.label = lab[s.row]; });
+    h.tried = model.rows.length + cand.length; h.rounds = rounds; h.ms = Math.round(now() - t0); h.total0 = total;
     return h;
   }
 
-  function hourCandidates(model, spec, opt) {
-    if (!model.day) return [];
-    const prep = opt.prep || E.prepare(model), ctx = dayContexts(model), out = [];
-    const base = model.rows.find(r => r.id === opt.from) || model.rows[0];
-    const { total } = product(spec);
-    if (total > LIMIT.full) return [];
-    const keys = Object.keys(spec), all = [];
-    const rec = (i, acc) => { if (i === keys.length) { all.push(Object.assign({}, base.v, acc)); return; } spec[keys[i]].forEach(x => rec(i + 1, Object.assign({}, acc, { [keys[i]]: x }))); };
-    rec(0, {});
-    const rows = all.map((v, i) => ({ id: '__h' + i, label: '', v }));
-    const picks = new Set();
-    ctx.forEach(c => {
-      const r = E.compute(model, { prep, K: c.K, rows });
-      r.ranked.slice(0, 2).forEach(id => picks.add(+id.slice(3)));
-    });
-    picks.forEach(i => out.push(all[i]));
-    return out;
+  function rangesFor(model, prep, ctx, rows) {
+    const R = {};
+    ctx.forEach(c => { const r = E.compute(model, { prep, K: c.K, rows }); Object.entries(r.ranges).forEach(([id, x]) => { if (x.text || x.empty) return; if (!R[id]) R[id] = { lo: x.lo, hi: x.hi, auto: x.auto }; else { R[id].lo = Math.min(R[id].lo, x.lo); R[id].hi = Math.max(R[id].hi, x.hi); } }); });
+    model.criteria.forEach(c => { if (c.range && !c.range.auto && R[c.id]) { R[c.id] = { lo: c.range.lo, hi: c.range.hi, auto: false }; } });
+    return R;
+  }
+
+  function prune(model, prep, ctx, cand, h, R) {
+    if (cand.length <= 40) return cand;
+    const best = new Map();
+    ctx.forEach(c => { const r = E.compute(model, { prep, K: c.K, rows: cand, R }); r.ranked.slice(0, 4).forEach((id, i) => best.set(id, Math.min(best.get(id) ?? 99, i))); });
+    const keep = new Set(h.plan);
+    [...best.entries()].sort((a, b) => a[1] - b[1]).forEach(([id]) => { if (keep.size < 40) keep.add(id); });
+    return cand.filter(c => keep.has(c.id));
   }
 
   const CURVE_LIST = ['even', 'gentle', 'steep', 'enough'];

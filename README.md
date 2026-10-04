@@ -51,6 +51,14 @@ All four live in a **Go further** panel under the ranking, use the same engine (
 - **Plan by hour with new options** (`M.plan.hourlyFind`): in Find the best option, **Plan by hour** finds new options and the best one for each hour in one go. It collects the top two new combinations for every hour plus the overall best, adds them to your list as candidates (up to 30), then runs the change-by-hour search over all of them. The result marks which hours use a **new** option, and **Add** puts those options into your list.
 - **Change by hour is exact**: the search no longer groups the carried queue into bands. For each option it keeps every plan that no other plan beats on both score so far and queue length, so it can't miss a better plan. A test checks it against brute force (every sequence of 3 options over 4 hours, with carry-over).
 
+## Done in v4.4: Plan by hour at any size
+`M.plan.hourlyFind` no longer stops at 4,096 combinations or at a fixed top-2 per hour:
+1. **Each hour gets its own search** (full when small, step-by-step when large), and its best 3 join the candidates, together with the best 3 for the whole day.
+2. **The day is planned** over your options plus the candidates, with switching cost and carry-over (exact search).
+3. **Refine**: every one-column change of each option the plan uses becomes a candidate. The day is planned again, and this repeats while the plan improves (up to 6 rounds). The candidate list is pruned to the best 40 per pass.
+4. **Fixed scales**: all candidates are scored on one scale taken from every hour, so adding options never moves the goalposts.
+The search runs in the worker with live progress and stops after about 6 s. Tested on a 40,000-combination shop: the peak-hour pick matches an exhaustive search, and quiet hours get fewer tills.
+
 ## Examples (11, all with guides)
 | Everyday | Teaches |
 |---|---|
@@ -75,7 +83,7 @@ All four live in a **Go further** panel under the ranking, use the same engine (
 | `index.html` | The app. A first visit shows the example picker |
 | `index.html#m=<base64url JSON>` | Opens a shared ranking |
 | `index.html#ex=<id>` | Opens an example (`laptop, flat, job, rice, supplier, shift, pharmacy, feed, venue, cafe, care`); add `&view=ranking` to open on the ranking, or `&tour` to start its guided tour |
-| `tests.html` | 206 engine tests (v4.3: plan by hour with new options, change-by-hour = brute force) (v4.2 adds finder progress, change-by-hour, curve fitting, version compare): parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
+| `tests.html` | 210 engine tests (v4.4: Plan by hour past 4,096 matches exhaustive at the peak) (v4.3: plan by hour with new options, change-by-hour = brute force) (v4.2 adds finder progress, change-by-hour, curve fitting, version compare): parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
 | `ui-check.html` | 61 checks (v4.2: progress bar, the finder really running in the worker, change-by-hour, pin + compare) driving the real app (results go to the console), including drag speed on the pharmacy |
 | `preview-ranking.html` | Opens an example without the start screen, for layout checks (set `data-ex` / `data-view` on `<html>`) |
 
@@ -107,7 +115,7 @@ No server and no table API are used.
 
 ## Not done yet
 - Within an hour the queue is steady state (M/M/c); only the carried-over value links hours. A minute-by-minute simulation isn't modelled.
-- Plan by hour considers the best new options per hour, not every combination in every hour. For spaces over 4,096 combinations, it uses only the overall best ones.
+- Plan by hour is a search, not a proof for very large spaces. It is exact when every hour's space is small enough to try in full, and very likely best otherwise; the result says how many options and rounds it used.
 
 ## Suggested next steps
 1. Compare more than two versions (a version history with named checkpoints).

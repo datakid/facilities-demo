@@ -52,18 +52,19 @@ window.M = window.M || {};
   }
   function hfHTML() {
     const X = T.hf; if (!X) return '';
-    if (X.busy) return '<div class="fd-res"><p class="fd-sum">Finding new options and planning the day…</p></div>';
+    if (X.busy) return `<div class="fd-res"><div class="prog"><span style="width:${((X.p ? X.p.frac : 0) * 100).toFixed(1)}%"></span></div><p class="fd-sum">${esc(X.p ? X.p.stage : 'Starting')}…${X.p && X.p.checked ? ` ${X.p.checked} new options so far` : ''}</p></div>`;
     if (X.error) return `<p class="bad-line">${esc(X.error)}</p>`;
     const lab = id => X.labels[id] || rl(id);
     const gain = X.single ? X.avg - X.single.avg : 0;
-    return `<div class="fd-res"><p class="fd-sum"><b>Plan by hour</b> from ${X.tried} options (yours plus the best new ones), switching cost ${X.cost}: average <b class="num">${U.pts(X.avg)}</b>${X.single ? `, ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} vs keeping ${esc(rl(X.single.id))} all day` : ''}${X.endQueue != null ? `, ${U.fmtNum(X.endQueue)} waiting at closing` : ''}.</p>
+    return `<div class="fd-res"><p class="fd-sum"><b>Plan by hour</b> from ${X.tried} options (yours plus the best new ones for each hour, then ${X.rounds} round${X.rounds === 1 ? '' : 's'} of one-change improvements, ${X.ms} ms), switching cost ${X.cost}: average <b class="num">${U.pts(X.avg)}</b>${X.single ? `, ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} vs keeping ${esc(rl(X.single.id))} all day` : ''}${X.endQueue != null ? `, ${U.fmtNum(X.endQueue)} waiting at closing` : ''}.</p>
       <ol class="hrly-list">${X.switches.map(s => `<li><span class="num">${esc(s.at)}</span><b>${esc(lab(s.row))}</b>${s.row.startsWith('__n') ? ' <span class="tag">new</span>' : ''}</li>`).join('')}</ol>
       ${X.newRows.length ? `<button class="btn sm" data-act="hf-add">${R.I.plus}Add the ${X.newRows.length} new option${X.newRows.length > 1 ? 's' : ''} it uses</button>` : '<p class="hint">It only needs options you already have.</p>'}</div>`;
   }
   const hfActs = A => { A['fd-hourly'] = () => {
     const f = T.find, spec = {}; Object.entries(f.cols).forEach(([k, x]) => { if (x.on && x.vals.length) spec[k] = x.vals; });
     T.hf = { busy: true }; T.found = null; re();
-    M.runner.run('hourlyFind', S.model, spec, { from: f.from, cost: S.model.day.switchCost ?? 4 }).then(r => { T.hf = r; if (S.ui.modal === 'find') re(); });
+    const tick = p => { if (!T.hf || !T.hf.busy) return; T.hf.p = p; const bar = document.querySelector('.fd-res .prog span'), sum = document.querySelector('.fd-res .fd-sum'); if (bar) bar.style.width = (p.frac * 100).toFixed(1) + '%'; if (sum) sum.textContent = `${p.stage}… ${p.checked ? p.checked + ' new options so far' : ''}`; };
+    M.runner.run('hourlyFind', S.model, spec, { from: f.from, cost: S.model.day.switchCost ?? 4 }, tick).then(r => { T.hf = r; if (S.ui.modal === 'find') re(); });
   };
   A['hf-add'] = () => {
     const X = T.hf; if (!X || !X.newRows.length) return;
