@@ -117,7 +117,7 @@ window.M = window.M || {};
     const columns = [C('tills', 'Tills open', 'number', ''), C('floor_staff', 'Floor staff', 'number', ''),
       C('capacity', 'Till capacity', 'number', '/h', '[Tills open] * 60 / [Minutes per customer]', 'Customers the tills can serve per hour'),
       C('busy', 'How busy', 'number', '%', '[Customers per hour] / [Till capacity] * 100', 'Above 85% queues grow fast'),
-      C('wait', 'Expected wait', 'number', 'min', 'if([How busy] < 100, [Minutes per customer] * ([How busy] / 100) / (1 - [How busy] / 100) / [Tills open], 60)', 'A simple queue estimate'),
+      C('wait', 'Expected wait', 'number', 'min', 'if([How busy] < 100, wait([Customers per hour], 60 / [Minutes per customer], [Tills open]) * 60, 60)', 'Real queue maths (M/M/c): average minutes in line before a till is free'),
       C('cost', 'Staff cost', 'number', '$/h', '([Tills open] + [Floor staff]) * Wage')];
     return {
       name: 'Staff a shop shift', question: 'How should we staff the Saturday rush?', method: 'add',
@@ -129,7 +129,7 @@ window.M = window.M || {};
       criteria: [W('wait', 'wait', 8, { want: 'less', curve: 'enough', at: 1 }), W('cost', 'cost', 6, { want: 'less' }), W('floor_staff', 'floor_staff', 3, { curve: 'gentle' })],
       guide: { level: 'Advanced', teaches: 'Chained formulas, a queue model, planning under load', steps: [
         S('formulas', 'col:busy', 'A chain of formulas', 'Till capacity → How busy → Expected wait. Each step uses the one before, and the settings.'),
-        S('formulas', 'col:wait', 'if() handles the edge case', 'When the tills are 100% busy the queue never clears, so the formula caps the wait at 60 minutes.'),
+        S('formulas', 'col:wait', 'Real queue maths', 'wait(arrivals, served per till, tills) is the standard M/M/c queue used by call centres and banks. if() caps the wait at 60 minutes when the tills are overloaded and the line never clears.'),
         S('rules', 'rule:g1', 'Safety first', 'Plans that run the tills above 90% are ruled out before scoring.'),
         S('formulas', 'knob:cph', 'Plan for the rush', 'Drag Customers per hour up to 120 and watch the plan that wins shift towards more tills.'),
         S('options', 'table', 'Try your own plan', 'Add an option, type how many tills and floor staff, and its wait and cost are worked out for you.', 'Click Add option.')
