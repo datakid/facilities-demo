@@ -147,6 +147,7 @@ window.M = window.M || {};
 
   const ACT = {
     tab: v => { S.ui.tab = v; S.ui.colSel = null; R.setup(); ST.save(); if (S.ui.guide != null) M.guide.refresh(); },
+    'tabs-scroll': v => { const s = document.querySelector('#setup .tabs'); if (s) s.scrollBy({ left: (+v) * Math.max(120, s.clientWidth * 0.6), behavior: 'smooth' }); },
     pane: v => { S.ui.pane = v; R.pane(); window.scrollTo(0, 0); },
     method: v => ST.change(m => { m.method = v; }, { setup: true }),
     'crit-on': (v, id) => ST.change(() => { const c = H.crit(id); c.on = !c.on; }, { setup: true }),
@@ -263,6 +264,13 @@ window.M = window.M || {};
     const t = e.target, typing = t && (t.tagName === 'INPUT' && t.type !== 'range' && t.type !== 'checkbox' || t.tagName === 'TEXTAREA');
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); if (e.shiftKey) ST.redo(); else ST.undo(); return; }
     if (e.key === 'Escape') { if (S.ui.modal && !S.ui.fresh) closeModal(); else if (S.ui.modal) closeModal(); else if (S.ui.colSel) { S.ui.colSel = null; R.setup(); } return; }
+    if (t && t.getAttribute && t.getAttribute('role') === 'tab' && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+      const list = [...t.parentElement.querySelectorAll('[role="tab"]')], i = list.indexOf(t);
+      const j = e.key === 'Home' ? 0 : e.key === 'End' ? list.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + list.length) % list.length;
+      e.preventDefault(); ACT.tab(list[j].dataset.v);
+      requestAnimationFrame(() => { const n = document.getElementById('tab-' + list[j].dataset.v); if (n) n.focus(); });
+      return;
+    }
     if (e.key === 'Enter' && t && t.matches && t.matches('input.cell')) {
       e.preventDefault();
       const td = t.closest('td, th'), tr = td.parentElement, idx = [...tr.children].indexOf(td);

@@ -10,21 +10,43 @@ window.M = window.M || {};
     const el = document.getElementById('setup'); if (!el) return;
     const t = S.ui.tab, m = S.model;
     const count = { matters: m.criteria.length, rules: m.rules.length, formulas: m.knobs.length + m.columns.filter(c => c.formula).length, options: m.rows.length, equations: R.eqData ? R.eqData().items.length : 0 };
-    const tabs = `<div class="tabs" role="tablist" aria-label="Build steps">${TABS.map(([id, l], i) => `<button role="tab" id="tab-${id}" class="${id === 'equations' ? 'tab-view' : ''}" data-act="tab" data-v="${id}" aria-selected="${t === id}" data-g="tab:${id}"><span class="tab-n">${id === 'equations' ? '∑' : i + 1}</span>${id === 'matters' ? '<span class="hide-xs">What </span>matters' : l}<span class="tab-c num">${count[id]}</span></button>`).join('')}</div>`;
+    const tabs = `<div class="tabs-wrap"><button type="button" class="tabs-arrow l" data-act="tabs-scroll" data-v="-1" tabindex="-1" aria-hidden="true">${R.I.chev}</button><div class="tabs" role="tablist" aria-label="Build steps" data-keep-scroll="tabs">${TABS.map(([id, l], i) => `<button role="tab" id="tab-${id}" class="${id === 'equations' ? 'tab-view' : ''}" data-act="tab" data-v="${id}" aria-selected="${t === id}" title="${esc(l)}" data-g="tab:${id}"><span class="tab-n">${id === 'equations' ? '∑' : i + 1}</span>${id === 'matters' ? '<span class="hide-xs">What </span>matters' : l}<span class="tab-c num">${count[id]}</span></button>`).join('')}</div><button type="button" class="tabs-arrow r" data-act="tabs-scroll" data-v="1" tabindex="-1" aria-hidden="true">${R.I.chev}</button></div>`;
     const body = ({ matters: matters, rules: rules, formulas: formulas, options: options, equations: R.equationsHTML })[t]();
     R.keepFocus(el, () => { el.innerHTML = tabs + `<div class="tab-body${t === 'equations' ? ' eq-body' : ''}" role="tabpanel" aria-labelledby="tab-${t}" data-keep-scroll="tab-body">${body}</div>`; });
     if (t === 'equations' && R.eqMount) R.eqMount(el);
-    const reveal = () => {
-      const strip = el.querySelector('.tabs'), on = strip && strip.querySelector('[aria-selected="true"]');
-      if (!on || strip.scrollWidth <= strip.clientWidth) return;
-      if (!on.nextElementSibling) { strip.scrollLeft = strip.scrollWidth; return; }
-      const a = strip.getBoundingClientRect(), b = on.getBoundingClientRect();
-      if (b.right > a.right) strip.scrollLeft += b.right - a.right + 16; else if (b.left < a.left) strip.scrollLeft -= a.left - b.left + 16;
-    };
-    reveal(); requestAnimationFrame(reveal);
+    R.tabsFit(true);
     R.strips();
     if (M.guide) M.guide.spot();
   };
+
+  R.tabsFit = reveal => {
+    const wrap = document.querySelector('#setup .tabs-wrap'); if (!wrap) return;
+    const strip = wrap.querySelector('.tabs');
+    const edges = () => {
+      const max = strip.scrollWidth - strip.clientWidth;
+      wrap.classList.toggle('more-l', strip.scrollLeft > 2);
+      wrap.classList.toggle('more-r', strip.scrollLeft < max - 2);
+    };
+    const show = () => {
+      const on = strip.querySelector('[aria-selected="true"]');
+      if (on && strip.scrollWidth > strip.clientWidth) {
+        const a = strip.getBoundingClientRect(), b = on.getBoundingClientRect(), pad = 36;
+        const prev = strip.style.scrollBehavior; strip.style.scrollBehavior = 'auto';
+        if (b.right > a.right - pad) strip.scrollLeft += b.right - a.right + pad;
+        else if (b.left < a.left + pad) strip.scrollLeft -= a.left - b.left + pad;
+        strip.style.scrollBehavior = prev;
+      }
+      edges();
+    };
+    if (!strip.dataset.bound) {
+      strip.dataset.bound = 1;
+      strip.addEventListener('scroll', edges, { passive: true });
+      strip.addEventListener('wheel', e => { if (strip.scrollWidth > strip.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { e.preventDefault(); strip.scrollLeft += e.deltaY; } }, { passive: false });
+    }
+    if (reveal) { show(); requestAnimationFrame(show); } else edges();
+  };
+  if (window.ResizeObserver) new ResizeObserver(() => R.tabsFit(true)).observe(document.getElementById('setup'));
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => R.tabsFit && S.model && R.tabsFit(true));
 
   const help = (txt) => `<p class="lede">${txt}</p>`;
 

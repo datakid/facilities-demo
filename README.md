@@ -69,6 +69,17 @@ Until now formulas only showed up one at a time, as editable code in the Formula
 - **Links in from elsewhere**: a ∑ button on each worked-out column, "∑ See all as equations" on the Formulas tab, and "See every equation with X's numbers" in the Why panel. Every equation card has an **Edit** link back to where it is defined.
 - **Polish**: must-have formulas are now growing textareas, so long rules wrap instead of being cut off. Long worked-out traces and export text wrap too. On phones the five tabs fit without scrolling ("What matters" becomes "Matters").
 
+## Done in v4.5.1: tabs at any window width
+- **Fix**: in a half-width desktop window the tab strip overflowed with no visible scrollbar, so the Equations tab couldn't be reached. The strip now adapts to the width of the build pane (container queries), not the screen:
+  - **wide**: number badges and counts are shown
+  - **under 780 px**: counts are hidden and the tabs sit closer together
+  - **under 640 px**: "What matters" becomes "Matters" and only the ∑ badge stays
+  - **under 440 px**: a tidy 3-column grid, so every tab is always on screen
+- If tabs still overflow in between, edge fades and round ← → buttons appear. The mouse wheel scrolls the strip, and the selected tab is always scrolled into view, including after a resize or font load.
+- Keyboard: ← → Home End move between tabs (the ARIA tabs pattern).
+- Equations that are too wide shrink slightly to fit (down to 82%). Past that they scroll inside their card, with a soft fade at the right edge.
+- UI checks: the Equations tab must be reachable in 700, 520 and 380 px panes. `preview-half.html` shows the app in a 960 px window.
+
 ## Examples (11, all with guides)
 | Everyday | Teaches |
 |---|---|

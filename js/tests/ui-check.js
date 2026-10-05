@@ -79,6 +79,19 @@
     ok('selecting shows why', /Why/.test(q('.why-head h3').textContent));
     await wait(300);
     ok('checks rendered', document.querySelectorAll('.ck').length >= 1);
+    const setupEl = q('#setup'), oldW = setupEl.style.width;
+    for (const w of [700, 520, 380]) {
+      setupEl.style.width = w + 'px';
+      await wait(60);
+      const tb = q('#tab-equations').getBoundingClientRect(), sb = q('#setup .tabs').getBoundingClientRect();
+      click('[data-act="tab"][data-v="equations"]');
+      await wait(60);
+      const tb2 = q('#tab-equations').getBoundingClientRect();
+      ok(`equations tab reachable in a ${w}px pane`, S.ui.tab === 'equations' && tb2.right <= sb.right + 1 && tb2.left >= sb.left - 1, `${tb.left}-${tb.right} in ${sb.left}-${sb.right}`);
+      click('[data-act="tab"][data-v="matters"]');
+      await wait(30);
+    }
+    setupEl.style.width = oldW;
     click('[data-act="tab"][data-v="equations"]');
     await wait(60);
     ok('equations tab lists formulas, rules, points and total', !!q('#eq-column') && !!q('#eq-rule') && !!q('#eq-crit') && !!q('#eq-total'));

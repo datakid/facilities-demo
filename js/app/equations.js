@@ -90,7 +90,26 @@ window.M = window.M || {};
       try { K.render(el.getAttribute('data-tex'), el, { throwOnError: false, displayMode: true, strict: 'ignore', output: 'html' }); }
       catch (e) { el.classList.add('plain'); }
     });
+    fit(root);
   };
+
+  function fit(root) {
+    root.querySelectorAll('.eq-math:not(.plain)').forEach(el => {
+      const k = el.querySelector('.katex'); if (!k) return;
+      k.style.fontSize = '';
+      el.classList.remove('wide', 'at-end');
+      const w = k.scrollWidth, room = el.clientWidth - 4;
+      if (w <= room || !room) return;
+      const s = Math.max(0.82, room / w);
+      k.style.fontSize = (1.08 * s).toFixed(3) + 'em';
+      if (k.scrollWidth > el.clientWidth - 4) {
+        el.classList.add('wide');
+        if (!el.dataset.sb) { el.dataset.sb = 1; el.addEventListener('scroll', () => el.classList.toggle('at-end', el.scrollLeft + el.clientWidth >= el.scrollWidth - 2), { passive: true }); }
+      }
+    });
+  }
+  let fitT = null;
+  if (window.ResizeObserver) new ResizeObserver(() => { if (S.ui.tab !== 'equations') return; clearTimeout(fitT); fitT = setTimeout(() => fit(document.getElementById('setup')), 120); }).observe(document.getElementById('setup'));
 
   function allText(f) { return EQ.doc(S.model, data(), copyKey(f), it => matchQ(it, (S.ui.eqQ || '').trim().toLowerCase())); }
   R.eqExport = kind => EQ.doc(S.model, data(), kind);
