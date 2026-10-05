@@ -115,6 +115,7 @@ window.M = window.M || {};
     h += `</tbody><tfoot>${pen}<tr><td colspan="4">${m.method === 'balanced' ? 'Balanced total' : 'Total'}</td><td class="r num"><b>${r.score.toFixed(1)}</b></td></tr></tfoot></table>`;
     const calcs = E.trace(m, res, id);
     if (calcs.length) h += `<details class="calc-trace"><summary>Worked out for ${esc(r.label)}</summary><ul>${calcs.map(s => `<li><b>${esc(MD.labelOf(m, s.col))}</b> = <span class="mono">${esc(s.plug)}</span> = <b class="num">${s.err ? esc(s.err) : esc(H.val(s.col, s.value))}</b></li>`).join('')}</ul></details>`;
+    h += `<button class="link sm eq-link" data-act="eq-why" data-id="${esc(id)}">∑ See every equation with ${esc(r.label)}’s numbers</button>`;
     const wit = E.whatItTakes(m, res, id);
     if (wit.length) {
       h += `<div class="takes"><p class="takes-h">${r.rank === 1 ? `What would cost ${esc(r.label)} first place` : `What it would take for ${esc(r.label)} to win`}</p><ul>${wit.map(w => {

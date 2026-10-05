@@ -274,5 +274,33 @@
   m2.columns[0].label = 'Sticker price';
   ok('rename rewrites formulas', M.formula.print(keep, id => M.model.nameRef(m2, id)) === '[Sticker price] <= Budget');
 
+  const EQ = M.equations;
+  M.examples.forEach(ex => {
+    const m = M.examples.get(ex.id), rr = E.compute(m), eq = EQ.build(m, rr);
+    const calcN = m.columns.filter(c => c.formula).length, ruleN = m.rules.filter(x => x.on).length, critN = rr.crits.length;
+    ok(`${m.name}: equations list every formula, rule and criterion`, eq.items.filter(x => x.kind === 'column').length === calcN && eq.items.filter(x => x.kind === 'rule').length === ruleN && eq.items.filter(x => x.kind === 'crit').length === critN && eq.items.some(x => x.kind === 'total'));
+    let bad = '';
+    eq.items.forEach(it => { if (it.broken) return; EQ.strings(m, it).forEach(s => { if (!s.sym || !s.text || !s.tex || /undefined|NaN/.test(s.sym + s.text + s.tex)) bad = it.label; }); });
+    ok(`${m.name}: every equation has symbols, text and LaTeX`, !bad, bad);
+    const crs = eq.items.filter(x => x.kind === 'crit');
+    let pOk = true, pWhy = '';
+    rr.rows.forEach(row => crs.forEach(it => {
+      const x = row.c[it.id]; if (!x || x.missing) return;
+      const scope = Object.assign({}, row.vals); let p = null;
+      it.eqs.forEach(e => { const v = F.evaluate(e.ast, scope); scope[e.lhs] = e.lhs.startsWith('__t') ? M.util.clamp(v, 0, 1) : v; p = scope[e.lhs]; });
+      if (!near(p, x.s * 10, 1e-3)) { pOk = false; pWhy = `${row.label} ${it.label}: ${p} vs ${x.s * 10}`; }
+    }));
+    ok(`${m.name}: written points equations give the engine's points`, pOk, pWhy);
+    if (m.method === 'add') {
+      const tot = eq.items.find(x => x.kind === 'total');
+      let tOk = true;
+      rr.ranked.forEach(id => { const row = rr.byId[id], sc = { __pen: row.penalty }; crs.forEach(it => { sc['__p' + it.n] = row.c[it.id].s * 10; }); if (!near(Math.max(0, F.evaluate(tot.eqs[0].ast, sc)), row.score, 0.02)) tOk = false; });
+      ok(`${m.name}: written total gives the engine's score`, tOk);
+    }
+    ok(`${m.name}: LaTeX export is a full document`, /\\begin\{document\}[\s\S]*\\end\{document\}/.test(EQ.doc(m, eq, 'tex')));
+  });
+  ok('LaTeX: division becomes a fraction', EQ.latex(F.parse('a / b').ast, n => n) === '\\frac{a}{b}');
+  ok('LaTeX: sqrt and if', /\\sqrt\{x\}/.test(EQ.latex(F.parse('sqrt(x)').ast, n => n)) && /cases/.test(EQ.latex(F.parse('if(a > 1, 2, 3)').ast, n => n)));
+
   M.testResults = out;
 })(window.M);

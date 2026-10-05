@@ -64,18 +64,19 @@ window.M = window.M || {};
     if (go && ok) go.disabled = ok.disabled;
   };
 
+  const expText = t => t === 'recipe' ? M.exporter.recipe(S.model, S.res) : t === 'csv' ? M.exporter.results(S.model, S.res) : t === 'js' ? M.exporter.js(S.model, S.res) : t === 'eq' ? R.eqExport('sym') : t === 'tex' ? R.eqExport('tex') : M.exporter.json(S.model);
   function exp() {
     const t = S.ui.exportTab;
-    const text = t === 'recipe' ? M.exporter.recipe(S.model, S.res) : t === 'csv' ? M.exporter.results(S.model, S.res) : t === 'js' ? M.exporter.js(S.model, S.res) : M.exporter.json(S.model);
-    const what = { recipe: 'A plain-text summary of the whole ranking, to paste in an email or doc.', csv: 'The ranking with every value, ready for a spreadsheet.', js: 'A JavaScript function that scores an option exactly like this app.', json: 'The full ranking file. Open it again with Open file.' }[t];
+    const text = expText(t);
+    const what = { recipe: 'A plain-text summary of the whole ranking, to paste in an email or doc.', eq: 'Every equation behind the ranking, written with math symbols.', tex: 'Every equation as a LaTeX document, ready for Overleaf or a paper.', csv: 'The ranking with every value, ready for a spreadsheet.', js: 'A JavaScript function that scores an option exactly like this app.', json: 'The full ranking file. Open it again with Open file.' }[t];
     return `<header class="modal-head"><div><h2 id="modal-title" class="serif">Save &amp; share</h2><p class="muted">Your work is saved in this browser automatically.</p></div><button class="icon-btn" data-act="close-modal" aria-label="Close">${R.I.x}</button></header>
       <div class="share-row"><button class="btn primary" data-act="share-link">${R.I.share}Copy a link to this ranking</button><button class="btn" data-act="import">Open file</button></div>
-      <div class="exp-tabs">${R.seg('exp-tab', t, [['recipe', 'Summary'], ['csv', 'Spreadsheet'], ['js', 'Code'], ['json', 'File']])}</div>
+      <div class="exp-tabs">${R.seg('exp-tab', t, [['recipe', 'Summary'], ['eq', 'Equations'], ['tex', 'LaTeX'], ['csv', 'Spreadsheet'], ['js', 'Code'], ['json', 'File']])}</div>
       <p class="hint">${esc(what)}</p>
       <pre class="exp-pre" tabindex="0">${esc(text)}</pre>
       <div class="modal-foot"><span></span><div><button class="btn" data-act="copy-exp">Copy</button><button class="btn" data-act="dl-exp">Download</button></div></div>`;
   }
-  R.exportText = () => { const t = S.ui.exportTab; return { text: t === 'recipe' ? M.exporter.recipe(S.model, S.res) : t === 'csv' ? M.exporter.results(S.model, S.res) : t === 'js' ? M.exporter.js(S.model, S.res) : M.exporter.json(S.model), ext: { recipe: 'txt', csv: 'csv', js: 'js', json: 'json' }[t] }; };
+  R.exportText = () => { const t = S.ui.exportTab; return { text: expText(t), ext: { recipe: 'txt', eq: 'txt', tex: 'tex', csv: 'csv', js: 'js', json: 'json' }[t] }; };
 
   function fromTable(rowsIn, mode) {
     const head = rowsIn[0], body = rowsIn.slice(1).filter(r => r.some(x => String(x).trim()));

@@ -45,7 +45,7 @@ window.M = window.M || {};
       case 'range-lo': ST.change(() => { H.crit(id).range.lo = num(v); }, L); break;
       case 'range-hi': ST.change(() => { H.crit(id).range.hi = num(v); }, L); break;
       case 'rule-label': ST.change(() => { H.rule(id).label = v; }, L); break;
-      case 'rule-fx': ST.change(() => { H.rule(id).formula = v; }, L); el.classList.toggle('bad', !!S.res.issues.find(x => x.where === 'rule' && x.id === id)); break;
+      case 'rule-fx': autoGrow(el); ST.change(() => { H.rule(id).formula = v; }, L); el.classList.toggle('bad', !!S.res.issues.find(x => x.where === 'rule' && x.id === id)); break;
       case 'rule-col': case 'rule-op': case 'rule-val': case 'rule-src': ruleEdit(k, id, v); break;
       case 'knob': {
         const kn = H.knob(id); setP(el, +v, kn.min, kn.max);
@@ -244,7 +244,7 @@ window.M = window.M || {};
     },
     'exp-tab': v => { S.ui.exportTab = v; R.modal(); },
     'copy-exp': () => copy(R.exportText().text, 'Copied'),
-    'dl-exp': () => { const x = R.exportText(); download(slug(S.model.name) + '.' + x.ext, x.text, x.ext === 'json' ? 'application/json' : 'text/plain'); },
+    'dl-exp': () => { const x = R.exportText(); download(slug(S.model.name) + (S.ui.exportTab === 'eq' || S.ui.exportTab === 'tex' ? '-equations' : '') + '.' + x.ext, x.text, x.ext === 'json' ? 'application/json' : 'text/plain'); },
     'share-link': () => { const x = Object.assign({}, S.model); delete x.pinned; copy(location.origin + location.pathname + '#m=' + U.b64e(JSON.stringify(x)), 'Link copied. Anyone with it sees this ranking'); },
     import: () => document.getElementById('import-file').click()
   };
@@ -284,7 +284,7 @@ window.M = window.M || {};
   });
   window.addEventListener('hashchange', () => { if (/#m=/.test(location.hash)) location.reload(); });
 
-  M.app = { ACT, insertText, goTo };
+  M.app = { ACT, insertText, goTo, copy, download, slug };
   M.app.start = () => { R.pane(); ST.boot(); document.querySelectorAll('textarea.fx-in').forEach(autoGrow); };
   const mo = new MutationObserver(() => document.querySelectorAll('textarea.fx-in').forEach(el => { if (!el.dataset.g) { el.dataset.g = 1; autoGrow(el); } }));
   mo.observe(document.getElementById('setup'), { childList: true, subtree: true });

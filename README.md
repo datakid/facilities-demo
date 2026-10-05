@@ -59,6 +59,16 @@ All four live in a **Go further** panel under the ranking, use the same engine (
 4. **Fixed scales**: all candidates are scored on one scale taken from every hour, so adding options never moves the goalposts.
 The search runs in the worker with live progress and stops after about 6 s. Tested on a 40,000-combination shop: the peak-hour pick matches an exhaustive search, and quiet hours get fewer tills.
 
+## Done in v4.5: Equations view
+Until now formulas only showed up one at a time, as editable code in the Formulas tab. The scoring maths (ranges, curves, the total) was never written out at all. v4.5 adds a fifth tab, **∑ Equations**, a read-only view of every equation behind the ranking for any model, examples and your own:
+- **Sections**: Settings · Worked-out columns · Must-haves · Points of 10 for each thing that matters · Total score. Jump chips at the top show a count for each section.
+- **Points equations written out**: each criterion shows its real scale `t = (x − worst) ÷ (best − worst)` (flipped when less is better) and its curve: `p = 10 × t`, `10 × √t`, `10 × t²`, `10 × min(1, t ÷ a)`, a sweet-spot formula, or a cases table for text answers. The total is either `Score = 10 × (Σ wᵢ × pᵢ)` with the real shares or the balanced geometric blend, minus penalties. Tests check that these written equations give the engine's numbers for every option in every example.
+- **Four formats**: **Math** (typeset with KaTeX: fractions, roots, cases, subscripts), **Symbols** (× ÷ ≤ ≠ √, pᵢ), **Plain text** (the same syntax the formula box accepts) and **LaTeX**.
+- **Numbers for one option**: a switch plus an option picker. It plugs that option's values into every equation and shows its t, p, pass or fail and final score.
+- **Copy and export**: a copy button on every card, **Copy all** and **Download** (.tex for Math or LaTeX, .txt otherwise). Copy and download follow the search filter. Save & share has two new tabs: **Equations** (symbols) and **LaTeX** (a full `\documentclass` document that compiles in Overleaf).
+- **Links in from elsewhere**: a ∑ button on each worked-out column, "∑ See all as equations" on the Formulas tab, and "See every equation with X's numbers" in the Why panel. Every equation card has an **Edit** link back to where it is defined.
+- **Polish**: must-have formulas are now growing textareas, so long rules wrap instead of being cut off. Long worked-out traces and export text wrap too. On phones the five tabs fit without scrolling ("What matters" becomes "Matters").
+
 ## Examples (11, all with guides)
 | Everyday | Teaches |
 |---|---|
@@ -85,6 +95,7 @@ The search runs in the worker with live progress and stops after about 6 s. Test
 | `index.html#ex=<id>` | Opens an example (`laptop, flat, job, rice, supplier, shift, pharmacy, feed, venue, cafe, care`); add `&view=ranking` to open on the ranking, or `&tour` to start its guided tour |
 | `tests.html` | 210 engine tests (v4.4: Plan by hour past 4,096 matches exhaustive at the peak) (v4.3: plan by hour with new options, change-by-hour = brute force) (v4.2 adds finder progress, change-by-hour, curve fitting, version compare): parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
 | `ui-check.html` | 61 checks (v4.2: progress bar, the finder really running in the worker, change-by-hour, pin + compare) driving the real app (results go to the console), including drag speed on the pharmacy |
+| `preview-equations.html` | Opens the job example on the Equations tab with numbers on (set `data-ex`, `data-fmt` = math/sym/text/tex, `data-nums` on `<html>`) |
 | `preview-ranking.html` | Opens an example without the start screen, for layout checks (set `data-ex` / `data-view` on `<html>`) |
 
 ## Files
@@ -99,6 +110,8 @@ js/core/insights.js  verdict and trust checks
 js/core/export.js    summary, CSV, JavaScript, JSON
 js/core/plan.js      finder (full + step-by-step, progress), situation matrix, day plan with carry-over, change-by-hour search, importance + curve fitting, version compare
 js/core/plan-worker.js  Web Worker wrapper for find / hourly / fitAll
+js/core/equations.js equation model (settings, columns, rules, points, total) + symbols / text / LaTeX printers + document export
+js/app/equations.js  Equations tab: formats, KaTeX rendering, numbers for one option, copy / download
 js/app/runner.js     runs jobs in the worker or falls back to the main thread
 js/app/main.js       starts the app after all modules load
 js/app/tools.js      Go further panel, day strip + change-by-hour, finder / matrix / day / pairs / compare dialogs, soft must-have controls
@@ -111,7 +124,7 @@ js/tests/*.js        engine tests, UI checks, helpers
 ## Data model
 One JSON model, saved in `localStorage['meridian.studio.v4']`:
 `name, question, about, method (add|balanced), columns[{id,label,type number|yesno|text,unit,formula,group,pct,choices}], rows[{id,label,v}], knobs[{id,label,value,min,max,step,unit,group,note}], base{knobId:value}, scenarios[{id,label,values}], rules[{id,label,formula,on,soft,penalty}], day{knob,start,values[],link{knob,lo,hi},carry{col,knob},sticky}, pairs[{a,b}], pinned{at,model}, day.switchCost, criteria[{id,col,on,weight 0–10,want more|less,curve,at,tol,points,range}], guide{level,teaches,steps[]}`.
-No server and no table API are used.
+No server and no table API are used. UI state for the Equations view (`eqFmt`, `eqNums`, `eqRow`, `eqQ`) is not saved. KaTeX 0.16 is loaded from jsDelivr. Without it, Math falls back to the Symbols text.
 
 ## Not done yet
 - Within an hour the queue is steady state (M/M/c); only the carried-over value links hours. A minute-by-minute simulation isn't modelled.

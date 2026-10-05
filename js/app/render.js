@@ -20,7 +20,8 @@ window.M = window.M || {};
     check: sv('<path d="M3 8.5l3 3 7-7"/>'),
     warn: sv('<path d="M8 2.5l6 11H2z"/><path d="M8 7v3M8 12v.01"/>'),
     info: sv('<circle cx="8" cy="8" r="6"/><path d="M8 7.5V11M8 5v.01"/>'),
-    dots: sv('<path d="M3.5 8h.01M8 8h.01M12.5 8h.01"/>')
+    dots: sv('<path d="M3.5 8h.01M8 8h.01M12.5 8h.01"/>'),
+    copy: sv('<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/>')
   };
 
   R.opts = (list, cur) => list.map(([v, l]) => `<option value="${esc(v)}"${String(v) === String(cur) ? ' selected' : ''}>${esc(l)}</option>`).join('');

@@ -1,33 +1,23 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-ex="job" data-view="build" data-tab="equations" data-nums="1">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Meridian Studio · rank anything, and know why</title>
-  <meta name="description" content="Build your own ranking: pick what matters, set how much, add must-haves and formulas. Every score explains itself.">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meridian Studio · equations preview</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <meta name="theme-color" content="#faf8fc">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body data-pane="build">
-  <a class="skip" href="#results">Skip to the ranking</a>
   <header class="topbar" id="topbar"></header>
-  <nav class="pane-switch" aria-label="View">
-    <button data-act="pane" data-v="build" aria-pressed="true">Build</button>
-    <button data-act="pane" data-v="results" aria-pressed="false">Ranking</button>
-  </nav>
-  <main class="layout" id="main">
-    <section class="setup" id="setup" aria-label="Build the ranking"></section>
-    <aside class="results" id="results" aria-label="Ranking"></aside>
-  </main>
-  <aside class="coach" id="coach" aria-live="polite" hidden></aside>
+  <nav class="pane-switch" aria-label="View"><button data-act="pane" data-v="build" aria-pressed="false">Build</button><button data-act="pane" data-v="results" aria-pressed="true">Ranking</button></nav>
+  <main class="layout" id="main"><section class="setup" id="setup"></section><aside class="results" id="results"></aside></main>
+  <aside class="coach" id="coach" hidden></aside>
   <div id="modal-root"></div>
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <input type="file" id="import-file" accept=".json,.csv,.tsv,.txt,application/json,text/csv" hidden>
+  <div class="toast" id="toast"></div>
+  <input type="file" id="import-file" hidden>
+  <script src="js/tests/preview-rank.js"></script>
   <script src="js/core/util.js"></script>
   <script src="js/core/formula.js"></script>
   <script src="js/core/model.js"></script>

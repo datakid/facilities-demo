@@ -3,16 +3,25 @@ window.M = window.M || {};
   'use strict';
   const U = M.util, H = M.h, S = H.S, esc = U.esc, MD = M.model, E = M.engine, R = M.render;
 
-  const TABS = [['matters', 'What matters'], ['rules', 'Must-haves'], ['formulas', 'Formulas'], ['options', 'Options']];
+  const TABS = [['matters', 'What matters'], ['rules', 'Must-haves'], ['formulas', 'Formulas'], ['options', 'Options'], ['equations', 'Equations']];
   const isOpen = k => !!(S.ui.exp || (S.ui.exp = {}))[k];
 
   R.setup = () => {
     const el = document.getElementById('setup'); if (!el) return;
     const t = S.ui.tab, m = S.model;
-    const count = { matters: m.criteria.length, rules: m.rules.length, formulas: m.knobs.length + m.columns.filter(c => c.formula).length, options: m.rows.length };
-    const tabs = `<div class="tabs" role="tablist" aria-label="Build steps">${TABS.map(([id, l], i) => `<button role="tab" id="tab-${id}" data-act="tab" data-v="${id}" aria-selected="${t === id}" data-g="tab:${id}"><span class="tab-n">${i + 1}</span>${l}<span class="tab-c num">${count[id]}</span></button>`).join('')}</div>`;
-    const body = ({ matters: matters, rules: rules, formulas: formulas, options: options })[t]();
-    R.keepFocus(el, () => { el.innerHTML = tabs + `<div class="tab-body" role="tabpanel" aria-labelledby="tab-${t}" data-keep-scroll="tab-body">${body}</div>`; });
+    const count = { matters: m.criteria.length, rules: m.rules.length, formulas: m.knobs.length + m.columns.filter(c => c.formula).length, options: m.rows.length, equations: R.eqData ? R.eqData().items.length : 0 };
+    const tabs = `<div class="tabs" role="tablist" aria-label="Build steps">${TABS.map(([id, l], i) => `<button role="tab" id="tab-${id}" class="${id === 'equations' ? 'tab-view' : ''}" data-act="tab" data-v="${id}" aria-selected="${t === id}" data-g="tab:${id}"><span class="tab-n">${id === 'equations' ? '∑' : i + 1}</span>${id === 'matters' ? '<span class="hide-xs">What </span>matters' : l}<span class="tab-c num">${count[id]}</span></button>`).join('')}</div>`;
+    const body = ({ matters: matters, rules: rules, formulas: formulas, options: options, equations: R.equationsHTML })[t]();
+    R.keepFocus(el, () => { el.innerHTML = tabs + `<div class="tab-body${t === 'equations' ? ' eq-body' : ''}" role="tabpanel" aria-labelledby="tab-${t}" data-keep-scroll="tab-body">${body}</div>`; });
+    if (t === 'equations' && R.eqMount) R.eqMount(el);
+    const reveal = () => {
+      const strip = el.querySelector('.tabs'), on = strip && strip.querySelector('[aria-selected="true"]');
+      if (!on || strip.scrollWidth <= strip.clientWidth) return;
+      if (!on.nextElementSibling) { strip.scrollLeft = strip.scrollWidth; return; }
+      const a = strip.getBoundingClientRect(), b = on.getBoundingClientRect();
+      if (b.right > a.right) strip.scrollLeft += b.right - a.right + 16; else if (b.left < a.left) strip.scrollLeft -= a.left - b.left + 16;
+    };
+    reveal(); requestAnimationFrame(reveal);
     R.strips();
     if (M.guide) M.guide.spot();
   };
@@ -159,7 +168,7 @@ window.M = window.M || {};
       body = `<div class="rule-build"><select class="sel" data-in="rule-col" data-id="${esc(r.id)}" aria-label="Column">${R.opts(cols.map(x => [x.id, x.label]), col.id)}</select>
         <select class="sel" data-in="rule-op" data-id="${esc(r.id)}" aria-label="Comparison">${R.opts(ops, parts.op)}</select>${val}</div>`;
     } else {
-      body = `<div class="fx-edit">${R.I.fx}<input class="fx-in${issue ? ' bad' : ''}" type="text" spellcheck="false" autocomplete="off" data-in="rule-fx" data-id="${esc(r.id)}" data-fk="rf-${esc(r.id)}" value="${esc(r.formula)}" placeholder="e.g. Price <= Budget and Memory >= 16" aria-label="Must-have formula"></div>
+      body = `<div class="fx-edit">${R.I.fx}<textarea rows="1" class="fx-in${issue ? ' bad' : ''}" spellcheck="false" autocomplete="off" data-in="rule-fx" data-id="${esc(r.id)}" data-fk="rf-${esc(r.id)}" placeholder="e.g. Price <= Budget and Memory >= 16" aria-label="Must-have formula">${esc(r.formula)}</textarea></div>
         <div class="fx-status" data-live="rfx:${esc(r.id)}">${ruleStatus(r.id)}</div>`;
     }
     return `<article class="rule${r.on ? '' : ' off'}" data-g="rule:${esc(r.id)}">
@@ -247,7 +256,7 @@ window.M = window.M || {};
     h += knobs.length ? `<div class="knob-list">${grouped(knobs).map(([g, items], i) => groupBlock('kg:', g, items, knobCard, i === 0)).join('')}</div>` : `<p class="empty">${q ? 'No setting matches.' : 'No settings. Add one for numbers like a budget or order size that apply to every option.'}</p>`;
     h += '</section>';
     const calc = m.columns.filter(c => c.formula && matchQ(c, q));
-    h += `<section class="block"><div class="block-head"><h3>Worked-out columns</h3><button class="btn sm" data-act="calc-add">${R.I.plus}Add worked-out column</button></div>`;
+    h += `<section class="block"><div class="block-head"><h3>Worked-out columns</h3><span class="block-acts">${calc.length ? `<button class="btn sm ghost" data-act="eq-open">∑ See all as equations</button>` : ''}<button class="btn sm" data-act="calc-add">${R.I.plus}Add worked-out column</button></span></div>`;
     const gl = grouped(calc), lastRes = gl.findIndex(([g]) => /result/i.test(g));
     h += calc.length ? gl.map(([g, items], i) => groupBlock('cg:', g, items, calcCard, lastRes >= 0 ? i === lastRes : i === 0)).join('') : `<p class="empty">${q ? 'No formula matches.' : 'None yet. Example: <span class="mono">Rent / Size</span> gives a rent per m² for every flat.'}</p>`;
     h += '</section>';
@@ -260,6 +269,7 @@ window.M = window.M || {};
     return `<article class="calc" data-g="col:${esc(c.id)}">
       <header class="calc-head"><span class="fx-badge">ƒ</span><input class="hl" type="text" data-in="col-label" data-id="${esc(c.id)}" data-fk="cl-${esc(c.id)}" value="${esc(c.label)}" aria-label="Column name">
         <input class="unit-in" type="text" data-in="col-unit" data-id="${esc(c.id)}" data-fk="cu-${esc(c.id)}" value="${esc(c.unit)}" placeholder="unit" aria-label="Unit">
+        ${issue ? '' : `<button class="icon-btn sm" data-act="eq-open" data-v="column" data-id="${esc(c.id)}" aria-label="See ${esc(c.label)} as an equation" title="See as an equation"><span class="sig" aria-hidden="true">∑</span></button>`}
         <button class="icon-btn sm" data-act="col-del" data-id="${esc(c.id)}" aria-label="Remove column" title="Remove">${R.I.x}</button></header>
       <div class="fx-edit"><span class="eq">=</span><textarea rows="1" class="fx-in${issue ? ' bad' : ''}" spellcheck="false" autocomplete="off" data-in="col-fx" data-id="${esc(c.id)}" data-fk="cf-${esc(c.id)}" aria-label="Formula for ${esc(c.label)}" placeholder="e.g. Price / Size">${esc(c.formula)}</textarea></div>
       <div class="names" aria-label="Insert a name">${nameChips(c.id)}</div>
