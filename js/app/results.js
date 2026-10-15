@@ -112,7 +112,7 @@ window.M = window.M || {};
         <td class="r num muted">${Math.round(x.w * 100)}%</td><td class="r num"><b>${(x.contrib * 100).toFixed(1)}</b></td></tr>`;
     });
     const pen = r.penalties.map(p => { const g = H.rule(p.id); return `<tr class="pen"><td colspan="4">Misses “${esc(g.label || MD.pretty(m, g.formula) || g.formula)}”</td><td class="r num">−${U.fmtNum(p.pts)}</td></tr>`; }).join('');
-    h += `</tbody><tfoot>${pen}<tr><td colspan="4">${m.method === 'balanced' ? 'Balanced total' : 'Total'}</td><td class="r num"><b>${r.score.toFixed(1)}</b></td></tr></tfoot></table>`;
+    h += `</tbody><tfoot>${pen}<tr><td colspan="4">${m.method === 'balanced' ? 'Balanced total' : m.method === 'strict' ? 'Total, weakest link counts' : 'Total'}</td><td class="r num"><b>${r.score.toFixed(1)}</b></td></tr></tfoot></table>`;
     const calcs = E.trace(m, res, id);
     if (calcs.length) h += `<details class="calc-trace"><summary>Worked out for ${esc(r.label)}</summary><ul>${calcs.map(s => `<li><b>${esc(MD.labelOf(m, s.col))}</b> = <span class="mono">${esc(s.plug)}</span> = <b class="num">${s.err ? esc(s.err) : esc(H.val(s.col, s.value))}</b></li>`).join('')}</ul></details>`;
     h += `<button class="link sm eq-link" data-act="eq-why" data-id="${esc(id)}">∑ See every equation with ${esc(r.label)}’s numbers</button>`;

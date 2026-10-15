@@ -52,9 +52,10 @@ window.M = window.M || {};
     const rl = id => res.byId[id] ? res.byId[id].label : id;
     const cl = id => { const c = model.criteria.find(x => x.id === id); return c ? MD.labelOf(model, c.col) : id; };
     const v = verdict(res);
+    const mc = M.uncertainty && M.uncertainty.run(model, res);
     res.issues.forEach(e => {
-      const who = e.where === 'rule' ? 'A must-have' : `The formula for ${MD.labelOf(model, e.id)}`;
-      G.push({ tone: 'bad', key: 'err-' + e.id, title: `${who} has a problem`, body: e.msg, go: { kind: e.where === 'rule' ? 'rule' : 'column', id: e.id } });
+      const who = e.where === 'rule' ? 'A must-have' : e.where === 'curve' ? `The own-formula scoring for ${cl(e.id)}` : `The formula for ${MD.labelOf(model, e.id)}`;
+      G.push(Object.assign({ tone: 'bad', key: 'err-' + e.id, title: `${who} has a problem`, body: e.msg }, e.where === 'curve' ? {} : { go: { kind: e.where === 'rule' ? 'rule' : 'column', id: e.id } }));
     });
     const miss = res.rows.filter(r => r.missing.length);
     if (miss.length) {
@@ -81,6 +82,14 @@ window.M = window.M || {};
       } else if (rob.length) {
         G.push({ tone: 'ok', key: 'robust', title: `${rl(L.winner)} holds up`, body: fragile.length ? `It stays first unless you move one importance by more than ${Math.floor(fragile[0].d)} steps.` : 'It stays first whatever single importance you change.' });
       }
+      if (mc && mc.top.length) {
+        const a = mc.top[0], pc = x => Math.round(x * 100) + '%';
+        const names = U.list(mc.cols.map(id => MD.labelOf(model, id)));
+        const lines = mc.top.slice(0, 3).map(x => `${rl(x.id)} ${pc(x.p)}`).join(' · ');
+        if (a.id !== L.winner) G.push({ tone: 'warn', key: 'mc', title: `${rl(a.id)} wins more often than ${rl(L.winner)}`, body: `Letting ${names} vary within the ranges you set, first place goes: ${lines}. The current numbers favour ${rl(L.winner)}, but not reliably.` });
+        else if (a.p >= 0.9) G.push({ tone: 'ok', key: 'mc', title: `${rl(a.id)} wins in ${pc(a.p)} of ${mc.n} what-ifs`, body: `Letting ${names} vary within the ranges you set, it almost always stays first.` });
+        else G.push({ tone: 'warn', key: 'mc', title: a.p >= 0.6 ? `${rl(a.id)} usually wins, not always` : 'Too uncertain to call', body: `Letting ${names} vary within the ranges you set, first place goes: ${lines}.` });
+      }
       if (res.crits.length >= 2) {
         const w = res.byId[L.winner];
         const parts = res.crits.map(id => ({ id, p: w.c[id].contrib })).sort((a, b) => b.p - a.p);
@@ -88,7 +97,7 @@ window.M = window.M || {};
         if (tot > 0 && parts[0].p / tot > 0.6) G.push({ tone: 'info', key: 'one-trick', title: `${rl(L.winner)} wins mostly on ${cl(parts[0].id)}`, body: `${Math.round(parts[0].p / tot * 100)}% of its score comes from that one thing. If ${cl(parts[0].id)} isn't really that important, lower it.`, go: { kind: 'criterion', id: parts[0].id } });
       }
     }
-    dominated(model, res).slice(0, 2).forEach(d => G.push({ tone: 'info', key: 'dom-' + d.row, title: `${rl(d.row)} can never win`, body: `${rl(d.by)} is at least as good on everything you score, whatever the importance. You could drop it.` }));
+    dominated(model, res).filter(d => { const x = mc && mc.top.find(t => t.id === d.row); return !x || x.p < 0.02; }).slice(0, 2).forEach(d => G.push({ tone: 'info', key: 'dom-' + d.row, title: `${rl(d.row)} can never win`, body: `${rl(d.by)} is at least as good on everything you score, whatever the importance. You could drop it.` }));
     for (let i = 0; i < res.crits.length; i++) for (let j = i + 1; j < res.crits.length; j++) {
       const a = res.crits[i], b = res.crits[j];
       const pass = res.rows.filter(r => !r.c[a].missing && !r.c[b].missing);

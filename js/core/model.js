@@ -8,11 +8,15 @@ window.M = window.M || {};
     gentle: { label: 'First steps count most', line: 'Going from bad to okay is worth more than okay to great.' },
     steep: { label: 'Only the top end counts', line: 'Small differences near the best matter most.' },
     enough: { label: 'Good enough is enough', line: 'Full points once it reaches a level you choose.' },
-    target: { label: 'Closest to a sweet spot', line: 'Full points at a value you choose, fewer the further away.' }
+    target: { label: 'Closest to a sweet spot', line: 'Full points at a value you choose, fewer the further away.' },
+    scurve: { label: 'Slow at both ends', line: 'Differences near the worst and the best count less than the middle.' },
+    step: { label: 'Pass or fail', line: 'Full points at or past a line you choose, none short of it.' },
+    custom: { label: 'My own formula', line: 'Write the points yourself, as a formula.' }
   };
   const METHODS = {
     add: { label: 'Add up', line: 'Strengths can make up for weaknesses.' },
-    balanced: { label: 'Balanced', line: 'A weak spot pulls the score down more.' }
+    balanced: { label: 'Balanced', line: 'A weak spot pulls the score down more.' },
+    strict: { label: 'Weakest link', line: 'The weakest point caps the score: a zero anywhere halves it.' }
   };
   const IMPORTANCE = ['Ignore', 'Barely', 'A little', 'A little', 'Some', 'Some', 'Quite', 'Important', 'Very', 'Very', 'Crucial'];
 
@@ -36,7 +40,7 @@ window.M = window.M || {};
     m.question = String(m.question || '');
     m.about = String(m.about || '');
     m.method = METHODS[m.method] ? m.method : 'add';
-    m.columns = (m.columns || []).map(c => ({ id: c.id, label: c.label || c.id, type: ['number', 'yesno', 'text'].includes(c.type) ? c.type : 'number', unit: c.unit || '', formula: c.formula || '', note: c.note || '', group: c.group || '', pin: !!c.pin, pct: !!c.pct, choices: Array.isArray(c.choices) ? c.choices.slice() : null }));
+    m.columns = (m.columns || []).map(c => ({ id: c.id, label: c.label || c.id, type: ['number', 'yesno', 'text'].includes(c.type) ? c.type : 'number', unit: c.unit || '', formula: c.formula || '', note: c.note || '', group: c.group || '', pin: !!c.pin, pct: !!c.pct, choices: Array.isArray(c.choices) ? c.choices.slice() : null, ...(c.unc && +c.unc.v > 0 ? { unc: { mode: c.unc.mode === 'abs' ? 'abs' : 'pct', v: +c.unc.v } } : {}) }));
     m.rows = (m.rows || []).map((r, i) => ({ id: r.id || 'r' + (i + 1), label: String(r.label ?? 'Option ' + (i + 1)), v: Object.assign({}, r.v || {}), note: r.note || '' }));
     m.knobs = (m.knobs || []).map(k => ({ id: k.id, label: k.label || k.id, value: +k.value || 0, min: +(k.min ?? 0), max: +(k.max ?? 100), step: +(k.step || 1), unit: k.unit || '', note: k.note || '', group: k.group || '' }));
     m.scenarios = (m.scenarios || []).map((s, i) => ({ id: s.id || 's' + (i + 1), label: String(s.label || 'Situation ' + (i + 1)), values: Object.assign({}, s.values || {}) }));

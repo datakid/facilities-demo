@@ -113,6 +113,10 @@ window.M = window.M || {};
     if (c.curve === 'enough') extra = `<label class="field-inline">Full points at ${c.want === 'less' ? 'or below' : 'or above'} <input class="num-in" type="text" inputmode="decimal" data-in="crit-at" data-id="${esc(c.id)}" data-fk="at-${esc(c.id)}" value="${esc(c.at ?? '')}" placeholder="${esc(U.fmtNum(R0.lo + (R0.hi - R0.lo) * (c.want === 'less' ? .3 : .7)))}"><span class="unit">${esc(col.unit)}</span></label>`;
     if (c.curve === 'target') extra = `<label class="field-inline">Sweet spot <input class="num-in" type="text" inputmode="decimal" data-in="crit-at" data-id="${esc(c.id)}" data-fk="at-${esc(c.id)}" value="${esc(c.at ?? '')}" placeholder="${esc(U.fmtNum((R0.lo + R0.hi) / 2))}"><span class="unit">${esc(col.unit)}</span></label>
       <label class="field-inline">zero points when off by <input class="num-in" type="text" inputmode="decimal" data-in="crit-tol" data-id="${esc(c.id)}" data-fk="tol-${esc(c.id)}" value="${esc(c.tol ?? '')}" placeholder="${esc(U.fmtNum((R0.hi - R0.lo) / 2))}"><span class="unit">${esc(col.unit)}</span></label>`;
+    if (c.curve === 'step') extra = `<label class="field-inline">Full points ${c.want === 'less' ? 'at or below' : 'at or above'} <input class="num-in" type="text" inputmode="decimal" data-in="crit-at" data-id="${esc(c.id)}" data-fk="at-${esc(c.id)}" value="${esc(c.at ?? '')}" placeholder="${esc(U.fmtNum((R0.lo + R0.hi) / 2))}"><span class="unit">${esc(col.unit)}</span></label>`;
+    if (c.curve === 'custom') extra = `<label class="field-block">Points from 0 to 1, using <code>x</code> (the value), <code>t</code> (0 to 1 across the range), <code>lo</code> and <code>hi</code></label>
+      <div class="fx-edit"><span class="eq">=</span><textarea rows="1" class="fx-in${E.customCurve(c.fx).ok ? '' : ' bad'}" spellcheck="false" autocomplete="off" data-in="crit-fx" data-id="${esc(c.id)}" data-fk="fx-${esc(c.id)}" aria-label="Points formula for ${esc(col.label)}" placeholder="e.g. t ^ 2">${esc(c.fx || '')}</textarea></div>
+      <div class="fx-status" data-live="ccx:${esc(c.id)}">${curveStatus(c.id)}</div>`;
     const rg = c.range.auto
       ? `<p class="hint">Worst and best come from your options: <span class="num" data-live="rng:${esc(c.id)}">${rangeTxt(c)}</span>. <button class="link inline" data-act="range-fix" data-id="${esc(c.id)}">Set my own</button></p>`
       : `<div class="field-inline">Score from <input class="num-in" type="text" inputmode="decimal" data-in="range-lo" data-id="${esc(c.id)}" data-fk="lo-${esc(c.id)}" value="${esc(c.range.lo ?? '')}"> to <input class="num-in" type="text" inputmode="decimal" data-in="range-hi" data-id="${esc(c.id)}" data-fk="hi-${esc(c.id)}" value="${esc(c.range.hi ?? '')}"><span class="unit">${esc(col.unit)}</span> <button class="link inline" data-act="range-auto" data-id="${esc(c.id)}">Use my options</button></div>`;
@@ -124,6 +128,7 @@ window.M = window.M || {};
   R.LIVE.rng = id => { const c = H.crit(id); return c ? rangeTxt(c) : ''; };
 
   function curveIcon(type, want) {
+    if (type === 'custom') return '<svg viewBox="0 0 40 26" aria-hidden="true"><text x="20" y="19" text-anchor="middle" font-size="15" font-style="italic" font-family="serif" fill="currentColor">ƒ(x)</text></svg>';
     const pts = [], fake = { curve: type, want: 'more', at: 0.65, tol: 0.4 };
     for (let i = 0; i <= 24; i++) {
       const t = i / 24;
@@ -325,7 +330,16 @@ window.M = window.M || {};
     if (!used) h += `<span class="muted">Not used yet. <button class="link inline" data-act="add-crit" data-id="${esc(id)}">Score options on it</button></span>`;
     return h;
   }
+  function curveStatus(id) {
+    const c = H.crit(id); if (!c) return '';
+    const k = E.customCurve(c.fx);
+    if (!k.ok) return errHTML(c.fx || '', k.issue);
+    const row = S.res.byId[S.ui.sel || (S.res.lead && S.res.lead.winner) || (S.res.rows[0] && S.res.rows[0].id)];
+    const x = row && row.c && row.c[id];
+    return x && typeof x.raw === 'number' ? `<span class="muted">For ${esc(row.label)}: ${esc(U.fmtNum(x.raw))} gives ${esc(U.fmtNum(x.s * 10))} of 10.</span>` : '<span class="muted">Looks good.</span>';
+  }
   R.LIVE.cfx = calcStatus;
+  R.LIVE.ccx = curveStatus;
 
   function fnHelp() {
     const F = M.formula.FN;
@@ -346,7 +360,7 @@ window.M = window.M || {};
       const open = S.ui.colSel === c.id;
       h += `<th scope="col" class="${c.formula ? 'th-calc' : ''}"><div class="th-in">${c.formula ? '<span class="fx-badge sm">ƒ</span>' : ''}<input class="hl" type="text" data-in="col-label" data-id="${esc(c.id)}" data-fk="h-${esc(c.id)}" value="${esc(c.label)}" aria-label="Column name">
         <button class="icon-btn xs" data-act="col-menu" data-id="${esc(c.id)}" aria-expanded="${open}" aria-label="Column options">${R.I.chev}</button></div>
-        ${open ? colMenu(c) : `<span class="th-unit">${esc(c.unit || (c.type === 'yesno' ? 'yes / no' : c.type === 'text' ? 'text' : ''))}</span>`}</th>`;
+        ${open ? colMenu(c) : `<span class="th-unit">${esc(c.unit || (c.type === 'yesno' ? 'yes / no' : c.type === 'text' ? 'text' : ''))}${c.unc ? ` ±${c.unc.v}${c.unc.mode === 'pct' ? '%' : ''}` : ''}</span>`}</th>`;
     });
     h += `<th class="th-x"><span class="sr">Remove</span></th></tr></thead><tbody>`;
     m.rows.forEach(r => {
@@ -374,9 +388,15 @@ window.M = window.M || {};
   }
   R.LIVE.cell = key => { const [r, c] = key.split('|'); return cellCalc(r, c); };
 
+  function uncField(c) {
+    if (c.formula || c.type !== 'number') return '';
+    const u = c.unc || { mode: 'pct', v: '' };
+    return `<label class="unc-row" title="The trust check tries many what-ifs within this range">Off by ± <input class="num-in" type="text" inputmode="decimal" data-in="col-unc" data-id="${esc(c.id)}" data-fk="mc-${esc(c.id)}" value="${esc(u.v)}" placeholder="0"> <select class="sel" data-in="col-unc-mode" data-id="${esc(c.id)}">${R.opts([['pct', '%'], ['abs', c.unit || 'units']], u.mode)}</select></label>`;
+  }
   function colMenu(c) {
     return `<div class="col-menu"><label>Unit <input class="unit-in" type="text" data-in="col-unit" data-id="${esc(c.id)}" data-fk="mu-${esc(c.id)}" value="${esc(c.unit)}" placeholder="$, kg, min"></label>
       ${c.formula ? '' : `<label>Type <select class="sel" data-in="col-type" data-id="${esc(c.id)}">${R.opts([['number', 'Number'], ['yesno', 'Yes / no'], ['text', 'Text']], c.type)}</select></label>`}
+      ${uncField(c)}
       <button class="link danger" data-act="col-del" data-id="${esc(c.id)}">Remove column</button></div>`;
   }
 })(window.M);

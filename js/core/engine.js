@@ -27,6 +27,10 @@ window.M = window.M || {};
       if (k.error) { issues.push({ where: 'rule', id: r.id, msg: k.error.msg, pos: k.error.pos, len: k.error.len }); return null; }
       return { r, ast: k.ast };
     }).filter(Boolean);
+    model.criteria.filter(c => c.on && c.curve === 'custom' && colById[c.col] && colById[c.col].type === 'number').forEach(c => {
+      const k = customCurve(c.fx);
+      if (!k.ok) issues.push({ where: 'curve', id: c.id, msg: k.error, pos: k.issue.pos, len: k.issue.len });
+    });
     return { colById, comp, order, rules, issues };
   }
 
@@ -43,10 +47,37 @@ window.M = window.M || {};
     return { s, errs };
   }
 
+  const CC = new Map();
+  const CNAMES = ['x', 't', 'lo', 'hi'];
+  function customCurve(src) {
+    const key = String(src || '');
+    if (CC.has(key)) return CC.get(key);
+    let out;
+    const p = F.parse(key);
+    if (p.error) out = { ok: false, error: p.error.msg, issue: p.error };
+    else {
+      const b = F.bind(p.ast, { resolve: k => CNAMES.includes(String(k).toLowerCase()) ? String(k).toLowerCase() : null, suggest: () => CNAMES });
+      out = b && b.error ? { ok: false, error: b.error.msg, issue: b.error } : { ok: true, ast: p.ast };
+    }
+    if (CC.size > 200) CC.clear();
+    CC.set(key, out);
+    return out;
+  }
+
   function curveApply(c, t, raw, R) {
     switch (c.curve) {
       case 'gentle': return Math.sqrt(t);
       case 'steep': return t * t;
+      case 'scurve': return t * t * (3 - 2 * t);
+      case 'step': {
+        const at = c.at ?? (R.lo + R.hi) / 2;
+        return (c.want === 'less' ? raw <= at : raw >= at) ? 1 : 0;
+      }
+      case 'custom': {
+        const k = customCurve(c.fx);
+        if (!k.ok) return 0;
+        try { const v = F.evaluate(k.ast, { x: raw, t, lo: R.lo, hi: R.hi }); return typeof v === 'number' && isFinite(v) ? v : 0; } catch (e) { return 0; }
+      }
       case 'enough': {
         const at = c.at ?? (R.lo + (R.hi - R.lo) * (c.want === 'less' ? 0.3 : 0.7));
         const span = R.hi - R.lo || 1;
@@ -125,6 +156,10 @@ window.M = window.M || {};
         S = U.clamp((Math.exp(lg) - 0.1) / 0.9, 0, 1);
         const base = crits.reduce((a, c) => a + share[c.id] * row.c[c.id].s, 0);
         crits.forEach(c => { row.c[c.id].contrib = base ? S * share[c.id] * row.c[c.id].s / base : 0; });
+      } else if (model.method === 'strict') {
+        const live = crits.filter(c => share[c.id] > 0);
+        const f = 0.5 + 0.5 * (live.length ? Math.min(...live.map(c => row.c[c.id].s)) : 1);
+        crits.forEach(c => { const x = row.c[c.id]; x.contrib = share[c.id] * x.s * f; S += x.contrib; });
       } else {
         crits.forEach(c => { const x = row.c[c.id]; x.contrib = share[c.id] * x.s; S += x.contrib; });
       }
@@ -245,5 +280,5 @@ window.M = window.M || {};
     return steps;
   }
 
-  M.engine = { prepare, compute, curveApply, weightSweep, knobSweep, situations, whatItTakes, trace, rootInputs, withModel };
+  M.engine = { prepare, compute, curveApply, customCurve, weightSweep, knobSweep, situations, whatItTakes, trace, rootInputs, withModel };
 })(window.M);

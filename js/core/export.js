@@ -27,7 +27,7 @@ window.M = window.M || {};
     if (calc.length) { L.push('Worked-out columns'); calc.forEach(c => L.push(`  ${c.label} = ${MD.pretty(model, c.formula) || c.formula}`)); L.push(''); }
     const rules = model.rules.filter(r => r.on);
     if (rules.length) { L.push('Must-haves'); rules.forEach(r => L.push(`  ${r.label ? r.label + ': ' : ''}${MD.pretty(model, r.formula) || r.formula}  (${r.soft ? `−${r.penalty} points if missed` : 'ruled out if missed'})`)); L.push(''); }
-    L.push(`Score = ${model.method === 'balanced' ? 'balanced blend' : 'sum'} of points × importance share, out of 100`);
+    L.push(`Score = ${model.method === 'balanced' ? 'balanced blend' : 'sum'}${model.method === 'strict' ? ', scaled down by the weakest point,' : ''} of points × importance share, out of 100`);
     model.criteria.filter(c => c.on && res.share[c.id] != null).forEach(c => {
       const R = res.ranges[c.id], col = model.columns.find(x => x.id === c.col);
       let how;
@@ -78,10 +78,14 @@ window.M = window.M || {};
         s = ta <= 0 ? '1' : `F.clamp(${t} / ${+ta.toPrecision(15)}, 0, 1)`;
       }
       if (c.curve === 'target') s = `F.clamp(1 - Math.abs(${x} - ${c.at}) / ${c.tol}, 0, 1)`;
+      if (c.curve === 'scurve') s = `${t} * ${t} * (3 - 2 * ${t})`;
+      if (c.curve === 'step') s = `(${x} ${c.want === 'less' ? '<=' : '>='} ${+(c.at ?? (R.lo + R.hi) / 2).toPrecision(15)} ? 1 : 0)`;
+      if (c.curve === 'custom') { const k = M.engine.customCurve(c.fx); s = k.ok ? `F.clamp(${F.toJS(k.ast, nm => nm === 'x' ? x : nm === 't' ? `(${t})` : String(+(nm === 'lo' ? R.lo : R.hi).toPrecision(15)))}, 0, 1)` : '0'; }
       L.push(`  s.${c.id} = ${s};`);
     });
     const ws = model.criteria.filter(c => c.on && res.share[c.id] != null).map(c => [c.id, +res.share[c.id].toPrecision(15)]);
     if (model.method === 'balanced') L.push(`  const S = (Math.exp(${ws.map(([id, w]) => `${w} * Math.log(0.1 + 0.9 * s.${id})`).join(' + ') || '0'}) - 0.1) / 0.9;`);
+    else if (model.method === 'strict') L.push(`  const S = (${ws.map(([id, w]) => `${w} * s.${id}`).join(' + ') || '0'}) * (0.5 + 0.5 * ${ws.filter(([, w]) => w > 0).length ? 'Math.min(' + ws.filter(([, w]) => w > 0).map(([id]) => 's.' + id).join(', ') + ')' : '1'});`);
     else L.push(`  const S = ${ws.map(([id, w]) => `${w} * s.${id}`).join(' + ') || '0'};`);
     L.push('  return { pass: true, score: Math.max(0, F.clamp(S, 0, 1) * 100 - penalty), s };');
     L.push('}');

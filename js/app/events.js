@@ -41,6 +41,7 @@ window.M = window.M || {};
       case 'crit-col': ST.change(m => { const c = H.crit(id), col = H.col(v); c.col = v; if (col.type === 'text') { c.points = {}; catsOf(v).forEach((x, i, a) => { c.points[x] = a.length > 1 ? Math.round(i / (a.length - 1) * 10) : 5; }); } c.want = col.type === 'number' ? U.guessDir(col.label) : 'more'; c.curve = 'even'; c.at = null; c.tol = null; c.range = { auto: true, lo: null, hi: null }; void m; }, { setup: true }); break;
       case 'points': setP(el, +v, 0, 10); ST.change(() => { H.crit(id).points[el.getAttribute('data-k')] = +v; }, L); break;
       case 'crit-at': ST.change(() => { H.crit(id).at = num(v); }, L); break;
+      case 'crit-fx': autoGrow(el); ST.change(() => { H.crit(id).fx = v; }, L); el.classList.toggle('bad', !M.engine.customCurve(v).ok); break;
       case 'crit-tol': ST.change(() => { const n = num(v); H.crit(id).tol = n && n > 0 ? n : null; }, L); break;
       case 'range-lo': ST.change(() => { H.crit(id).range.lo = num(v); }, L); break;
       case 'range-hi': ST.change(() => { H.crit(id).range.hi = num(v); }, L); break;
@@ -67,6 +68,8 @@ window.M = window.M || {};
       case 'knob-unit': ST.change(() => { H.knob(id).unit = v.trim(); }, live ? L : { setup: true }); break;
       case 'col-label': ST.change(() => relabel('col', id, v), L); break;
       case 'col-unit': ST.change(() => { H.col(id).unit = v.trim(); }, L); break;
+      case 'col-unc': { const n = num(v); ST.change(() => { const c = H.col(id); if (!(n > 0)) delete c.unc; else c.unc = { mode: (c.unc && c.unc.mode) || 'pct', v: n }; }, L); break; }
+      case 'col-unc-mode': ST.change(() => { const c = H.col(id); if (c.unc) c.unc.mode = v === 'abs' ? 'abs' : 'pct'; }, { setup: true }); break;
       case 'col-type': ST.change(m => {
         const c = H.col(id);
         m.rows.forEach(r => { const x = r.v[id]; r.v[id] = x == null ? null : U.castCell(typeof x === 'boolean' ? (x ? 'yes' : 'no') : x, v); });
@@ -171,7 +174,7 @@ window.M = window.M || {};
     },
     'sit-base': () => { ST.change(m => { m.knobs.forEach(k => { m.base[k.id] = k.value; }); }); R.situations(); ST.toast('These settings are the new baseline'); },
     'sit-del': (v, id) => { ST.change(m => { m.scenarios = m.scenarios.filter(s => s.id !== id); }); R.situations(); ST.toast('Situation removed. Ctrl+Z brings it back'); },
-    curve: (v, id) => ST.change(() => { const c = H.crit(id); c.curve = v; if (v === 'target') { const r = S.res.ranges[id]; c.at = c.at ?? +((r.lo + r.hi) / 2).toPrecision(3); c.tol = c.tol ?? +(Math.max((r.hi - r.lo) / 2, 1)).toPrecision(3); } if (v === 'enough') { const r = S.res.ranges[id]; c.at = +(r.lo + (r.hi - r.lo) * (c.want === 'less' ? 0.3 : 0.7)).toPrecision(3); } }, { setup: true }),
+    curve: (v, id) => ST.change(() => { const c = H.crit(id); c.curve = v; if (v === 'target') { const r = S.res.ranges[id]; c.at = c.at ?? +((r.lo + r.hi) / 2).toPrecision(3); c.tol = c.tol ?? +(Math.max((r.hi - r.lo) / 2, 1)).toPrecision(3); } if (v === 'enough') { const r = S.res.ranges[id]; c.at = +(r.lo + (r.hi - r.lo) * (c.want === 'less' ? 0.3 : 0.7)).toPrecision(3); } if (v === 'step') { const r = S.res.ranges[id]; c.at = c.at ?? +((r.lo + r.hi) / 2).toPrecision(3); } if (v === 'custom' && !c.fx) c.fx = 't'; }, { setup: true }),
     'range-fix': (v, id) => ST.change(() => { const c = H.crit(id), r = S.res.ranges[id]; c.range = { auto: false, lo: r.lo, hi: r.hi }; }, { setup: true }),
     'range-auto': (v, id) => ST.change(() => { H.crit(id).range = { auto: true, lo: null, hi: null }; }, { setup: true }),
     'add-crit': (v, id) => { if (S.model.criteria.length >= H.LIMIT.criteria) return ST.toast('Up to 8 things can matter'); ST.change(m => { m.criteria.push(newCrit(id)); }); S.ui.tab = 'matters'; R.setup(); },
@@ -245,7 +248,7 @@ window.M = window.M || {};
     },
     'exp-tab': v => { S.ui.exportTab = v; R.modal(); },
     'copy-exp': () => copy(R.exportText().text, 'Copied'),
-    'dl-exp': () => { const x = R.exportText(); download(slug(S.model.name) + (S.ui.exportTab === 'eq' || S.ui.exportTab === 'tex' ? '-equations' : '') + '.' + x.ext, x.text, x.ext === 'json' ? 'application/json' : 'text/plain'); },
+    'dl-exp': () => { if (S.ui.exportTab === 'xlsx') { download(slug(S.model.name) + '.xlsx', M.xlsx.build(S.model, S.res), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); return; } const x = R.exportText(); download(slug(S.model.name) + (S.ui.exportTab === 'eq' || S.ui.exportTab === 'tex' ? '-equations' : '') + '.' + x.ext, x.text, x.ext === 'json' ? 'application/json' : 'text/plain'); },
     'share-link': () => { const x = Object.assign({}, S.model); delete x.pinned; copy(location.origin + location.pathname + '#m=' + U.b64e(JSON.stringify(x)), 'Link copied. Anyone with it sees this ranking'); },
     import: () => document.getElementById('import-file').click()
   };

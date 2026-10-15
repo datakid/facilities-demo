@@ -76,7 +76,7 @@ window.M = window.M || {};
       if (!list.length) return;
       any = true;
       const note = k === 'crit' ? '<p class="hint eq-sec-n">Each value is placed on a 0–1 scale <span class="mono">t</span> between the worst and best of your options (kept between 0 and 1), then the curve turns it into points <span class="mono">p</span> from 0 to 10.</p>'
-        : k === 'total' ? `<p class="hint eq-sec-n">${S.model.method === 'balanced' ? 'Balanced: a weighted geometric blend, so one weak spot pulls the score down more.' : 'Added up: each p times its share of importance, out of 100.'}</p>` : '';
+        : k === 'total' ? `<p class="hint eq-sec-n">${S.model.method === 'strict' ? 'Weakest link: each p times its share of importance, then scaled by how strong the weakest p is. A zero anywhere halves the score.' : S.model.method === 'balanced' ? 'Balanced: a weighted geometric blend, so one weak spot pulls the score down more.' : 'Added up: each p times its share of importance, out of 100.'}</p>` : '';
       h += `<section class="eq-sec" id="eq-${k}" data-g="eq-sec:${k}"><h3 class="eq-sec-h">${esc(title)}<span class="num muted">${list.length}</span></h3>${note}<div class="eq-list">${list.map(([it, i]) => card(it, i, f, row, trace)).join('')}</div></section>`;
     });
     if (!any) h += `<p class="empty">${q ? 'No equation matches.' : 'Nothing to show yet.'}</p>`;

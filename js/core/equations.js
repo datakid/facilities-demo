@@ -82,15 +82,34 @@ window.M = window.M || {};
       const at = c.at ?? (R.lo + R.hi) / 2, tol = c.tol || Math.max((R.hi - R.lo) / 2, 1e-9);
       return [{ lhs: Pn, ast: P(`10 * max(0, 1 - abs(${X} - ${num(at)}) / ${num(tol)})`) }];
     }
+    if (c.curve === 'step') {
+      const at = c.at ?? (R.lo + R.hi) / 2;
+      return [{ lhs: Pn, ast: P(`10 * if(${X} ${c.want === 'less' ? '<=' : '>='} ${num(at)}, 1, 0)`) }];
+    }
     const lo = num(R.lo), hi = num(R.hi);
     const tSrc = R.hi === R.lo ? '1' : c.want === 'less' ? `(${hi} - ${X}) / (${hi} - ${lo})` : `(${X} - ${lo}) / (${hi} - ${lo})`;
     let pSrc = `10 * ${T}`;
     if (c.curve === 'gentle') pSrc = `10 * sqrt(${T})`;
     if (c.curve === 'steep') pSrc = `10 * ${T}^2`;
+    if (c.curve === 'scurve') pSrc = `10 * ${T}^2 * (3 - 2 * ${T})`;
     if (c.curve === 'enough') {
       const span = R.hi - R.lo || 1, at = c.at ?? (R.lo + span * (c.want === 'less' ? 0.3 : 0.7));
       let ta = U.clamp((at - R.lo) / span, 0, 1); if (c.want === 'less') ta = 1 - ta;
       pSrc = ta <= 0 ? '10' : `10 * min(1, ${T} / ${num(ta)})`;
+    }
+    if (c.curve === 'custom') {
+      const k = M.engine.customCurve(c.fx);
+      if (!k.ok) throw new Error(k.error);
+      const sub = n => {
+        switch (n.t) {
+          case 'id': { const w = n.ref != null ? n.ref : String(n.name).toLowerCase(); return w === 'x' ? P(X) : w === 't' ? P(T) : { t: 'num', v: w === 'lo' ? R.lo : R.hi }; }
+          case 'un': return Object.assign({}, n, { a: sub(n.a) });
+          case 'bin': return Object.assign({}, n, { a: sub(n.a), b: sub(n.b) });
+          case 'call': return Object.assign({}, n, { args: n.args.map(sub) });
+          default: return n;
+        }
+      };
+      return [{ lhs: T, ast: P(tSrc), note: 't is kept between 0 and 1' }, { lhs: Pn, ast: { t: 'bin', op: '*', a: { t: 'num', v: 10 }, b: { t: 'call', fn: 'clamp', args: [sub(k.ast), { t: 'num', v: 0 }, { t: 'num', v: 1 }] } } }];
     }
     return [{ lhs: T, ast: P(tSrc), note: 't is kept between 0 and 1' }, { lhs: Pn, ast: P(pSrc) }];
   }
@@ -114,10 +133,14 @@ window.M = window.M || {};
     });
     const W = crits.map((c, i) => [num(+res.share[c.id].toFixed(4)), i + 1]);
     const pen = model.rules.some(r => r.on && r.soft) ? ' - __pen' : '';
-    const tot = model.method === 'balanced'
+    const live = W.filter(([w]) => +w > 0).map(([, n]) => `__p${n}`);
+    const worst = live.length > 1 ? `min(${live.join(', ')})` : live[0] || '10';
+    const tot = model.method === 'strict'
+      ? `10 * (${W.map(([w, n]) => `${w} * __p${n}`).join(' + ') || '0'}) * (0.5 + 0.05 * ${worst})${pen}`
+      : model.method === 'balanced'
       ? `100 * (exp(${W.map(([w, n]) => `${w} * ln(0.1 + 0.09 * __p${n})`).join(' + ') || '0'}) - 0.1) / 0.9${pen}`
       : `10 * (${W.map(([w, n]) => `${w} * __p${n}`).join(' + ') || '0'})${pen}`;
-    items.push({ kind: 'total', id: 'score', label: model.method === 'balanced' ? 'Score, balanced' : 'Score, added up', eqs: [{ lhs: 'Score', ast: P(tot) }] });
+    items.push({ kind: 'total', id: 'score', label: model.method === 'strict' ? 'Score, weakest link counts' : model.method === 'balanced' ? 'Score, balanced' : 'Score, added up', eqs: [{ lhs: 'Score', ast: P(tot) }] });
     return { name: model.name, question: model.question, method: model.method, items };
   }
 

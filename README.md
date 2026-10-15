@@ -104,7 +104,7 @@ Until now formulas only showed up one at a time, as editable code in the Formula
 | `index.html` | The app. A first visit shows the example picker |
 | `index.html#m=<base64url JSON>` | Opens a shared ranking |
 | `index.html#ex=<id>` | Opens an example (`laptop, flat, job, rice, supplier, shift, pharmacy, feed, venue, cafe, care`); add `&view=ranking` to open on the ranking, or `&tour` to start its guided tour |
-| `tests.html` | 210 engine tests (v4.4: Plan by hour past 4,096 matches exhaustive at the peak) (v4.3: plan by hour with new options, change-by-hour = brute force) (v4.2 adds finder progress, change-by-hour, curve fitting, version compare): parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
+| `tests.html` | 530 engine tests (v4.5: what-ifs from ± on values, the Excel workbook checked against the engine, S-curve / pass-or-fail / own-formula curves and the weakest-link method matching the written equations and exported code) (v4.4: Plan by hour past 4,096 matches exhaustive at the peak) (v4.3: plan by hour with new options, change-by-hour = brute force) (v4.2 adds finder progress, change-by-hour, curve fitting, version compare): parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
 | `ui-check.html` | 61 checks (v4.2: progress bar, the finder really running in the worker, change-by-hour, pin + compare) driving the real app (results go to the console), including drag speed on the pharmacy |
 | `preview-equations.html` | Opens the job example on the Equations tab with numbers on (set `data-ex`, `data-fmt` = math/sym/text/tex, `data-nums` on `<html>`) |
 | `preview-ranking.html` | Opens an example without the start screen, for layout checks (set `data-ex` / `data-view` on `<html>`) |
@@ -119,10 +119,13 @@ js/core/model.js     model shape, curves, name resolution, simple-rule ↔ formu
 js/core/engine.js    compute (formulas → must-haves → points → score), overrides, sweeps, situations, what-it-takes, trace
 js/core/insights.js  verdict and trust checks
 js/core/export.js    summary, CSV, JavaScript, JSON
+js/core/xlsx.js      Excel workbook with live formulas (Settings, Data, Scores), written without libraries
+js/core/uncertainty.js  what-ifs: runs the ranking many times with the values marked ± varied, reports win chances
 js/core/plan.js      finder (full + step-by-step, progress), situation matrix, day plan with carry-over, change-by-hour search, importance + curve fitting, version compare
 js/core/plan-worker.js  Web Worker wrapper for find / hourly / fitAll
 js/core/equations.js equation model (settings, columns, rules, points, total) + symbols / text / LaTeX printers + document export
 js/app/equations.js  Equations tab: formats, KaTeX rendering, numbers for one option, copy / download
+js/app/dropdown.js   app-styled dropdown that replaces every native select and keeps its change events
 js/app/runner.js     runs jobs in the worker or falls back to the main thread
 js/app/main.js       starts the app after all modules load
 js/app/tools.js      Go further panel, day strip + change-by-hour, finder / matrix / day / pairs / compare dialogs, soft must-have controls

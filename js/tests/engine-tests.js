@@ -302,5 +302,114 @@
   ok('LaTeX: division becomes a fraction', EQ.latex(F.parse('a / b').ast, n => n) === '\\frac{a}{b}');
   ok('LaTeX: sqrt and if', /\\sqrt\{x\}/.test(EQ.latex(F.parse('sqrt(x)').ast, n => n)) && /cases/.test(EQ.latex(F.parse('if(a > 1, 2, 3)').ast, n => n)));
 
+  {
+    const UN = M.uncertainty, E0 = M.engine;
+    const sup = M.examples.get('supplier'), base = E0.compute(sup);
+    ok('uncertainty: no ± values means nothing to run', UN.run(sup, base) === null);
+    const withUnc = (m, mode, v) => { const c = M.model.normalize(m); c.columns.forEach(x => { if (x.type === 'number' && !x.formula) x.unc = { mode, v }; }); return c; };
+    ok('uncertainty: a valid ± survives normalize, a zero is dropped', (() => { const a = M.model.normalize({ columns: [{ id: 'a', type: 'number', unc: { mode: 'abs', v: 3 } }, { id: 'b', type: 'number', unc: { mode: 'pct', v: 0 } }], rows: [], criteria: [] }); return a.columns[0].unc.v === 3 && a.columns[0].unc.mode === 'abs' && !a.columns[1].unc; })());
+    const big = withUnc(sup, 'pct', 25), rb = E0.compute(big), mc = UN.run(big, rb, { ms: Infinity });
+    ok('uncertainty: a run returns trials and win chances', mc && mc.n >= 150 && mc.top.length >= 1);
+    ok('uncertainty: win chances add up to one', mc && Math.abs(mc.top.reduce((a, x) => a + x.p, 0) - 1) < 1e-9, mc && mc.top.map(x => x.p));
+    const mc2 = UN.run(big, rb, { ms: Infinity });
+    ok('uncertainty: the same model gives the same answer every time', JSON.stringify(mc.top) === JSON.stringify(mc2.top));
+    const tiny = withUnc(sup, 'pct', 0.0001), mt = UN.run(tiny, E0.compute(tiny), { ms: Infinity });
+    ok('uncertainty: a tiny ± keeps the current winner at 100%', mt && mt.top[0].id === E0.compute(tiny).ranked[0] && mt.top[0].p === 1);
+    ok('uncertainty: a wider ± can only lower the winner\'s chance', mc.top[0].p <= 1 && mc.top[0].p <= mt.top[0].p);
+    ok('uncertainty: ± on a worked-out column is ignored', (() => { const m = M.model.normalize(sup); m.columns.forEach(c => { if (c.formula) c.unc = { mode: 'pct', v: 20 }; }); return UN.columns(m).every(c => !c.formula); })());
+    ok('uncertainty: sampled values stay within the range', (() => { const c = { unc: { mode: 'abs', v: 5 } }; return UN.spread(c, 100) === 5 && UN.spread({ unc: { mode: 'pct', v: 10 } }, -200) === 20; })());
+    ok('uncertainty: Can I trust this gets a what-ifs line', M.insights.build(big, rb).items.some(g => g.key === 'mc'));
+    ok('uncertainty: an option with a real chance is not called unable to win', (() => { const mm = UN.run(big, rb, { ms: Infinity }), items = M.insights.build(big, rb).items; return mm.top.filter(x => x.p >= 0.02).every(x => !items.some(g => g.key === 'dom-' + x.id)); })());
+    ok('uncertainty: no ± means no what-ifs line', !M.insights.build(sup, base).items.some(g => g.key === 'mc'));
+    M.examples.forEach(ex => {
+      const m = withUnc(M.examples.get(ex.id), 'pct', 10), r = E0.compute(m), t0 = Date.now(), x = UN.run(m, r);
+      ok(`${m.name}: what-ifs run within a second`, !x || Date.now() - t0 < 1000, x ? x.ms + ' ms, ' + x.n + ' trials' : 'skipped');
+    });
+  }
+
+  {
+    M.examples.forEach(ex => {
+      const m = M.examples.get(ex.id), r = M.engine.compute(m), p = M.xlsx.plan(m, r);
+      const fs = p.sheets.flatMap(s => s.rows.flat()).filter(c => c && c.f !== undefined).map(c => c.f);
+      ok(`${m.name}: workbook formulas are all Excel-safe`, fs.length > 0 && fs.every(f => f.length < 8192 && !/\bF\.|==|&&|\|\||\bpick\(|\bwait\(|\berlangc\(/.test(f)), fs.length + ' formulas');
+      ok(`${m.name}: workbook keeps every value live`, p.stat.length === 0, p.stat.slice(0, 2).join('; '));
+      const sc = p.sheets.find(s => s.name === 'Scores'), da = p.sheets.find(s => s.name === 'Data');
+      ok(`${m.name}: workbook has a row per option`, sc.rows.length === p.FIRST - 1 + m.rows.length && da.rows.length === m.rows.length + 1);
+      const z = M.xlsx.build(m, r);
+      ok(`${m.name}: workbook is a zip file`, z[0] === 0x50 && z[1] === 0x4b && z.length > 1500);
+    });
+    ok('workbook: the Excel tab describes the sheets', /Scores:/.test(M.xlsx.describe(M.examples.get('laptop'), M.engine.compute(M.examples.get('laptop')))));
+    ok('workbook: queue functions become Excel formulas', (() => { const a = M.formula.parse('wait(a, b, c)').ast; const f = M.xlsx.fx(a, id => id.toUpperCase()); return /POISSON/.test(f) && !/wait/.test(f); })());
+    ok('workbook: pick becomes nested IFs', (() => { const f = M.xlsx.fx(M.formula.parse('pick(a, "x", 1, "y", 2, 0)').ast, id => 'A1'); return f === 'IF(A1="x",1,IF(A1="y",2,0))'; })());
+  }
+
+  {
+    const EQ2 = M.equations, F2 = M.formula;
+    const curves = ['even', 'gentle', 'steep', 'enough', 'target', 'scurve', 'step', 'custom'], fxs = ['t ^ 2', '1 - t', 'if(x > (lo + hi) / 2, 1, t)', 'clamp((x - lo) / (hi - lo) * 1.5, 0, 1)'];
+    ok('curves: S-curve is flat at both ends and fair in the middle', near(E.curveApply({ curve: 'scurve' }, 0, 0, { lo: 0, hi: 1 }), 0) && near(E.curveApply({ curve: 'scurve' }, 0.5, 0.5, { lo: 0, hi: 1 }), 0.5) && near(E.curveApply({ curve: 'scurve' }, 1, 1, { lo: 0, hi: 1 }), 1) && E.curveApply({ curve: 'scurve' }, 0.1, 0.1, { lo: 0, hi: 1 }) < 0.1);
+    ok('curves: pass or fail respects the direction', E.curveApply({ curve: 'step', at: 5, want: 'more' }, 1, 6, { lo: 0, hi: 10 }) === 1 && E.curveApply({ curve: 'step', at: 5, want: 'more' }, 0, 4, { lo: 0, hi: 10 }) === 0 && E.curveApply({ curve: 'step', at: 5, want: 'less' }, 1, 4, { lo: 0, hi: 10 }) === 1);
+    ok('curves: my own formula "t" matches every bit counts', [0, 0.3, 0.77, 1].every(t => near(E.curveApply({ curve: 'custom', fx: 't' }, t, t, { lo: 0, hi: 1 }), t)));
+    ok('curves: my own formula can use the value and the range', near(E.curveApply({ curve: 'custom', fx: '(x - lo) / (hi - lo)' }, 0.25, 12.5, { lo: 10, hi: 20 }), 0.25));
+    ok('curves: a broken own formula is reported, not silently scored', (() => { const m = M.model.normalize(JSON.parse(JSON.stringify(M.examples.get('laptop')))); m.criteria[0].curve = 'custom'; m.criteria[0].fx = 't +'; const r = E.compute(m); return r.issues.some(i => i.where === 'curve' && i.id === m.criteria[0].id); })());
+    ok('curves: unknown names in my own formula are caught', !E.customCurve('price * 2').ok && E.customCurve('x * 2').ok);
+    M.examples.forEach(ex => {
+      for (let v = 0; v < 3; v++) {
+        const base = M.examples.get(ex.id), r0 = E.compute(base), m0 = JSON.parse(JSON.stringify(base));
+        m0.criteria.forEach((c, i) => {
+          c.curve = curves[(i + v * 3) % curves.length]; c.at = null; c.tol = null;
+          if ((i + v) % 3 === 1) c.want = c.want === 'less' ? 'more' : 'less';
+          if (c.curve === 'custom') c.fx = fxs[(i + v) % fxs.length];
+          const R = r0.ranges[c.id];
+          if (R && !R.text) {
+            if (c.curve === 'target') { c.at = +((R.lo + R.hi) / 2).toPrecision(3); c.tol = +Math.max((R.hi - R.lo) / 2, 1).toPrecision(3); }
+            if (c.curve === 'enough') c.at = +(R.lo + (R.hi - R.lo) * (c.want === 'less' ? 0.3 : 0.7)).toPrecision(3);
+            if (c.curve === 'step') c.at = +((R.lo + R.hi) / 2).toPrecision(3);
+          }
+        });
+        const m = M.model.normalize(m0), r = E.compute(m), tag = `${m.name} (curve mix ${v + 1})`;
+        ok(`${tag}: no formula issues`, !r.issues.length, r.issues.map(i => i.msg).join('; '));
+        let same = false, why = '';
+        try {
+          const code = M.exporter.js(m, r), fn = code.replace('export function score', 'return function score').replace(/^\/\/.*\n/, '');
+          const score = (new Function('return (function(){' + fn + '})()'))();
+          same = r.rows.every(row => { const o = score(Object.assign({}, m.rows.find(x => x.id === row.id).v)); if (o.pass !== row.pass) { why = row.label + ' pass'; return false; } if (o.pass && !near(o.score, row.score, 1e-6)) { why = row.label + ' ' + o.score + ' vs ' + row.score; return false; } return true; });
+        } catch (e) { why = e.message; }
+        ok(`${tag}: exported code = engine`, same, why);
+        const eq = EQ2.build(m, r), crs = eq.items.filter(x => x.kind === 'crit');
+        let pOk = true, pWhy = '';
+        r.rows.forEach(row => crs.forEach(it => {
+          const x = row.c[it.id]; if (!x || x.missing) return;
+          const scope = Object.assign({}, row.vals); let p = null;
+          try { it.eqs.forEach(e => { const val = F2.evaluate(e.ast, scope); scope[e.lhs] = e.lhs.startsWith('__t') ? M.util.clamp(val, 0, 1) : val; p = scope[e.lhs]; }); } catch (e) { pOk = false; pWhy = it.label + ': ' + e.message; return; }
+          if (!near(p, x.s * 10, 1e-3)) { pOk = false; pWhy = `${row.label} ${it.label}: ${p} vs ${x.s * 10}`; }
+        }));
+        ok(`${tag}: written points equations give the engine's points`, pOk, pWhy);
+        ok(`${tag}: workbook keeps every value live`, M.xlsx.plan(m, r).stat.length === 0);
+      }
+    });
+  }
+
+  {
+    const EQ3 = M.equations, F3 = M.formula;
+    M.examples.forEach(ex => {
+      const add = E.compute(M.examples.get(ex.id)), m = M.model.normalize(Object.assign(JSON.parse(JSON.stringify(M.examples.get(ex.id))), { method: 'strict' })), r = E.compute(m), tag = `${m.name} (weakest link)`;
+      ok(`${tag}: never scores above adding up`, r.rows.every(x => x.score <= add.byId[x.id].score + 1e-9));
+      ok(`${tag}: contributions add up to the score`, r.rows.every(x => !x.pass || near(Object.values(x.c).reduce((a, y) => a + y.contrib, 0) * 100 - x.penalty, x.score > 0 ? x.score : x.score - 0, 1e-6) || x.score === 0));
+      let same = false, why = '';
+      try {
+        const code = M.exporter.js(m, r), fn = code.replace('export function score', 'return function score').replace(/^\/\/.*\n/, '');
+        const score = (new Function('return (function(){' + fn + '})()'))();
+        same = r.rows.every(row => { const o = score(Object.assign({}, m.rows.find(x => x.id === row.id).v)); if (o.pass !== row.pass) { why = row.label + ' pass'; return false; } if (o.pass && !near(o.score, row.score, 1e-6)) { why = row.label + ' ' + o.score + ' vs ' + row.score; return false; } return true; });
+      } catch (e) { why = e.message; }
+      ok(`${tag}: exported code = engine`, same, why);
+      const eq = EQ3.build(m, r), crs = eq.items.filter(x => x.kind === 'crit'), tot = eq.items.find(x => x.kind === 'total');
+      let tOk = true;
+      r.ranked.forEach(id => { const row = r.byId[id], sc = { __pen: row.penalty }; crs.forEach(it => { sc['__p' + it.n] = row.c[it.id].s * 10; }); if (!near(Math.max(0, F3.evaluate(tot.eqs[0].ast, sc)), row.score, 0.02)) tOk = false; });
+      ok(`${tag}: written total gives the engine's score`, tOk);
+      ok(`${tag}: workbook keeps every value live`, M.xlsx.plan(m, r).stat.length === 0);
+    });
+    ok('weakest link: a zero anywhere halves the score', (() => { const m = M.model.normalize({ method: 'strict', columns: [{ id: 'a', label: 'A', type: 'number' }, { id: 'b', label: 'B', type: 'number' }], rows: [{ id: 'r1', label: 'One', v: { a: 10, b: 0 } }, { id: 'r2', label: 'Two', v: { a: 0, b: 10 } }, { id: 'r3', label: 'Three', v: { a: 10, b: 10 } }], criteria: [{ id: 'ca', col: 'a', weight: 5 }, { id: 'cb', col: 'b', weight: 5 }] }); const r = E.compute(m); return near(r.byId.r1.score, 25) && near(r.byId.r3.score, 100); })());
+  }
+
   M.testResults = out;
 })(window.M);
