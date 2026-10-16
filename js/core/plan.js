@@ -117,7 +117,7 @@ window.M = window.M || {};
     const nCtx = opt.judge === 'day' ? model.day.values.length : ctx.length;
     const sig = v => keys.map(k => String(v[k])).join('|');
     const existing = new Map(model.rows.map(r => [sig(r.v), r.id]));
-    const fixedR = fixedRanges(model, prep, ctx, keys, spec, base);
+    const fixedR = fixedRanges(model, prep, ctx || dayContexts(model), keys, spec, base);
     const scoreRows = cands => {
       const rows = cands.map((v, i) => ({ id: '__c' + i, label: '', v }));
       let agg;
@@ -193,7 +193,9 @@ window.M = window.M || {};
     keys.forEach(k => spec[k].forEach(x => sample.push(Object.assign({}, base.v, { [k]: x }))));
     const rows = sample.map((v, i) => ({ id: '__s' + i, label: '', v }));
     const R = {};
-    (ctx || [{ K: Object.assign({}, model.base) }]).slice(0, 6).forEach(c => {
+    const all = ctx || [{ K: Object.assign({}, model.base) }];
+    const use = all.length <= 12 ? all : Array.from({ length: 12 }, (_, i) => all[Math.round(i * (all.length - 1) / 11)]);
+    use.forEach(c => {
       const r = E.compute(model, { prep, K: c.K, rows });
       Object.entries(r.ranges).forEach(([id, x]) => { if (x.text || x.empty) return; if (!R[id]) R[id] = { lo: x.lo, hi: x.hi, auto: x.auto }; else { R[id].lo = Math.min(R[id].lo, x.lo); R[id].hi = Math.max(R[id].hi, x.hi); } });
     });
@@ -214,7 +216,7 @@ window.M = window.M || {};
     const r = E.compute(model, { prep, W });
     return pairs.map(p => {
       const a = r.byId[p.a], b = r.byId[p.b];
-      if (!a || !b) return { p, ok: null };
+      if (!a || !b) return { p, ok: null, gone: true };
       if (!a.pass || !b.pass) return { p, ok: null, out: !a.pass ? p.a : p.b };
       return { p, ok: a.score > b.score + 1e-9, gap: a.score - b.score };
     });
@@ -233,6 +235,7 @@ window.M = window.M || {};
     };
     let W = Object.assign({}, orig), L = loss(W);
     if (Object.values(W).every(w => !w)) crits.forEach(c => { W[c.id] = 5; });
+    L = loss(W);
     for (let pass = 0; pass < 6; pass++) {
       let moved = false;
       crits.forEach(c => {
@@ -259,6 +262,7 @@ window.M = window.M || {};
     const cost = Math.max(0, opt.cost ?? d.switchCost ?? 4);
     const ctx = dayContexts(model), H = ctx.length;
     const list = (opt.rows || model.rows).slice(0, 120), n = list.length; void n;
+    if (!list.length) return { error: 'Add some options first.' };
     const carry = d.carry && model.knobs.some(k => k.id === d.carry.knob) && model.columns.some(c => c.id === d.carry.col) ? d.carry : null;
     const MAXS = opt.maxStates || 4000;
     const step = (h, q) => {
@@ -348,7 +352,6 @@ window.M = window.M || {};
   function rangesFor(model, prep, ctx, rows) {
     const R = {};
     ctx.forEach(c => { const r = E.compute(model, { prep, K: c.K, rows }); Object.entries(r.ranges).forEach(([id, x]) => { if (x.text || x.empty) return; if (!R[id]) R[id] = { lo: x.lo, hi: x.hi, auto: x.auto }; else { R[id].lo = Math.min(R[id].lo, x.lo); R[id].hi = Math.max(R[id].hi, x.hi); } }); });
-    model.criteria.forEach(c => { if (c.range && !c.range.auto && R[c.id]) { R[c.id] = { lo: c.range.lo, hi: c.range.hi, auto: false }; } });
     return R;
   }
 
@@ -402,6 +405,8 @@ window.M = window.M || {};
     b.rows.forEach(r => { if (!a.rows.some(x => key(x) === key(r))) { const y = rb.byId[r.id]; rows.push({ label: r.label, a: null, b: { rank: y.rank, score: y.pass ? y.score : null } }); } });
     const diffs = [];
     const nm = (m, c) => { const col = m.columns.find(x => x.id === c.col); return col ? col.label : c.col; };
+    const canon = (m, src, ex) => { const k = M.model.compileFormula(m, src, ex); return k.ast ? M.formula.print(k.ast, id => id) : String(src || '').trim(); };
+    const auto = v => (v == null ? 'auto' : v);
     a.criteria.forEach(c => {
       const o = b.criteria.find(x => x.col === c.col || x.id === c.id);
       if (!o) { diffs.push(`${nm(a, c)} only counts in A`); return; }
@@ -409,11 +414,25 @@ window.M = window.M || {};
       if (o.weight !== c.weight) diffs.push(`${nm(a, c)} importance ${c.weight} → ${o.weight}`);
       if (o.want !== c.want) diffs.push(`${nm(a, c)}: ${c.want} is better → ${o.want}`);
       if (o.curve !== c.curve) diffs.push(`${nm(a, c)} curve ${MD().CURVES[c.curve].label.toLowerCase()} → ${MD().CURVES[o.curve].label.toLowerCase()}`);
+      if ((o.at ?? null) !== (c.at ?? null)) diffs.push(`${nm(a, c)} sweet spot or threshold ${auto(c.at)} → ${auto(o.at)}`);
+      if ((o.tol ?? null) !== (c.tol ?? null)) diffs.push(`${nm(a, c)} tolerance ${auto(c.tol)} → ${auto(o.tol)}`);
+      const ga = c.range || {}, gb = o.range || {}, rg = g => (g.auto ?? true) ? 'auto' : `${g.lo} to ${g.hi}`;
+      if ((ga.auto ?? true) !== (gb.auto ?? true) || (!(ga.auto ?? true) && (ga.lo !== gb.lo || ga.hi !== gb.hi))) diffs.push(`${nm(a, c)} score range ${rg(ga)} → ${rg(gb)}`);
+      if (JSON.stringify(o.points) !== JSON.stringify(c.points)) diffs.push(`${nm(a, c)} points per answer changed`);
+      if ((o.fx || '') !== (c.fx || '')) diffs.push(`${nm(a, c)} own curve changed`);
     });
+    a.columns.forEach(c => {
+      const o = b.columns.find(x => x.id === c.id);
+      if (!o) { diffs.push(`Column ${c.label} only in A`); return; }
+      if (canon(a, c.formula, c.id) !== canon(b, o.formula, o.id)) diffs.push(`Formula for ${c.label} changed`);
+    });
+    b.columns.forEach(c => { if (!a.columns.some(x => x.id === c.id)) diffs.push(`Column ${c.label} only in B`); });
     b.criteria.forEach(c => { if (!a.criteria.some(x => x.col === c.col || x.id === c.id)) diffs.push(`${nm(b, c)} only counts in B`); });
-    a.knobs.forEach(k => { const o = b.knobs.find(x => x.id === k.id); if (o && Math.abs(o.value - k.value) > 1e-9) diffs.push(`${k.label} ${U.withUnit(k.value, k.unit)} → ${U.withUnit(o.value, o.unit)}`); });
+    a.knobs.forEach(k => { const o = b.knobs.find(x => x.id === k.id); if (!o) diffs.push(`Setting ${k.label} only in A`); else if (Math.abs(o.value - k.value) > 1e-9) diffs.push(`${k.label} ${U.withUnit(k.value, k.unit)} → ${U.withUnit(o.value, o.unit)}`); });
+    b.knobs.forEach(k => { if (!a.knobs.some(x => x.id === k.id)) diffs.push(`Setting ${k.label} only in B`); });
     const rf = r => `${r.label || r.formula}${r.on ? '' : ' (off)'}${r.soft ? ` (−${r.penalty})` : ''}`;
-    a.rules.forEach(r => { const o = b.rules.find(x => x.id === r.id); if (!o) diffs.push(`Must-have “${rf(r)}” only in A`); else if (rf(o) !== rf(r) || o.formula !== r.formula) diffs.push(`Must-have “${rf(r)}” → “${rf(o)}”`); });
+    const rk = (m, r) => `${r.label || ''}|${canon(m, r.formula)}|${!!r.on}|${!!r.soft}|${r.soft ? r.penalty : 0}`;
+    a.rules.forEach(r => { const o = b.rules.find(x => x.id === r.id); if (!o) diffs.push(`Must-have “${rf(r)}” only in A`); else if (rk(a, r) !== rk(b, o)) diffs.push(`Must-have “${rf(r)}” → “${rf(o)}”`); });
     b.rules.forEach(r => { if (!a.rules.some(x => x.id === r.id)) diffs.push(`Must-have “${rf(r)}” only in B`); });
     if (a.method !== b.method) diffs.push(`Combine: ${a.method} → ${b.method}`);
     const cellDiff = rows.filter(x => x.a && x.b).length;

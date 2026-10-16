@@ -79,11 +79,11 @@ window.M = window.M || {};
       return [{ lhs: Pn, ast: P(src) }];
     }
     if (c.curve === 'target') {
-      const at = c.at ?? (R.lo + R.hi) / 2, tol = c.tol || Math.max((R.hi - R.lo) / 2, 1e-9);
+      const { at, tol } = M.engine.curveParams(c, R);
       return [{ lhs: Pn, ast: P(`10 * max(0, 1 - abs(${X} - ${num(at)}) / ${num(tol)})`) }];
     }
     if (c.curve === 'step') {
-      const at = c.at ?? (R.lo + R.hi) / 2;
+      const { at } = M.engine.curveParams(c, R);
       return [{ lhs: Pn, ast: P(`10 * if(${X} ${c.want === 'less' ? '<=' : '>='} ${num(at)}, 1, 0)`) }];
     }
     const lo = num(R.lo), hi = num(R.hi);
@@ -93,7 +93,7 @@ window.M = window.M || {};
     if (c.curve === 'steep') pSrc = `10 * ${T}^2`;
     if (c.curve === 'scurve') pSrc = `10 * ${T}^2 * (3 - 2 * ${T})`;
     if (c.curve === 'enough') {
-      const span = R.hi - R.lo || 1, at = c.at ?? (R.lo + span * (c.want === 'less' ? 0.3 : 0.7));
+      const span = R.hi - R.lo || 1, { at } = M.engine.curveParams(c, R);
       let ta = U.clamp((at - R.lo) / span, 0, 1); if (c.want === 'less') ta = 1 - ta;
       pSrc = ta <= 0 ? '10' : `10 * min(1, ${T} / ${num(ta)})`;
     }
@@ -132,14 +132,15 @@ window.M = window.M || {};
         how: R.text ? 'Points per answer' : (c.want === 'less' ? 'Less is better' : 'More is better') + ' · ' + MD.CURVES[c.curve].label, eqs: (() => { try { return critEqs(model, c, R, col, i + 1); } catch (e) { return [{ lhs: '__p' + (i + 1), ast: { t: 'num', v: 5 } }]; } })() });
     });
     const W = crits.map((c, i) => [num(+res.share[c.id].toFixed(4)), i + 1]);
-    const pen = model.rules.some(r => r.on && r.soft) ? ' - __pen' : '';
+    const hasPen = model.rules.some(r => r.on && r.soft);
     const live = W.filter(([w]) => +w > 0).map(([, n]) => `__p${n}`);
     const worst = live.length > 1 ? `min(${live.join(', ')})` : live[0] || '10';
-    const tot = model.method === 'strict'
-      ? `10 * (${W.map(([w, n]) => `${w} * __p${n}`).join(' + ') || '0'}) * (0.5 + 0.05 * ${worst})${pen}`
+    const body = model.method === 'strict'
+      ? `10 * (${W.map(([w, n]) => `${w} * __p${n}`).join(' + ') || '0'}) * (0.5 + 0.05 * ${worst})`
       : model.method === 'balanced'
-      ? `100 * (exp(${W.map(([w, n]) => `${w} * ln(0.1 + 0.09 * __p${n})`).join(' + ') || '0'}) - 0.1) / 0.9${pen}`
-      : `10 * (${W.map(([w, n]) => `${w} * __p${n}`).join(' + ') || '0'})${pen}`;
+      ? `100 * (exp(${W.map(([w, n]) => `${w} * ln(0.1 + 0.09 * __p${n})`).join(' + ') || '0'}) - 0.1) / 0.9`
+      : `10 * (${W.map(([w, n]) => `${w} * __p${n}`).join(' + ') || '0'})`;
+    const tot = hasPen ? `max(0, ${body} - __pen)` : body;
     items.push({ kind: 'total', id: 'score', label: model.method === 'strict' ? 'Score, weakest link counts' : model.method === 'balanced' ? 'Score, balanced' : 'Score, added up', eqs: [{ lhs: 'Score', ast: P(tot) }] });
     return { name: model.name, question: model.question, method: model.method, items };
   }
@@ -165,7 +166,7 @@ window.M = window.M || {};
     const L = [];
     const side = it => it.kind === 'rule' ? it.label + (it.effect ? ', ' + it.effect : '') : it.kind === 'crit' ? `${it.label}, ${Math.round(it.share * 100)}%` : '';
     if (k === 'tex') {
-      L.push('\\documentclass{article}', '\\usepackage{amsmath,amssymb}', '\\begin{document}', `\\section*{${texEsc(eq.name)}}`);
+      L.push('\\documentclass{article}', '\\usepackage[T1]{fontenc}', '\\usepackage{textcomp}', '\\usepackage{newunicodechar}', '\\newunicodechar{²}{\\textsuperscript{2}}', '\\newunicodechar{“}{\\textquotedblleft}', '\\newunicodechar{”}{\\textquotedblright}', '\\usepackage{amsmath,amssymb}', '\\begin{document}', `\\section*{${texEsc(eq.name)}}`);
       if (eq.question) L.push(texEsc(eq.question));
       SECTIONS.forEach(([kd, title]) => {
         const list = items.filter(x => x.kind === kd); if (!list.length) return;
@@ -173,7 +174,7 @@ window.M = window.M || {};
         const lines = [];
         list.forEach(it => {
           if (it.broken) { lines.push(`&\\text{${texEsc(it.label)}: ${texEsc(it.raw)}} && \\text{(${texEsc(it.broken)})}`); return; }
-          strings(model, it).forEach((s, j) => { const i = s.tex.indexOf(' = '); const body = i > 0 && it.kind !== 'rule' ? s.tex.slice(0, i) + ' &= ' + s.tex.slice(i + 3) : '&' + s.tex; lines.push(body + (j === it.eqs.length - 1 && side(it) ? ` && \\text{${texEsc(side(it)).replace('−', '-')}}` : '')); });
+          strings(model, it).forEach((s, j) => { const i = s.tex.indexOf(' = '); const body = i > 0 && it.kind !== 'rule' ? s.tex.slice(0, i) + ' &= ' + s.tex.slice(i + 3) : '&' + s.tex; lines.push(body + (j === it.eqs.length - 1 && side(it) ? ` && \\text{${texEsc(side(it)).replace(/−/g, '-')}}` : '')); });
         });
         L.push(lines.join(' \\\\\n'), '\\end{align*}');
       });

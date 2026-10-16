@@ -64,13 +64,22 @@ window.M = window.M || {};
     return out;
   }
 
+  function curveParams(c, R) {
+    switch (c.curve) {
+      case 'enough': return { at: c.at ?? R.lo + (R.hi - R.lo) * (c.want === 'less' ? 0.3 : 0.7) };
+      case 'target': return { at: c.at ?? (R.lo + R.hi) / 2, tol: c.tol || Math.max((R.hi - R.lo) / 2, 1e-9) };
+      case 'step': return { at: c.at ?? (R.lo + R.hi) / 2 };
+    }
+    return {};
+  }
+
   function curveApply(c, t, raw, R) {
     switch (c.curve) {
       case 'gentle': return Math.sqrt(t);
       case 'steep': return t * t;
       case 'scurve': return t * t * (3 - 2 * t);
       case 'step': {
-        const at = c.at ?? (R.lo + R.hi) / 2;
+        const { at } = curveParams(c, R);
         return (c.want === 'less' ? raw <= at : raw >= at) ? 1 : 0;
       }
       case 'custom': {
@@ -79,13 +88,13 @@ window.M = window.M || {};
         try { const v = F.evaluate(k.ast, { x: raw, t, lo: R.lo, hi: R.hi }); return typeof v === 'number' && isFinite(v) ? v : 0; } catch (e) { return 0; }
       }
       case 'enough': {
-        const at = c.at ?? (R.lo + (R.hi - R.lo) * (c.want === 'less' ? 0.3 : 0.7));
+        const { at } = curveParams(c, R);
         const span = R.hi - R.lo || 1;
         let ta = U.clamp((at - R.lo) / span, 0, 1); if (c.want === 'less') ta = 1 - ta;
         return ta <= 0 ? 1 : U.clamp(t / ta, 0, 1);
       }
       case 'target': {
-        const at = c.at ?? (R.lo + R.hi) / 2, tol = c.tol || Math.max((R.hi - R.lo) / 2, 1e-9);
+        const { at, tol } = curveParams(c, R);
         return U.clamp(1 - Math.abs(raw - at) / tol, 0, 1);
       }
     }
@@ -93,7 +102,7 @@ window.M = window.M || {};
   }
 
   function rangeOf(c, vals) {
-    if (c.range && !c.range.auto && isFinite(c.range.lo) && isFinite(c.range.hi) && c.range.lo !== c.range.hi) return { lo: Math.min(c.range.lo, c.range.hi), hi: Math.max(c.range.lo, c.range.hi), auto: false };
+    if (c.range && !c.range.auto && Number.isFinite(c.range.lo) && Number.isFinite(c.range.hi) && c.range.lo !== c.range.hi) return { lo: Math.min(c.range.lo, c.range.hi), hi: Math.max(c.range.lo, c.range.hi), auto: false };
     const v = vals.filter(x => typeof x === 'number' && isFinite(x));
     if (!v.length) return { lo: 0, hi: 0, auto: true, empty: true };
     return { lo: Math.min(...v), hi: Math.max(...v), auto: true };
@@ -234,6 +243,11 @@ window.M = window.M || {};
     const target = row.rank === 1 ? res.ranked[1] : lead.winner;
     if (!target) return [];
     const out = [];
+    const roundAway = (x, from) => {
+      if (x === 0) return 0;
+      const p = Math.pow(10, Math.floor(Math.log10(Math.abs(x))) - 2), q = +(x / p).toPrecision(12);
+      return +((x > from ? Math.ceil(q) : Math.floor(q)) * p).toPrecision(12);
+    };
     const editable = model.columns.filter(c => !(c.formula && c.formula.trim()) && c.type === 'number');
     const used = new Set();
     model.criteria.filter(c => c.on && c.weight > 0).forEach(c => {
@@ -254,10 +268,12 @@ window.M = window.M || {};
         if (!test(far)) return;
         let lo = cur, hi = far;
         for (let j = 0; j < 16; j++) { const mid = (lo + hi) / 2; if (test(mid)) hi = mid; else lo = mid; }
-        out.push({ col: col.id, from: cur, to: hi, delta: hi - cur, rel: Math.abs(hi - cur) / span });
+        const nice = roundAway(hi, cur), to = test(nice) ? nice : hi;
+        const vs = row.rank === 1 ? (compute(model, { prep: res.prep, V: { [rowId]: { [col.id]: to } } }).ranked[0] || null) : target;
+        out.push({ col: col.id, from: cur, to, delta: to - cur, rel: Math.abs(to - cur) / span, vs });
       });
     });
-    return out.sort((a, b) => a.rel - b.rel).slice(0, 4).map(x => Object.assign(x, { lose: row.rank === 1, vs: target }));
+    return out.sort((a, b) => a.rel - b.rel).slice(0, 4).map(x => Object.assign(x, { lose: row.rank === 1 }));
   }
 
   function rootInputs(model, prep, colId, seen) {
@@ -280,5 +296,5 @@ window.M = window.M || {};
     return steps;
   }
 
-  M.engine = { prepare, compute, curveApply, customCurve, weightSweep, knobSweep, situations, whatItTakes, trace, rootInputs, withModel };
+  M.engine = { prepare, compute, curveApply, curveParams, rangeOf, customCurve, weightSweep, knobSweep, situations, whatItTakes, trace, rootInputs, withModel };
 })(window.M);

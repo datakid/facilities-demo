@@ -46,7 +46,7 @@ window.M = window.M || {};
   function fx(ast, ref) {
     const go = n => {
       switch (n.t) {
-        case 'num': return String(+n.v.toFixed(10));
+        case 'num': return String(+n.v.toPrecision(15));
         case 'str': return q(n.v);
         case 'id': return ref(n.ref != null ? n.ref : n.name);
         case 'un': return n.op === '-' ? `(-${go(n.a)})` : `IF(${go(n.a)},0,1)`;
@@ -57,6 +57,7 @@ window.M = window.M || {};
           if (n.op === '==') return `IF(${a}=${b},1,0)`;
           if (n.op === '!=') return `IF(${a}<>${b},1,0)`;
           if (['<', '<=', '>', '>='].includes(n.op)) return `IF(${a}${n.op}${b},1,0)`;
+          if (n.op === '%') return `(${a}-${b}*TRUNC(${a}/${b}))`;
           return `(${a}${n.op}${b})`;
         }
         case 'call': return call(n.fn, n.args.map(go));
@@ -107,7 +108,7 @@ window.M = window.M || {};
       const col = prep.colById[c.col], l = L(j), dl = colL[c.col], rng = `Data!${dl}$2:${dl}$${lastData}`;
       rowW.push({ n: +c.weight });
       if (col.type === 'text') { rowLo.push(null); rowHi.push(null); rowAt.push(null); rowTol.push(null); return; }
-      const fixed = c.range && !c.range.auto && isFinite(c.range.lo) && isFinite(c.range.hi) && c.range.lo !== c.range.hi;
+      const fixed = c.range && !c.range.auto && Number.isFinite(c.range.lo) && Number.isFinite(c.range.hi) && c.range.lo !== c.range.hi;
       rowLo.push(fixed ? { n: Math.min(c.range.lo, c.range.hi) } : { f: `MIN(${rng})` });
       rowHi.push(fixed ? { n: Math.max(c.range.lo, c.range.hi) } : { f: `MAX(${rng})` });
       const less = c.want === 'less';

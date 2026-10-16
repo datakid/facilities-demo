@@ -1,13 +1,20 @@
 window.M = window.M || {};
 (function (M) {
   'use strict';
-  const U = M.util, H = M.h, S = H.S, R = M.render, MD = M.model, ST = M.store;
+  const U = M.util, H = M.h, S = H.S, R = M.render, MD = M.model, ST = M.store, E = M.engine;
   let lastFx = null;
 
   const num = v => U.parseNum(v);
   const setP = (el, v, lo, hi) => { el.style.setProperty('--p', ((v - lo) / ((hi - lo) || 1) * 100) + '%'); };
   const focusLater = sel => requestAnimationFrame(() => { const el = document.querySelector(sel); if (el) { el.focus(); if (el.select) el.select(); el.scrollIntoView({ block: 'nearest' }); } });
   const exp = () => (S.ui.exp = S.ui.exp || {});
+  const rangeNow = id => {
+    const r = S.res.ranges[id];
+    if (r && !r.text && !r.empty) return r;
+    const c = H.crit(id), raws = S.res.rows.map(x => { const v = x.vals[c.col]; return typeof v === 'boolean' ? (v ? 1 : 0) : v; });
+    const g = E.rangeOf(c, raws);
+    return g.empty ? { lo: 0, hi: 1 } : g;
+  };
 
   function relabel(kind, id, label) {
     const m = S.model, list = kind === 'col' ? m.columns : m.knobs, obj = list.find(x => x.id === id);
@@ -155,7 +162,7 @@ window.M = window.M || {};
     method: v => ST.change(m => { m.method = v; }, { setup: true }),
     'crit-on': (v, id) => ST.change(() => { const c = H.crit(id); c.on = !c.on; }, { setup: true }),
     'crit-del': (v, id) => { const name = R.critName(H.crit(id)); ST.change(m => { m.criteria = m.criteria.filter(c => c.id !== id); }, { setup: true }); ST.toast(`Removed ${name}. Ctrl+Z brings it back`); },
-    want: (v, id) => ST.change(() => { const c = H.crit(id); c.want = v; c.at = null; }, { setup: true }),
+    want: (v, id) => ST.change(() => { const c = H.crit(id); c.want = v; if (c.curve !== 'target') c.at = null; }, { setup: true }),
     exp: v => { exp()[v] = !exp()[v]; R.setup(); },
     grp: (v, id, el) => { const cur = v in exp() ? exp()[v] : el.getAttribute('data-d') === '1'; exp()[v] = !cur; R.setup(); },
     sit: (v, id) => {
@@ -174,8 +181,8 @@ window.M = window.M || {};
     },
     'sit-base': () => { ST.change(m => { m.knobs.forEach(k => { m.base[k.id] = k.value; }); }); R.situations(); ST.toast('These settings are the new baseline'); },
     'sit-del': (v, id) => { ST.change(m => { m.scenarios = m.scenarios.filter(s => s.id !== id); }); R.situations(); ST.toast('Situation removed. Ctrl+Z brings it back'); },
-    curve: (v, id) => ST.change(() => { const c = H.crit(id); c.curve = v; if (v === 'target') { const r = S.res.ranges[id]; c.at = c.at ?? +((r.lo + r.hi) / 2).toPrecision(3); c.tol = c.tol ?? +(Math.max((r.hi - r.lo) / 2, 1)).toPrecision(3); } if (v === 'enough') { const r = S.res.ranges[id]; c.at = +(r.lo + (r.hi - r.lo) * (c.want === 'less' ? 0.3 : 0.7)).toPrecision(3); } if (v === 'step') { const r = S.res.ranges[id]; c.at = c.at ?? +((r.lo + r.hi) / 2).toPrecision(3); } if (v === 'custom' && !c.fx) c.fx = 't'; }, { setup: true }),
-    'range-fix': (v, id) => ST.change(() => { const c = H.crit(id), r = S.res.ranges[id]; c.range = { auto: false, lo: r.lo, hi: r.hi }; }, { setup: true }),
+    curve: (v, id) => ST.change(() => { const c = H.crit(id); c.curve = v; if (v === 'target') { const r = rangeNow(id); c.at = c.at ?? +((r.lo + r.hi) / 2).toPrecision(3); c.tol = c.tol ?? +(Math.max((r.hi - r.lo) / 2, 1)).toPrecision(3); } if (v === 'enough') { const r = rangeNow(id); c.at = +(r.lo + (r.hi - r.lo) * (c.want === 'less' ? 0.3 : 0.7)).toPrecision(3); } if (v === 'step') { const r = rangeNow(id); c.at = c.at ?? +((r.lo + r.hi) / 2).toPrecision(3); } if (v === 'custom' && !c.fx) c.fx = 't'; }, { setup: true }),
+    'range-fix': (v, id) => ST.change(() => { const c = H.crit(id), r = rangeNow(id); c.range = { auto: false, lo: r.lo, hi: r.hi }; }, { setup: true }),
     'range-auto': (v, id) => ST.change(() => { H.crit(id).range = { auto: true, lo: null, hi: null }; }, { setup: true }),
     'add-crit': (v, id) => { if (S.model.criteria.length >= H.LIMIT.criteria) return ST.toast('Up to 8 things can matter'); ST.change(m => { m.criteria.push(newCrit(id)); }); S.ui.tab = 'matters'; R.setup(); },
     'new-col-crit': () => {
@@ -188,7 +195,7 @@ window.M = window.M || {};
       const m = S.model, id = U.uid('g', m.rules), col = m.columns.find(c => c.type === 'number' && !c.formula) || m.columns[0];
       let f = '';
       if (col) { const p = { col: col.id, op: col.type === 'number' ? '<=' : '==', value: col.type === 'number' ? Math.max(0, ...m.rows.map(r => r.v[col.id]).filter(x => typeof x === 'number')) : col.type === 'yesno' ? true : (catsOf(col.id)[0] || '') }; f = MD.ruleFormula(m, p); }
-      ST.change(mm => { mm.rules.push({ id, label: '', formula: f, on: true }); }, { setup: true });
+      ST.change(mm => { mm.rules.push({ id, label: '', formula: f, on: true, soft: false, penalty: 15 }); }, { setup: true });
       focusLater(`[data-fk="rl-${id}"]`);
     },
     'rule-on': (v, id) => ST.change(() => { const r = H.rule(id); r.on = !r.on; }, { setup: true }),
@@ -200,7 +207,18 @@ window.M = window.M || {};
       ST.change(m => { m.knobs.push({ id, label, value: 50, min: 0, max: 100, step: 1, unit: '', note: '' }); }, { setup: true });
       exp()['k:' + id] = true; R.setup(); focusLater(`[data-fk="kl-${id}"]`);
     },
-    'knob-del': (v, id) => { ST.change(m => { m.knobs = m.knobs.filter(k => k.id !== id); }, { setup: true }); ST.toast('Setting removed. Ctrl+Z brings it back'); },
+    'knob-del': (v, id) => { ST.change(m => {
+      m.knobs = m.knobs.filter(k => k.id !== id);
+      if (m.base) delete m.base[id];
+      m.scenarios.forEach(s => { delete s.values[id]; });
+      if (m.day) {
+        if (m.day.knob === id) m.day = null;
+        else {
+          if (m.day.link && m.day.link.knob === id) m.day.link = null;
+          if (m.day.carry && m.day.carry.knob === id) m.day.carry = null;
+        }
+      }
+    }, { setup: true }); ST.toast('Setting removed. Ctrl+Z brings it back'); },
     'calc-add': () => {
       if (S.model.columns.length >= H.LIMIT.columns) return ST.toast('Up to 80 columns');
       const label = 'New result', id = U.toId(label, H.taken());
@@ -209,7 +227,7 @@ window.M = window.M || {};
       ST.change(m => { m.columns.push({ id, label, type: 'number', unit: '', formula: seed }); }, { setup: true });
       focusLater(`[data-fk="cf-${id}"]`);
     },
-    'col-del': (v, id) => { const l = H.col(id).label; ST.change(m => { m.columns = m.columns.filter(c => c.id !== id); m.criteria = m.criteria.filter(c => c.col !== id); m.rows.forEach(r => { delete r.v[id]; }); }, { setup: true }); S.ui.colSel = null; ST.toast(`Removed ${l}. Ctrl+Z brings it back`); },
+    'col-del': (v, id) => { const l = H.col(id).label; ST.change(m => { m.columns = m.columns.filter(c => c.id !== id); m.criteria = m.criteria.filter(c => c.col !== id); m.rows.forEach(r => { delete r.v[id]; }); if (m.day && m.day.carry && m.day.carry.col === id) m.day.carry = null; }, { setup: true }); S.ui.colSel = null; ST.toast(`Removed ${l}. Ctrl+Z brings it back`); },
     insert: v => insertText(v),
     'row-add': () => {
       if (S.model.rows.length >= H.LIMIT.rows) return ST.toast('Up to 500 options');
@@ -224,9 +242,9 @@ window.M = window.M || {};
       focusLater(`[data-fk="h-${id}"]`);
     },
     'col-menu': (v, id) => { S.ui.colSel = S.ui.colSel === id ? null : id; R.setup(); },
-    'row-del': (v, id) => { const l = (S.model.rows.find(r => r.id === id) || {}).label; ST.change(m => { m.rows = m.rows.filter(r => r.id !== id); }, { setup: true }); ST.toast(`Removed ${l}. Ctrl+Z brings it back`); },
+    'row-del': (v, id) => { const l = (S.model.rows.find(r => r.id === id) || {}).label; ST.change(m => { m.rows = m.rows.filter(r => r.id !== id); m.pairs = m.pairs.filter(p => p.a !== id && p.b !== id); }, { setup: true }); ST.toast(`Removed ${l}. Ctrl+Z brings it back`); },
     select: (v, id) => { S.ui.sel = id; S.prev = null; R.results(); R.live(); if (window.matchMedia('(max-width: 900px)').matches) requestAnimationFrame(() => { const w = document.getElementById('why'); if (w) w.scrollIntoView({ block: 'start', behavior: 'smooth' }); }); },
-    try: (v, id, el) => { ST.change(m => { m.rows.find(r => r.id === id).v[el.getAttribute('data-col')] = +(+v).toPrecision(4); }, { setup: true }); ST.toast('Changed. Ctrl+Z to go back'); },
+    try: (v, id, el) => { ST.change(m => { m.rows.find(r => r.id === id).v[el.getAttribute('data-col')] = +v; }, { setup: true }); ST.toast('Changed. Ctrl+Z to go back'); },
     go: (v, id, el) => goTo(el.getAttribute('data-kind'), id),
     'all-checks': () => { S.ui.allChecks = true; R.checks(); },
     'open-start': () => { S.ui.modal = 'start'; R.modal(); },

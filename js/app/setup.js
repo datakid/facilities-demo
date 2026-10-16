@@ -98,7 +98,8 @@ window.M = window.M || {};
   R.LIVE.method = () => esc(MD.METHODS[S.model.method].line);
 
   function pointsEditor(c) {
-    const cats = (S.res.info[c.id] || {}).cats || [];
+    const info = S.res.info[c.id], col = H.col(c.col);
+    const cats = info ? info.cats : [...new Set([...((col && col.choices) || []), ...S.res.rows.map(x => x.vals[c.col]).filter(x => x != null).map(String)])];
     if (!cats.length) return '<p class="hint">No answers yet. Fill this column on the Options tab.</p>';
     return `<div class="points">${cats.map(k => { const v = c.points[k] ?? 5; return `<label class="pt-row"><span class="pt-k">${esc(k)}</span>
       <input type="range" min="0" max="10" step="1" value="${v}" data-in="points" data-id="${esc(c.id)}" data-k="${esc(k)}" data-fk="p-${esc(c.id)}-${esc(k)}" style="--p:${v * 10}%" aria-label="Points for ${esc(k)}">
@@ -305,7 +306,7 @@ window.M = window.M || {};
 
   function nameChips(exclude) {
     const m = S.model;
-    const chip = (id, label, kind) => `<button class="name-chip ${kind}" data-act="insert" data-v="${esc(/^[A-Za-z_][A-Za-z0-9_]*$/.test(label) ? label : '[' + label + ']')}" tabindex="-1">${esc(label)}</button>`;
+    const chip = (id, label, kind) => `<button class="name-chip ${kind}" data-act="insert" data-v="${esc(MD.nameRef(S.model, id))}" tabindex="-1">${esc(label)}</button>`;
     return m.columns.filter(c => c.id !== exclude).map(c => chip(c.id, c.label, c.formula ? 'calc' : 'col')).join('') + m.knobs.map(k => chip(k.id, k.label, 'knob')).join('');
   }
 

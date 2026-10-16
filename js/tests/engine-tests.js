@@ -411,5 +411,165 @@
     ok('weakest link: a zero anywhere halves the score', (() => { const m = M.model.normalize({ method: 'strict', columns: [{ id: 'a', label: 'A', type: 'number' }, { id: 'b', label: 'B', type: 'number' }], rows: [{ id: 'r1', label: 'One', v: { a: 10, b: 0 } }, { id: 'r2', label: 'Two', v: { a: 0, b: 10 } }, { id: 'r3', label: 'Three', v: { a: 10, b: 10 } }], criteria: [{ id: 'ca', col: 'a', weight: 5 }, { id: 'cb', col: 'b', weight: 5 }] }); const r = E.compute(m); return near(r.byId.r1.score, 25) && near(r.byId.r3.score, 100); })());
   }
 
+  {
+    const E9 = M.engine, X9 = M.exporter, F9 = M.formula, MD9 = M.model, P9 = M.plan;
+    const exportMatches = m => {
+      const r = E9.compute(m); let why = '';
+      try {
+        const code = X9.js(m, r), fn = code.replace('export function score', 'return function score').replace(/^\/\/.*\n/, '');
+        const score = (new Function('return (function(){' + fn + '})()'))();
+        const same = r.rows.every(row => {
+          const o = score(Object.assign({}, m.rows.find(x => x.id === row.id).v));
+          if (o.pass !== row.pass) { why = row.label + ' pass'; return false; }
+          if (o.pass && Math.abs(o.score - row.score) > 1e-9) { why = row.label + ' ' + o.score + ' vs ' + row.score; return false; }
+          return true;
+        });
+        return { same, why, r };
+      } catch (e) { return { same: false, why: e.message, r }; }
+    };
+    const edge = MD9.normalize((() => {
+      const m = JSON.parse(JSON.stringify(M.examples.get('laptop')));
+      m.knobs[0].value = 2000;
+      m.columns.push(
+        { id: 'flat', label: 'Flat', type: 'number', unit: '', formula: '' },
+        { id: 'tag', label: 'Finish', type: 'text', unit: '', formula: '', choices: ['Matte', 'Gloss'] },
+        { id: 'touch', label: 'Touch', type: 'yesno', unit: '', formula: '' },
+        { id: 'spare', label: 'Spare', type: 'number', unit: '', formula: '' },
+        { id: 'ratio', label: 'Ratio', type: 'number', unit: '', formula: 'Battery / Spare' },
+        { id: 'bonus', label: 'Bonus', type: 'number', unit: '', formula: 'if(Touch = yes, 1, 0)' });
+      const tags = ['Matte', 'Gloss', 'Matte', null, 'Gloss', 'Matte'], touch = [true, false, true, false, true, true], spare = [7, 9, 0, 8, 4, 8];
+      m.rows.forEach((r, i) => { r.v.flat = 5; r.v.tag = tags[i]; r.v.touch = touch[i]; r.v.spare = spare[i]; });
+      m.rows[1].v.weight = null;
+      m.criteria.find(c => c.id === 'weight').curve = 'enough';
+      m.criteria.find(c => c.id === 'weight').at = null;
+      m.criteria.find(c => c.id === 'screen').at = null;
+      m.criteria.find(c => c.id === 'screen').tol = null;
+      m.criteria.push(
+        { id: 'flat', col: 'flat', weight: 4, want: 'less', curve: 'even' },
+        { id: 'tag', col: 'tag', weight: 3, points: { Matte: 8, Gloss: 3 } },
+        { id: 'touch', col: 'touch', weight: 2 },
+        { id: 'bonus', col: 'bonus', weight: 3, want: 'more', curve: 'steep' });
+      m.rules = [
+        { id: 'g1', label: 'Enough memory', formula: 'Memory >= 16', on: true, soft: false },
+        { id: 'g2', label: 'Within budget', formula: 'Price <= Budget', on: true, soft: false },
+        { id: 'g3', label: 'Spare ratio', formula: 'Ratio >= 0.5', on: true, soft: false },
+        { id: 'g4', label: 'Good ratio', formula: 'Ratio >= 1', on: true, soft: true, penalty: 20 },
+        { id: 'g5', label: 'Odd split', formula: 'Battery / (Spare - 8) >= 1', on: true, soft: true, penalty: 10 }
+      ];
+      return m;
+    })());
+    const er = exportMatches(edge);
+    ok('edge model: no formula issues', !er.r.issues.length, er.r.issues.map(i => i.msg).join('; '));
+    ok('edge model: covers ruled out, penalised and blank rows', er.r.out.length >= 1 && er.r.rows.some(x => x.pass && x.penalty > 0) && er.r.byId.r2.c.weight.missing && er.r.byId.r4.c.tag.missing);
+    ok('exported JS = engine on auto thresholds, flat range, blanks, yes/no, divide by zero and rules', er.same, er.why);
+    ok('curveParams: automatic thresholds', E9.curveParams({ curve: 'enough', want: 'less', at: null }, { lo: 0, hi: 10 }).at === 3 && E9.curveParams({ curve: 'enough', want: 'more', at: null }, { lo: 0, hi: 10 }).at === 7 && E9.curveParams({ curve: 'target', at: null, tol: null }, { lo: 0, hi: 10 }).tol === 5 && E9.curveParams({ curve: 'step', at: null }, { lo: 2, hi: 4 }).at === 3 && Object.keys(E9.curveParams({ curve: 'even' }, { lo: 0, hi: 1 })).length === 0);
+    ok('summary shows the real threshold instead of a dash', (() => { const t = X9.recipe(edge, er.r); return !/\(—\)/.test(t) && /sweet spot|Sweet spot|Enough|enough/.test(t); })());
+    ok('written points equations use the same automatic thresholds', (() => {
+      const eq = M.equations.build(edge, er.r), crs = eq.items.filter(x => x.kind === 'crit');
+      return er.r.rows.every(row => crs.every(it => {
+        const x = row.c[it.id]; if (!x || x.missing) return true;
+        const scope = Object.assign({}, row.vals); let p = null;
+        try { it.eqs.forEach(e => { const val = F9.evaluate(e.ast, scope); scope[e.lhs] = e.lhs.startsWith('__t') ? M.util.clamp(val, 0, 1) : val; p = scope[e.lhs]; }); } catch (e) { return false; }
+        return near(p, x.s * 10, 1e-3);
+      }));
+    })());
+
+    const rtp = (src, scope) => {
+      const names = Object.keys(scope), env = { resolve: n => names.find(k => k.toLowerCase() === n.toLowerCase()) ?? null, suggest: () => names };
+      const p = F9.parse(src); F9.bind(p.ast, env);
+      return { a: F9.evaluate(p.ast, scope), printed: F9.print(p.ast, n => n) };
+    };
+    const rt = { a: 2, b: 3, c: 2, x: 5 };
+    ok('print keeps (a ^ b) ^ c', (() => { const o = rtp('(a ^ b) ^ c', rt); return ev(o.printed, rt) === o.a && o.a === 64; })(), rtp('(a ^ b) ^ c', rt).printed);
+    ok('print keeps (a < b) = c', (() => { const o = rtp('(a < b) = c', rt); return ev(o.printed, rt) === o.a; })(), rtp('(a < b) = c', rt).printed);
+    ok('print keeps tiny numbers', (() => { const o = rtp('x * 1e-12', rt); return ev(o.printed, rt) === o.a && o.a > 0; })(), rtp('x * 1e-12', rt).printed);
+    ok('print keeps 15 digits of a number', F9.print(F9.parse('0.123456789012345').ast, n => n) === '0.123456789012345');
+
+    ok('a column labelled Yes keeps its value after a rename pass', (() => {
+      const m = MD9.normalize({ columns: [{ id: 'yes_c', label: 'Yes', type: 'number' }, { id: 'no_c', label: 'No', type: 'number' }, { id: 'calc', label: 'Calc', type: 'number', formula: '[Yes] * 2 + [No]' }],
+        rows: [{ id: 'r1', label: 'One', v: { yes_c: 3, no_c: 1 } }, { id: 'r2', label: 'Two', v: { yes_c: 4, no_c: 1 } }], criteria: [{ id: 'k', col: 'calc', weight: 5 }] });
+      const before = E9.compute(m).byId.r1.vals.calc;
+      MD9.renameRefs(m);
+      const after = E9.compute(m);
+      return before === 7 && after.byId.r1.vals.calc === 7 && after.byId.r2.vals.calc === 9 && /\[Yes\]/.test(m.columns[2].formula) && MD9.nameRef(m, 'yes_c') === '[Yes]' && MD9.nameRef(m, 'calc') === 'Calc';
+    })());
+    ok('reserved words become bracketed names', ['And', 'Or', 'Not', 'True', 'False', 'YES', 'no'].every(w => MD9.nameRef({ columns: [{ id: 'q', label: w }], knobs: [] }, 'q') === '[' + w + ']'));
+
+    ok('workbook: % becomes TRUNC maths, never an Excel percent sign', (() => { const f = M.xlsx.fx(F9.parse('x % 3').ast, id => id.toUpperCase()); return /TRUNC\(/.test(f) && !/%/.test(f); })());
+
+    ok('find on the whole day runs over every hour', (() => {
+      const m = M.examples.get('pharmacy'), spec = { role_maya: ['window', 'typing'], role_omar: ['window', 'typing'] };
+      const f = P9.find(m, spec, { judge: 'day', ms: 1500 });
+      return !f.error && f.contexts === m.day.values.length && f.top.length > 0;
+    })());
+
+    ok('a range typed backwards plans the day the same as one typed forwards', (() => {
+      const cafe = M.examples.get('cafe'), wages = cafe.rows.map(r => r.v.wage), lo = Math.min(...wages), hi = Math.max(...wages);
+      const run = (a, b) => { const m = E9.withModel(cafe, x => { x.criteria.find(c => c.id === 'c_cost').range = { auto: false, lo: a, hi: b }; }); const h = P9.hourlyFind(m, { baristas: [1, 2, 3], registers: [1, 2] }, { ms: 4000, cost: 4 }); return { avg: +h.avg.toFixed(6), plan: h.plan.join(',') }; };
+      const f = run(lo, hi), b = run(hi, lo);
+      return f.avg === b.avg && f.plan === b.plan;
+    })());
+
+    ok('a cleared range box is automatic, not zero', (() => {
+      const c = { range: { auto: false, lo: null, hi: 10 } };
+      const g = E9.rangeOf(c, [4, 8]);
+      return g.lo === 4 && g.hi === 8 && g.auto === true;
+    })());
+
+    ok('fit: from all-zero importances it agrees with the pair', (() => {
+      const m = MD9.normalize({ columns: [{ id: 'x', label: 'X' }, { id: 'y', label: 'Y' }], rows: [{ id: 'a', label: 'A', v: { x: 10, y: 6 } }, { id: 'b', label: 'B', v: { x: 0, y: 4 } }],
+        criteria: [{ id: 'x', col: 'x', weight: 0 }, { id: 'y', col: 'y', weight: 0 }], pairs: [{ a: 'a', b: 'b' }] });
+      const f = P9.fit(m, m.pairs), ag = P9.agreement(m, E9.prepare(m), m.pairs, f.W);
+      return f.after.ok >= f.before.ok && f.after.ok === 1 && ag[0].ok === true;
+    })());
+
+    ok('can never win: a penalty keeps the lower option in the race', (() => {
+      const m = MD9.normalize({ columns: [{ id: 'x', label: 'X' }, { id: 'y', label: 'Y' }, { id: 'f', label: 'F', type: 'yesno' }],
+        rows: [{ id: 'a', label: 'A', v: { x: 10, y: 10, f: false } }, { id: 'b', label: 'B', v: { x: 5, y: 5, f: true } }, { id: 'c', label: 'C', v: { x: 1, y: 1, f: true } }],
+        rules: [{ id: 'g', label: 'Flag', formula: 'F = yes', on: true, soft: true, penalty: 50 }],
+        criteria: [{ id: 'x', col: 'x', weight: 5 }, { id: 'y', col: 'y', weight: 5 }] });
+      const d = M.insights.dominated(m, E9.compute(m));
+      return !d.some(x => x.row === 'b') && d.some(x => x.row === 'c' && x.by === 'b');
+    })());
+
+    ok('written total floors at zero when penalties exceed the points', (() => {
+      const m = E9.withModel(M.examples.get('laptop'), x => { x.rules[0].soft = true; x.rules[0].penalty = 100; });
+      const r = E9.compute(m), eq = M.equations.build(m, r), crs = eq.items.filter(i => i.kind === 'crit'), tot = eq.items.find(i => i.kind === 'total');
+      const row = r.byId.r5, sc = { __pen: row.penalty };
+      crs.forEach(it => { sc['__p' + it.n] = row.c[it.id].s * 10; });
+      return row.pass && row.penalty === 100 && row.score === 0 && F9.evaluate(tot.eqs[0].ast, sc) === 0;
+    })());
+
+    const cmpBase = (() => { const m = JSON.parse(JSON.stringify(M.examples.get('laptop'))); m.columns.push({ id: 'ppb', label: 'Price per hour', type: 'number', unit: '', formula: 'Price / Battery' }); m.criteria.find(c => c.id === 'battery').curve = 'enough'; m.criteria.find(c => c.id === 'battery').at = null; return MD9.normalize(m); })();
+    ok('compare lists a changed threshold and a changed formula', (() => {
+      const b = E9.withModel(cmpBase, x => { x.criteria.find(c => c.id === 'battery').at = 12; x.columns.find(c => c.id === 'ppb').formula = 'Price / Weight'; });
+      const d = P9.compare(cmpBase, b).diffs;
+      return d.some(s => /Battery.*threshold/.test(s)) && d.some(s => /Formula for Price per hour changed/.test(s));
+    })());
+    ok('compare lists tolerance, range, points, columns and settings', (() => {
+      const b = E9.withModel(cmpBase, x => {
+        x.criteria.find(c => c.id === 'screen').tol = 3; x.criteria.find(c => c.id === 'weight').range = { auto: false, lo: 0, hi: 5 };
+        x.criteria.find(c => c.id === 'price').points = { a: 1 }; x.columns.pop(); x.knobs.push({ id: 'extra', label: 'Extra', value: 1, min: 0, max: 5, step: 1, unit: '', note: '', group: '' });
+      });
+      const d = P9.compare(cmpBase, b).diffs;
+      return d.some(s => /Screen tolerance/.test(s)) && d.some(s => /Weight score range/.test(s)) && d.some(s => /Price points per answer/.test(s)) && d.some(s => /Column Price per hour only in A/.test(s)) && d.some(s => /Setting Extra only in B/.test(s));
+    })());
+    ok('compare ignores a rename that changes no meaning', (() => {
+      const b = JSON.parse(JSON.stringify(cmpBase)); b.columns.find(c => c.id === 'price').label = 'Sticker'; b.rules.find(r => r.id === 'g2').formula = 'Sticker <= Budget'; b.columns.find(c => c.id === 'ppb').formula = 'Sticker / Battery';
+      return !P9.compare(cmpBase, MD9.normalize(b)).diffs.some(s => /Must-have|Formula for/.test(s));
+    })());
+
+    ok('what it takes: the suggested value really flips the result', (() => {
+      const m = M.examples.get('laptop'), r = E9.compute(m);
+      return r.ranked.slice().every(id => E9.whatItTakes(m, r, id).every(w => {
+        const rr = E9.compute(m, { prep: r.prep, V: { [id]: { [w.col]: w.to } } });
+        return w.lose ? rr.ranked[0] !== id && rr.ranked[0] === w.vs : rr.ranked[0] === id;
+      }));
+    })());
+    ok('what it takes: suggestions are rounded to 3 digits away from today', E9.whatItTakes(M.examples.get('laptop'), E9.compute(M.examples.get('laptop')), 'r1').every(w => +w.to.toPrecision(3) === w.to));
+
+    ok('hourly: no options gives a clear message', (() => { const m = E9.withModel(M.examples.get('cafe'), x => { x.rows = []; x.pairs = []; }); try { return P9.hourly(m).error === 'Add some options first.'; } catch (e) { return false; } })());
+  }
+
   M.testResults = out;
 })(window.M);

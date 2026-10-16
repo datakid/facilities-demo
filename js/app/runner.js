@@ -31,6 +31,6 @@ window.M = window.M || {};
       ww.postMessage({ id, job, model: JSON.parse(JSON.stringify(model)), spec, opt });
     });
   }
-  function cancel() { if (w) { w.terminate(); w = null; ok = null; } jobs.clear(); }
+  function cancel() { if (w) { w.terminate(); w = null; ok = null; } jobs.forEach(j => j.res({ error: 'Stopped', stopped: true })); jobs.clear(); }
   M.runner = { run, cancel, warm: () => worker(), usingWorker: () => ok === true };
 })(window.M);

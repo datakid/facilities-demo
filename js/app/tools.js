@@ -25,7 +25,7 @@ window.M = window.M || {};
     const k = H.knob(m.day.knob); if (!k) return '';
     const maxV = Math.max(...m.day.values, 1);
     const cells = D.hours.map((h, i) => {
-      const p = D.plan[i], v = m.day.values[i], q = D.carry && p ? (h.res.byId[p].vals[m.day.carry.knob] || 0) : 0;
+      const p = D.plan[i], v = m.day.values[i], q = D.carry && p ? (h.res.byId[p].vals[D.carry.knob] || 0) : 0;
       return `<button class="hr${p ? '' : ' none'}" data-act="day-hour" data-v="${i}" style="--rc:${p ? `var(--c${R.rowTone(p)})` : 'var(--line-2)'};--h:${(v / maxV * 100).toFixed(1)}%" title="${esc(h.label)} · ${esc(k.label)} ${esc(U.withUnit(v, k.unit))} · ${esc(p ? rl(p) : 'nothing passes')}${q > 0.5 ? ` · ${U.fmtNum(q)} carried over` : ''}"><i></i>${q > 0.5 ? '<s></s>' : ''}<span>${esc(h.label.slice(0, 2))}</span></button>`;
     }).join('');
     const sw = D.switches.filter(s => s.row);
@@ -64,7 +64,7 @@ window.M = window.M || {};
     const f = T.find, spec = {}; Object.entries(f.cols).forEach(([k, x]) => { if (x.on && x.vals.length) spec[k] = x.vals; });
     T.hf = { busy: true }; T.found = null; re();
     const tick = p => { if (!T.hf || !T.hf.busy) return; T.hf.p = p; const bar = document.querySelector('.fd-res .prog span'), sum = document.querySelector('.fd-res .fd-sum'); if (bar) bar.style.width = (p.frac * 100).toFixed(1) + '%'; if (sum) sum.textContent = `${p.stage}… ${p.checked ? p.checked + ' new options so far' : ''}`; };
-    M.runner.run('hourlyFind', S.model, spec, { from: f.from, cost: S.model.day.switchCost ?? 4 }, tick).then(r => { T.hf = r; if (S.ui.modal === 'find') re(); });
+    M.runner.run('hourlyFind', S.model, spec, { from: f.from, cost: S.model.day.switchCost ?? 4 }, tick).then(r => { T.hf = r.stopped ? null : r; if (S.ui.modal === 'find') re(); });
   };
   A['hf-add'] = () => {
     const X = T.hf; if (!X || !X.newRows.length) return;
@@ -73,7 +73,7 @@ window.M = window.M || {};
   }; };
   const runHourly = () => {
     T.hourlyBusy = true; R.day();
-    M.runner.run('hourly', S.model, null, { cost: S.model.day.switchCost ?? 4 }).then(r => { T.hourly = r; T.hourlyBusy = false; T.hourlySig = JSON.stringify(S.model); R.day(); });
+    M.runner.run('hourly', S.model, null, { cost: S.model.day.switchCost ?? 4 }).then(r => { T.hourly = r.stopped ? null : r; T.hourlyBusy = false; T.hourlySig = JSON.stringify(S.model); R.day(); });
   };
 
   R.extraModals.matrix = () => {
@@ -90,16 +90,25 @@ window.M = window.M || {};
   };
 
   function findSpec() {
-    const m = S.model;
+    const m = S.model, raw = c => !(c.formula && c.formula.trim());
     if (!T.find || T.find.model !== m.name) {
       const from = (S.res.lead && S.res.lead.winner) || (m.rows[0] && m.rows[0].id);
-      const cols = {}; m.columns.filter(c => !c.formula).forEach(c => { cols[c.id] = { on: false, vals: P.spaceFor(m, c.id) }; });
-      const vary = m.columns.filter(c => !c.formula && new Set(m.rows.map(r => String(r.v[c.id]))).size > 1).slice(0, 4);
+      const cols = {}; m.columns.filter(raw).forEach(c => { cols[c.id] = { on: false, vals: P.spaceFor(m, c.id), type: c.type }; });
+      const vary = m.columns.filter(c => raw(c) && new Set(m.rows.map(r => String(r.v[c.id]))).size > 1).slice(0, 4);
       vary.forEach(c => { cols[c.id].on = true; });
       T.find = { model: m.name, from, cols, judge: (m.scenarios || []).length ? 'situations' : 'now', agg: 'avg' };
       T.found = null;
     }
-    return T.find;
+    const f = T.find, rawCols = m.columns.filter(raw);
+    Object.keys(f.cols).forEach(id => { if (!rawCols.some(c => c.id === id)) delete f.cols[id]; });
+    rawCols.forEach(c => {
+      const x = f.cols[c.id];
+      if (!x) f.cols[c.id] = { on: false, vals: P.spaceFor(m, c.id), type: c.type };
+      else if (x.type !== c.type) { x.vals = P.spaceFor(m, c.id); x.type = c.type; }
+    });
+    if (!m.rows.some(r => r.id === f.from)) f.from = (S.res.lead && S.res.lead.winner) || (m.rows[0] && m.rows[0].id);
+    if ((f.judge === 'situations' && !(m.scenarios || []).length) || (f.judge === 'day' && !m.day)) f.judge = 'now';
+    return f;
   }
   const valsTxt = (c, vals) => vals.map(v => typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v)).join(', ');
   const parseVals = (c, s) => String(s).split(',').map(x => x.trim()).filter(Boolean).map(x => c.type === 'number' ? U.parseNum(x) : c.type === 'yesno' ? /^(y|yes|true|1)$/i.test(x) : x).filter(x => x != null);
@@ -165,12 +174,12 @@ window.M = window.M || {};
     const m = S.model, prep = S.res.prep;
     const ag = P.agreement(m, prep, m.pairs);
     const ok = ag.filter(x => x.ok === true).length, n = ag.filter(x => x.ok != null).length;
-    const list = ag.map((x, i) => `<li class="pr ${x.ok === true ? 'ok' : x.ok === false ? 'bad' : 'skip'}">${x.ok === true ? R.I.check : x.ok === false ? R.I.warn : R.I.info}<span>I’d pick <b>${esc(rl(x.p.a))}</b> over <b>${esc(rl(x.p.b))}</b></span><span class="muted pr-why">${x.ok == null ? `${esc(rl(x.out))} is ruled out` : x.ok ? `agrees by ${x.gap.toFixed(1)}` : `ranking disagrees by ${(-x.gap).toFixed(1)}`}</span><button class="icon-btn xs" data-act="pr-del" data-v="${i}" aria-label="Remove">${R.I.x}</button></li>`).join('');
+    const list = ag.map((x, i) => `<li class="pr ${x.ok === true ? 'ok' : x.ok === false ? 'bad' : 'skip'}">${x.ok === true ? R.I.check : x.ok === false ? R.I.warn : R.I.info}<span>I’d pick <b>${esc(rl(x.p.a))}</b> over <b>${esc(rl(x.p.b))}</b></span><span class="muted pr-why">${x.gone ? 'one of these options was removed' : x.ok == null ? `${esc(rl(x.out))} is ruled out` : x.ok ? `agrees by ${x.gap.toFixed(1)}` : `ranking disagrees by ${(-x.gap).toFixed(1)}`}</span><button class="icon-btn xs" data-act="pr-del" data-v="${i}" aria-label="Remove">${R.I.x}</button></li>`).join('');
     const F = T.fitted;
     return `<header class="modal-head"><div><h2 id="modal-title" class="serif">Teach it my taste</h2><p class="muted">Not sure how important each thing is? Compare a few options you know. It finds importances that agree with you, changing as little as possible.</p></div><button class="icon-btn" data-act="close-modal" aria-label="Close">${R.I.x}</button></header>
       <div class="pr-add">I’d pick <select class="sel" data-in="pr-a">${R.opts([['', 'choose…'], ...m.rows.map(r => [r.id, r.label])], T.pairA)}</select> over <select class="sel" data-in="pr-b">${R.opts([['', 'choose…'], ...m.rows.map(r => [r.id, r.label])], T.pairB)}</select><button class="btn" data-act="pr-add" ${T.pairA && T.pairB && T.pairA !== T.pairB ? '' : 'disabled'}>${R.I.plus}Add</button></div>
       ${m.pairs.length ? `<p class="pr-sum">The ranking agrees with <b class="num">${ok} of ${n}</b> of your choices.</p><ul class="pr-list">${list}</ul>` : '<p class="empty">Add two or three choices to start. Pick pairs where you know your answer.</p>'}
-      ${F ? `<div class="pr-fit">${F.changes.length || (F.curves || []).length ? `<p>Suggested: ${[...F.changes.map(c => `<b>${esc(R.critName(H.crit(c.id)))}</b> ${c.from} → ${c.to}`), ...(F.curves || []).map(c => `<b>${esc(R.critName(H.crit(c.id)))}</b> curve “${esc(MD.CURVES[c.from].label)}” → “${esc(MD.CURVES[c.to].label)}”`)].join(', ')}. That agrees with <b>${F.after.ok} of ${F.after.of}</b> (now ${F.before.ok}).</p><button class="btn primary sm" data-act="pr-apply">Use ${(F.curves || []).length ? 'these changes' : 'these importances'}</button>` : `<p>${F.after.ok === F.after.of ? 'Your ranking already agrees with every choice.' : 'No change in importances or curves fixes the rest. Something else is driving your choice: maybe a column that isn’t in the ranking yet, or a must-have.'}</p>`}</div>` : ''}
+      ${F && !F.error && F.changes ? `<div class="pr-fit">${F.changes.length || (F.curves || []).length ? `<p>Suggested: ${[...F.changes.map(c => `<b>${esc(R.critName(H.crit(c.id)))}</b> ${c.from} → ${c.to}`), ...(F.curves || []).map(c => `<b>${esc(R.critName(H.crit(c.id)))}</b> curve “${esc(MD.CURVES[c.from].label)}” → “${esc(MD.CURVES[c.to].label)}”`)].join(', ')}. That agrees with <b>${F.after.ok} of ${F.after.of}</b> (now ${F.before.ok}).</p><button class="btn primary sm" data-act="pr-apply">Use ${(F.curves || []).length ? 'these changes' : 'these importances'}</button>` : `<p>${F.after.ok === F.after.of ? 'Your ranking already agrees with every choice.' : 'No change in importances or curves fixes the rest. Something else is driving your choice: maybe a column that isn’t in the ranking yet, or a must-have.'}</p>`}</div>` : ''}
       <div class="modal-foot"><span class="hint">Pairs are saved with the ranking.</span><button class="btn primary" data-act="pr-fit" ${n ? '' : 'disabled'}>Suggest importances</button></div>`;
   };
 
@@ -220,7 +229,7 @@ window.M = window.M || {};
   };
   A['pr-add'] = () => { ST.change(m => { m.pairs.push({ a: T.pairA, b: T.pairB }); }); T.pairA = ''; T.pairB = ''; T.fitted = null; re(); };
   A['pr-del'] = v => { ST.change(m => { m.pairs.splice(+v, 1); }); T.fitted = null; re(); };
-  A['pr-fit'] = () => { const b = document.querySelector('[data-act="pr-fit"]'); if (b) { b.disabled = true; b.textContent = 'Thinking…'; } M.runner.run('fitAll', S.model, S.model.pairs, {}).then(r => { T.fitted = r; re(); }); };
+  A['pr-fit'] = () => { const b = document.querySelector('[data-act="pr-fit"]'); if (b) { b.disabled = true; b.textContent = 'Thinking…'; } M.runner.run('fitAll', S.model, S.model.pairs, {}).then(r => { if (r.stopped || r.error) { T.fitted = null; re(); if (r.error && !r.stopped) ST.toast(r.error); return; } T.fitted = r; re(); }); };
   A['pr-apply'] = () => { const F = T.fitted; ST.change(m => { m.criteria.forEach(c => { const x = F.model.criteria.find(y => y.id === c.id); if (x) { c.weight = x.weight; c.curve = x.curve; c.at = x.at; } }); }, { setup: true }); T.fitted = null; re(); ST.toast('Ranking updated. Ctrl+Z to go back'); };
 
   R.extraModals.compare = () => {
@@ -253,8 +262,8 @@ window.M = window.M || {};
     const f = T.find, d = T.day;
     switch (k) {
       case 'fd-from': f.from = v; T.found = null; re(); break;
-      case 'fd-on': f.cols[id].on = el.checked; T.found = null; re(); break;
-      case 'fd-vals': { const c = H.col(id); f.cols[id].vals = [...new Set(parseVals(c, v))]; T.found = null; re(); break; }
+      case 'fd-on': if (!f.cols[id]) return; f.cols[id].on = el.checked; T.found = null; re(); break;
+      case 'fd-vals': { if (!f.cols[id]) return; const c = H.col(id); f.cols[id].vals = [...new Set(parseVals(c, v))]; T.found = null; re(); break; }
       case 'dy-knob': d.knob = v; d.values = P.shape({ day: d, knobs: S.model.knobs }, 'two', d.values.length || 12); if (d.link && d.link.knob === v) d.link = null; re(); break;
       case 'dy-start': d.start = Math.round(U.clamp(U.parseNum(v) ?? 8, 0, 23)); re(); break;
       case 'dy-vals': d.values = v.split(',').map(x => U.parseNum(x)).filter(x => x != null).slice(0, 24); re(); break;
@@ -267,10 +276,10 @@ window.M = window.M || {};
       case 'hr-cost': { const n = U.parseNum(v); if (n == null) break; ST.change(m => { m.day.switchCost = Math.max(0, n); }); T.hourly = null; runHourly(); break; }
       case 'pr-a': T.pairA = v; re(); break;
       case 'pr-b': T.pairB = v; re(); break;
-      case 'rule-soft': ST.change(() => { H.rule(id).soft = v === 'soft'; }, { setup: true }); break;
+      case 'rule-soft': ST.change(() => { const r = H.rule(id); r.soft = v === 'soft'; if (r.soft && !Number.isFinite(r.penalty)) r.penalty = 15; }, { setup: true }); break;
     }
   });
-  A['rule-kind'] = (v, id) => ST.change(() => { H.rule(id).soft = v === 'soft'; }, { setup: true });
+  A['rule-kind'] = (v, id) => ST.change(() => { const r = H.rule(id); r.soft = v === 'soft'; if (r.soft && !Number.isFinite(r.penalty)) r.penalty = 15; }, { setup: true });
   document.addEventListener('input', e => {
     const el = e.target; if (el.getAttribute && el.getAttribute('data-in') === 'rule-pen') {
       const n = U.parseNum(el.value); if (n == null) return;

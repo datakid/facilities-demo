@@ -32,7 +32,7 @@ window.M = window.M || {};
       const R = res.ranges[c.id], col = model.columns.find(x => x.id === c.col);
       let how;
       if (R.text) how = 'points per answer: ' + Object.entries(c.points).map(([k, v]) => `${k} ${v}/10`).join(', ');
-      else how = `${c.want === 'less' ? 'lower' : 'higher'} is better, ${U.withUnit(R.lo, col.unit)} → ${U.withUnit(R.hi, col.unit)}, ${MD.CURVES[c.curve].label.toLowerCase()}` + (c.curve === 'enough' || c.curve === 'target' ? ` (${U.withUnit(c.at, col.unit)})` : '');
+      else how = `${c.want === 'less' ? 'lower' : 'higher'} is better, ${U.withUnit(R.lo, col.unit)} → ${U.withUnit(R.hi, col.unit)}, ${MD.CURVES[c.curve].label.toLowerCase()}` + (c.curve === 'enough' || c.curve === 'target' ? ` (${U.withUnit(M.engine.curveParams(c, R).at, col.unit)})` : '');
       L.push(`  ${Math.round(res.share[c.id] * 100)}%  ${col.label}: ${how}`);
     });
     L.push('');
@@ -43,13 +43,15 @@ window.M = window.M || {};
   }
 
   function js(model, res) {
-    const ref = id => (model.knobs.some(k => k.id === id) ? 'K.' : 'r.') + id;
+    const ref = id => model.knobs.some(k => k.id === id) ? 'K.' + id : `F.v(r.${id})`;
+    const yn = model.columns.filter(c => c.type === 'yesno' && !(c.formula && c.formula.trim())).map(c => c.id);
     const L = [];
     L.push(`// ${model.name} · exported from Meridian Studio`);
     L.push(`const K = ${JSON.stringify(Object.fromEntries(model.knobs.map(k => [k.id, k.value])))};`);
     L.push('const F = { min: Math.min, max: Math.max, abs: Math.abs, sqrt: Math.sqrt, exp: Math.exp, log: Math.log, log10: Math.log10, pow: Math.pow, floor: Math.floor, ceil: Math.ceil,');
     L.push('  sum: (...a) => a.reduce((x, y) => x + y, 0), avg: (...a) => a.reduce((x, y) => x + y, 0) / a.length,');
     L.push('  round: (x, n = 0) => Math.round(x * 10 ** n) / 10 ** n, clamp: (x, a, b) => Math.max(a, Math.min(b, x)),');
+    L.push('  v: x => { if (x == null) throw 0; return x; }, div: (a, b) => { if (b === 0) throw 0; return a / b; }, mod: (a, b) => { if (b === 0) throw 0; return a % b; },');
     L.push('  ln: Math.log, log2: Math.log2, pick: (x, a) => { const k = String(x).trim().toLowerCase(); for (let i = 0; i + 1 < a.length; i += 2) if (String(a[i]).trim().toLowerCase() === k) return a[i + 1]; return a.length % 2 ? a[a.length - 1] : undefined; },');
     L.push('  erlangc: (l, m, c) => { c = Math.max(1, Math.floor(c)); if (!(l > 0)) return 0; if (!(m > 0)) return 1; const a = l / m, p = a / c; if (p >= 1) return 1; let B = 1; for (let k = 1; k <= c; k++) B = a * B / (k + a * B); return B / (1 - p * (1 - B)); },');
     L.push('  wait: (l, m, c) => { c = Math.max(1, Math.floor(c)); if (!(l > 0)) return 0; if (!(m > 0) || l >= c * m) return Infinity; return F.erlangc(l, m, c) / (c * m - l); },');
@@ -60,28 +62,34 @@ window.M = window.M || {};
     L.push('');
     L.push('export function score(r) {');
     L.push('  r = Object.assign({}, r);');
-    res.prep.order.forEach(id => L.push(`  r.${id} = ${F.toJS(res.prep.comp[id].ast, ref)};`));
+    if (yn.length) L.push(`  ${JSON.stringify(yn)}.forEach(k => { if (typeof r[k] === "boolean") r[k] = +r[k]; });`);
+    res.prep.order.forEach(id => L.push(`  try { r.${id} = ${F.toJS(res.prep.comp[id].ast, ref)}; if (Number.isNaN(r.${id})) r.${id} = null; } catch (e) { r.${id} = null; }`));
     L.push('  let penalty = 0;');
-    res.prep.rules.forEach(({ r, ast }) => L.push(r.soft ? `  if (!(${F.toJS(ast, ref)})) penalty += ${+r.penalty || 0};` : `  if (!(${F.toJS(ast, ref)})) return { pass: false, score: 0, fails: ${JSON.stringify(r.label || r.formula)} };`));
+    res.prep.rules.forEach(({ r, ast }) => {
+      const fail = `{ pass: false, score: 0, fails: ${JSON.stringify(r.label || r.formula)} }`;
+      L.push(r.soft ? `  try { if (!(${F.toJS(ast, ref)})) penalty += ${+r.penalty || 0}; } catch (e) { penalty += ${+r.penalty || 0}; }` : `  try { if (!(${F.toJS(ast, ref)})) return ${fail}; } catch (e) { return ${fail}; }`);
+    });
     L.push('  const s = {};');
     model.criteria.filter(c => c.on && res.share[c.id] != null).forEach(c => {
       const R = res.ranges[c.id], col = model.columns.find(x => x.id === c.col);
       const x = col.type === 'yesno' ? `(r.${c.col} ? 1 : 0)` : `r.${c.col}`;
-      if (R.text) { L.push(`  s.${c.id} = (${JSON.stringify(Object.fromEntries(Object.entries(c.points).map(([k, v]) => [k, v / 10])))})[r.${c.col}] ?? 0.5;`); return; }
-      let t = `lin(${x}, ${+R.lo.toPrecision(15)}, ${+R.hi.toPrecision(15)})`;
-      if (c.want === 'less') t = `(1 - ${t})`;
+      if (R.text) { L.push(`  s.${c.id} = r.${c.col} == null ? 0 : ((${JSON.stringify(Object.fromEntries(Object.entries(c.points).map(([k, v]) => [k, v / 10])))})[r.${c.col}] ?? 0.5);`); return; }
+      const flat = R.hi === R.lo;
+      let t = flat ? '1' : `lin(${x}, ${+R.lo.toPrecision(15)}, ${+R.hi.toPrecision(15)})`;
+      if (c.want === 'less' && !flat) t = `(1 - ${t})`;
+      const cp = M.engine.curveParams(c, R);
       let s = t;
       if (c.curve === 'gentle') s = `Math.sqrt(${t})`;
       if (c.curve === 'steep') s = `${t} ** 2`;
       if (c.curve === 'enough') {
-        const span = R.hi - R.lo || 1; let ta = U.clamp(((c.at ?? 0) - R.lo) / span, 0, 1); if (c.want === 'less') ta = 1 - ta;
+        const span = R.hi - R.lo || 1; let ta = U.clamp((cp.at - R.lo) / span, 0, 1); if (c.want === 'less') ta = 1 - ta;
         s = ta <= 0 ? '1' : `F.clamp(${t} / ${+ta.toPrecision(15)}, 0, 1)`;
       }
-      if (c.curve === 'target') s = `F.clamp(1 - Math.abs(${x} - ${c.at}) / ${c.tol}, 0, 1)`;
+      if (c.curve === 'target') s = `F.clamp(1 - Math.abs(${x} - ${+cp.at.toPrecision(15)}) / ${+cp.tol.toPrecision(15)}, 0, 1)`;
       if (c.curve === 'scurve') s = `${t} * ${t} * (3 - 2 * ${t})`;
-      if (c.curve === 'step') s = `(${x} ${c.want === 'less' ? '<=' : '>='} ${+(c.at ?? (R.lo + R.hi) / 2).toPrecision(15)} ? 1 : 0)`;
-      if (c.curve === 'custom') { const k = M.engine.customCurve(c.fx); s = k.ok ? `F.clamp(${F.toJS(k.ast, nm => nm === 'x' ? x : nm === 't' ? `(${t})` : String(+(nm === 'lo' ? R.lo : R.hi).toPrecision(15)))}, 0, 1)` : '0'; }
-      L.push(`  s.${c.id} = ${s};`);
+      if (c.curve === 'step') s = `(${x} ${c.want === 'less' ? '<=' : '>='} ${+cp.at.toPrecision(15)} ? 1 : 0)`;
+      if (c.curve === 'custom') { const k = M.engine.customCurve(c.fx); s = k.ok ? `(() => { try { const v = ${F.toJS(k.ast, nm => nm === 'x' ? x : nm === 't' ? `(${t})` : String(+(nm === 'lo' ? R.lo : R.hi).toPrecision(15)))}; return typeof v === "number" && isFinite(v) ? F.clamp(v, 0, 1) : 0; } catch (e) { return 0; } })()` : '0'; }
+      L.push(col.type === 'yesno' ? `  s.${c.id} = r.${c.col} == null ? 0 : (${s});` : `  s.${c.id} = typeof r.${c.col} === "number" ? (${s}) : 0;`);
     });
     const ws = model.criteria.filter(c => c.on && res.share[c.id] != null).map(c => [c.id, +res.share[c.id].toPrecision(15)]);
     if (model.method === 'balanced') L.push(`  const S = (Math.exp(${ws.map(([id, w]) => `${w} * Math.log(0.1 + 0.9 * s.${id})`).join(' + ') || '0'}) - 0.1) / 0.9;`);

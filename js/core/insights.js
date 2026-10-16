@@ -41,7 +41,7 @@ window.M = window.M || {};
     const pass = res.rows.filter(r => r.pass);
     const out = [];
     pass.forEach(a => {
-      const by = pass.find(b => b !== a && ids.every(c => b.c[c].s >= a.c[c].s - 1e-9) && ids.some(c => b.c[c].s > a.c[c].s + 1e-9));
+      const by = pass.find(b => b !== a && ids.every(c => b.c[c].s >= a.c[c].s - 1e-9) && ids.some(c => b.c[c].s > a.c[c].s + 1e-9) && (b.penalty || 0) <= (a.penalty || 0));
       if (by) out.push({ row: a.id, by: by.id });
     });
     return out;

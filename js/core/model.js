@@ -76,7 +76,7 @@ window.M = window.M || {};
     const k = model.knobs.find(x => x.id === id); if (k) return k.label;
     return id;
   }
-  const nameRef = (model, id) => { const l = labelOf(model, id); return /^[A-Za-z_][A-Za-z0-9_]*$/.test(l) ? l : `[${l}]`; };
+  const nameRef = (model, id) => { const l = labelOf(model, id); return /^[A-Za-z_][A-Za-z0-9_]*$/.test(l) && !['and', 'or', 'not', 'true', 'false', 'yes', 'no'].includes(l.toLowerCase()) ? l : `[${l}]`; };
 
   function compileFormula(model, src, exclude) {
     const p = M.formula.parse(src);

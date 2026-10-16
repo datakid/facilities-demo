@@ -256,12 +256,12 @@ window.M = window.M || {};
     const go = (n, parent, right) => {
       let s, pr = 10;
       switch (n.t) {
-        case 'num': s = n.v === 1 && n.word ? n.word : String(+n.v.toFixed(10)); break;
+        case 'num': s = n.v === 1 && n.word ? n.word : String(+n.v.toPrecision(15)); break;
         case 'str': s = JSON.stringify(n.v); break;
         case 'id': s = name(n.ref ?? n.name, n); break;
         case 'call': s = `${n.fn}(${n.args.map(a => go(a, 0)).join(', ')})`; break;
         case 'un': pr = n.op === '!' ? 3 : 7; s = (n.op === '!' ? 'not ' : (pretty ? '−' : '-')) + go(n.a, pr); break;
-        case 'bin': pr = PREC[n.op]; s = `${go(n.a, pr, false)} ${op(n.op)} ${go(n.b, pr + (n.op === '^' ? 0 : 0.5), true)}`; break;
+        case 'bin': pr = PREC[n.op]; s = `${go(n.a, n.op === '^' || pr === 4 ? pr + 0.5 : pr, false)} ${op(n.op)} ${go(n.b, pr + (n.op === '^' ? 0 : 0.5), true)}`; break;
       }
       return (parent && pr < parent) || (right && parent === pr && n.t === 'bin') ? `(${s})` : s;
     };
@@ -284,6 +284,8 @@ window.M = window.M || {};
           if (n.op === '&&' || n.op === '||') return `((${go(n.a)}) ${n.op} (${go(n.b)}) ? 1 : 0)`;
           if (['<', '<=', '>', '>='].includes(n.op)) return `(${go(n.a)} ${n.op} ${go(n.b)} ? 1 : 0)`;
           if (n.op === '^') return `Math.pow(${go(n.a)}, ${go(n.b)})`;
+          if (n.op === '/') return `F.div(${go(n.a)}, ${go(n.b)})`;
+          if (n.op === '%') return `F.mod(${go(n.a)}, ${go(n.b)})`;
           return `(${go(n.a)} ${n.op} ${go(n.b)})`;
       }
       return '0';

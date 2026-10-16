@@ -120,7 +120,7 @@ window.M = window.M || {};
     if (wit.length) {
       h += `<div class="takes"><p class="takes-h">${r.rank === 1 ? `What would cost ${esc(r.label)} first place` : `What it would take for ${esc(r.label)} to win`}</p><ul>${wit.map(w => {
         const col = H.col(w.col);
-        return `<li><button class="takes-btn" data-act="try" data-id="${esc(id)}" data-col="${esc(w.col)}" data-v="${w.to}" title="Try it (undo to go back)"><span>${esc(col.label)} ${esc(H.val(w.col, w.from))} → <b>${esc(H.val(w.col, +w.to.toPrecision(3)))}</b></span><span class="muted">${r.rank === 1 ? esc(R.rowLabel(w.vs)) + ' would lead' : 'try it'}</span></button></li>`;
+        return `<li><button class="takes-btn" data-act="try" data-id="${esc(id)}" data-col="${esc(w.col)}" data-v="${w.to}" title="Try it (undo to go back)"><span>${esc(col.label)} ${esc(H.val(w.col, w.from))} → <b>${esc(H.val(w.col, w.to))}</b></span><span class="muted">${r.rank === 1 ? esc(R.rowLabel(w.vs)) + ' would lead' : 'try it'}</span></button></li>`;
       }).join('')}</ul></div>`;
     } else if (r.rank === 1 && res.ranked.length > 1) h += `<p class="hint takes-none">No single realistic change to its numbers costs it first place.</p>`;
     return h;

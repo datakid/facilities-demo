@@ -80,6 +80,29 @@ Until now formulas only showed up one at a time, as editable code in the Formula
 - Equations that are too wide shrink slightly to fit (down to 82%). Past that they scroll inside their card, with a soft fade at the right edge.
 - UI checks: the Equations tab must be reachable in 700, 520 and 380 px panes. `preview-half.html` shows the app in a 960 px window.
 
+## Done in v4.5.2: fixes
+- **Find the best option** no longer crashes after you add, delete or retype a column, delete its starting option, or remove the day plan or situations it was set to use.
+- **Criteria that are switched off** no longer crash when you change how to score them or fix their range.
+- **Automatic thresholds** (sweet spot, enough-point, tolerance) are now the same in the ranking, the exported code, the summary text and the written equations.
+- **Exported code** now matches the ranking on blank cells, flat ranges, yes/no and text columns, divide-by-zero, worked-out columns that fail, and must-haves that fail.
+- **Printed formulas** keep the brackets around powers and comparisons and keep 15 digits, so a tiny number like 1e-12 survives being written back.
+- **Names that are also words** (a column called Yes, No, And, Or, Not, True or False) are written in brackets, so formulas that use them keep working after a rename.
+- **The Excel workbook** turns the remainder sign (%) into TRUNC maths instead of an Excel percent sign.
+- **Find the best option over the whole day** takes its scale from every hour, and it looks at every situation (evenly sampled when there are more than 12) instead of only the first six.
+- **Plan by hour** no longer applies a typed range a second time without putting it in order, so a range typed backwards scores the same as one typed forwards.
+- **A cleared or non-numeric range box** now means automatic instead of zero, in the ranking and in the Excel workbook.
+- **Teach it my taste** starts from the right baseline when every importance is zero.
+- **"Can never win"** no longer calls an option beaten when the option that beats it carries a bigger penalty.
+- **Stop** now ends the running job, so change-by-hour and Teach it my taste no longer hang, and a stopped or failed fit shows no broken suggestion box.
+- **Deleting a column, setting or option** also removes what depended on it: carry-over, the day link, a day that ran on the deleted setting, situation values, saved base values and taste choices. A choice that lost an option says so, and the day plan view no longer crashes in the moment after.
+- **Replacing the options from a table** keeps the taste choices whose options are still there.
+- **The written total** never goes below zero, like the real score.
+- **Compare versions** now lists changes to sweet spots and thresholds, tolerance, score range, points per answer, own curves, worked-out formulas, columns and settings. A rename that changes no meaning is not reported.
+- **What it would take** shows round numbers that really flip the result, says who leads after the change, and Try it keeps every digit.
+- **Plan by hour with no options** says to add some instead of failing.
+- **Must-haves**: a new one starts with a 15-point penalty ready, switching one to take off points never leaves the penalty empty, flipping the direction keeps a sweet spot, and points per answer stay editable for a text criterion that is switched off.
+- **LaTeX export** loads the font and unicode packages it needs, so ² and curly quotes compile, and every − in the side notes becomes a hyphen.
+
 ## Examples (11, all with guides)
 | Everyday | Teaches |
 |---|---|
@@ -104,8 +127,8 @@ Until now formulas only showed up one at a time, as editable code in the Formula
 | `index.html` | The app. A first visit shows the example picker |
 | `index.html#m=<base64url JSON>` | Opens a shared ranking |
 | `index.html#ex=<id>` | Opens an example (`laptop, flat, job, rice, supplier, shift, pharmacy, feed, venue, cafe, care`); add `&view=ranking` to open on the ranking, or `&tour` to start its guided tour |
-| `tests.html` | 530 engine tests (v4.5: what-ifs from ± on values, the Excel workbook checked against the engine, S-curve / pass-or-fail / own-formula curves and the weakest-link method matching the written equations and exported code) (v4.4: Plan by hour past 4,096 matches exhaustive at the peak) (v4.3: plan by hour with new options, change-by-hour = brute force) (v4.2 adds finder progress, change-by-hour, curve fitting, version compare): parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
-| `ui-check.html` | 61 checks (v4.2: progress bar, the finder really running in the worker, change-by-hour, pin + compare) driving the real app (results go to the console), including drag speed on the pharmacy |
+| `tests.html` | 555 engine tests (v4.5.2: exported code checked against the engine on blanks, flat ranges and divide-by-zero, the written total, printing, compare, fit and the Excel remainder) (v4.5: what-ifs from ± on values, the Excel workbook checked against the engine, S-curve / pass-or-fail / own-formula curves and the weakest-link method matching the written equations and exported code) (v4.4: Plan by hour past 4,096 matches exhaustive at the peak) (v4.3: plan by hour with new options, change-by-hour = brute force) (v4.2 adds finder progress, change-by-hour, curve fitting, version compare): parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
+| `ui-check.html` | 87 checks (v4.5.2: Find after edits, criteria that are switched off, Stop, deleting options and settings, choices kept when options are replaced) (v4.2: progress bar, the finder really running in the worker, change-by-hour, pin + compare) driving the real app (results go to the console), including drag speed on the pharmacy |
 | `preview-equations.html` | Opens the job example on the Equations tab with numbers on (set `data-ex`, `data-fmt` = math/sym/text/tex, `data-nums` on `<html>`) |
 | `preview-ranking.html` | Opens an example without the start screen, for layout checks (set `data-ex` / `data-view` on `<html>`) |
 
