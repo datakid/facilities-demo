@@ -73,6 +73,12 @@ window.M = window.M || {};
     return {};
   }
 
+  function scoreAt(c, R, raw) {
+    let t = R.hi === R.lo ? 1 : U.clamp((raw - R.lo) / (R.hi - R.lo), 0, 1);
+    if (c.want === 'less' && R.hi !== R.lo) t = 1 - t;
+    return { t, s: U.clamp(curveApply(c, t, raw, R), 0, 1) };
+  }
+
   function curveApply(c, t, raw, R) {
     switch (c.curve) {
       case 'gentle': return Math.sqrt(t);
@@ -148,10 +154,7 @@ window.M = window.M || {};
         if (raw == null || (col.type !== 'text' && typeof raw !== 'number')) { missing = true; bad = row.errs[c.col] || (typeof raw === 'string' ? `“${raw}” isn't a number` : null); }
         else if (col.type === 'text') { s = U.clamp((c.points[String(raw)] ?? 5) / 10, 0, 1); t = s; }
         else {
-          const R = ranges[c.id];
-          t = R.hi === R.lo ? 1 : U.clamp((raw - R.lo) / (R.hi - R.lo), 0, 1);
-          if (c.want === 'less' && R.hi !== R.lo) t = 1 - t;
-          s = U.clamp(curveApply(c, t, raw, R), 0, 1);
+          ({ t, s } = scoreAt(c, ranges[c.id], raw));
         }
         row.c[c.id] = { raw, t, s, w: share[c.id], missing, bad, contrib: 0 };
       });
@@ -296,5 +299,5 @@ window.M = window.M || {};
     return steps;
   }
 
-  M.engine = { prepare, compute, curveApply, curveParams, rangeOf, customCurve, weightSweep, knobSweep, situations, whatItTakes, trace, rootInputs, withModel };
+  M.engine = { prepare, compute, scoreAt, curveApply, curveParams, rangeOf, customCurve, weightSweep, knobSweep, situations, whatItTakes, trace, rootInputs, withModel };
 })(window.M);

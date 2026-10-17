@@ -196,5 +196,41 @@ window.M = window.M || {};
     return L.join('\n');
   }
 
-  M.equations = { build, strings, doc, latex, namer, sentinel, SECTIONS };
+  function niceTicks(lo, hi, n) {
+    const span = hi - lo;
+    if (!(span > 0)) return [lo];
+    const raw = span / Math.max(1, n - 1), mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
+    const step = (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * mag;
+    const out = [];
+    for (let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + step * 1e-9; v += step) out.push(+v.toPrecision(12));
+    return out;
+  }
+
+  function chartData(model, res, cid) {
+    const c = model.criteria.find(x => x.id === cid), R = res.ranges[cid], col = c && model.columns.find(x => x.id === c.col);
+    if (!c || !R || !col) return null;
+    const xLabel = col.label + (col.unit ? ' (' + col.unit + ')' : '');
+    const dots = res.rows.map(r => { const x = r.c[cid]; return { id: r.id, label: r.label, pass: r.pass, missing: !!x.missing, x: x.raw, y: x.s * 10 }; });
+    if (R.text) {
+      const cats = res.info[cid].cats.map(k => ({ k, y: Math.max(0, Math.min(10, c.points[k] ?? 5)), names: dots.filter(d => !d.missing && String(d.x) === k).map(d => d.label) }));
+      return { kind: 'cats', xLabel, yLabel: 'Points', cats, blank: dots.filter(d => d.missing).map(d => d.label) };
+    }
+    if (col.type === 'yesno') return { kind: 'cats', xLabel, yLabel: 'Points', cats: [0, 1].map(v => ({ k: v ? 'Yes' : 'No', y: M.engine.scoreAt(c, R, v).s * 10, names: dots.filter(d => !d.missing && d.x === v).map(d => d.label) })), blank: dots.filter(d => d.missing).map(d => d.label) };
+    const cp = M.engine.curveParams(c, R), marked = c.curve === 'enough' || c.curve === 'target' || c.curve === 'step';
+    let lo = marked ? Math.min(R.lo, cp.at) : R.lo, hi = marked ? Math.max(R.hi, cp.at) : R.hi;
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) { lo = 0; hi = 1; }
+    const pad = hi === lo ? (Math.abs(lo) * 0.1 || 1) : (hi - lo) * 0.06;
+    const d0 = lo - pad, d1 = hi + pad, N = 96;
+    const xs = Array.from({ length: N + 1 }, (_, i) => d0 + (d1 - d0) * i / N);
+    const mark = c.curve === 'enough' ? { x: cp.at, label: 'enough at' } : c.curve === 'target' ? { x: cp.at, label: 'sweet spot', tol: cp.tol } : c.curve === 'step' ? { x: cp.at, label: 'step at' } : null;
+    if (c.curve === 'step') xs.push(cp.at - (d1 - d0) * 1e-7, cp.at);
+    xs.sort((a, b) => a - b);
+    const curve = xs.map(x => ({ x, y: M.engine.scoreAt(c, R, x).s * 10 }));
+    const ticks = niceTicks(d0, d1, 6).map(x => ({ x, label: U.fmtNum(x) }));
+    const ok = d => !d.missing && Number.isFinite(d.y);
+    const pinned = dots.filter(ok).map(d => ({ id: d.id, label: d.label, pass: d.pass, y: d.y, raw: d.x, x: Number.isNaN(d.x) ? d0 : Math.min(d1, Math.max(d0, d.x)), off: d.x < d0 ? 'lo' : d.x > d1 ? 'hi' : null }));
+    return { kind: 'curve', xLabel, yLabel: 'Points', d0, d1, ticks, curve, mark, dots: pinned, blank: dots.filter(d => !ok(d)).map(d => d.label) };
+  }
+
+  M.equations = { build, strings, doc, latex, namer, sentinel, chartData, niceTicks, SECTIONS };
 })(window.M);

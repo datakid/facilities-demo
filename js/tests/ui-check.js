@@ -326,6 +326,37 @@
     act('crit-on', null, 'area');
     await wait(40);
     ok('points per answer still show for a text criterion that is off', crit('area').on === false && !!q('[data-in="points"][data-id="area"]'));
+
+    ST().load(M.examples.get('laptop'));
+    await wait(80);
+    const rk = q('.rank-row.sel');
+    ok('the selected ranking row is not styled like a dropdown', !!rk && getComputedStyle(rk).height !== '32px' && getComputedStyle(rk).borderTopWidth !== '1px', rk ? getComputedStyle(rk).height + ' ' + getComputedStyle(rk).borderTopWidth : 'no row');
+    act('tab', 'options');
+    await wait(120);
+    ok('the options table gets the full width of the pane', !!q('.tab-body.opt-body'));
+    act('tab', 'equations');
+    await wait(150);
+    const eqCards = document.querySelectorAll('.eq-card.k-crit'), eqFigs = [...document.querySelectorAll('.eq-card.k-crit .eq-chart svg')];
+    ok('every points equation has a chart', eqCards.length > 0 && eqFigs.length === eqCards.length, eqCards.length + ' cards, ' + eqFigs.length + ' charts');
+    ok('each chart draws its curve, axes and options', eqFigs.length > 0 && eqFigs.every(s => s.querySelector('.ch-line') && s.querySelectorAll('.ch-tick').length >= 3 && s.querySelectorAll('.ch-dot, .ch-pin').length >= 1));
+    const ttl = [...eqFigs[0].querySelectorAll('.ch-ttl')].map(t => t.textContent);
+    ok('chart axes are labelled with the points and the criterion', ttl.includes('Points') && ttl.some(t => /Price/.test(t)), ttl.join(' | '));
+    ok('options are named on the chart', [...eqFigs[0].querySelectorAll('.ch-lab')].map(t => t.textContent).some(t => /Fjord Air/.test(t)));
+    ok('the sweet spot is marked on the screen chart', !!eqFigs[3].querySelector('.ch-mark') && /sweet spot/.test(eqFigs[3].querySelector('.ch-mark-t').textContent));
+    const numsWere = !!S.ui.eqNums, flipNums = async () => { const t = q('[data-act="eq-nums"], [data-in="eq-nums"]'); if (t) { t.click(); await wait(150); } return !!t; };
+    if (!numsWere) await flipNums();
+    ok('turning on the numbers for one option highlights it on every chart', !!S.ui.eqNums && document.querySelectorAll('.eq-chart .ch-dot.sel, .eq-chart .ch-pin.sel').length >= eqCards.length, String(document.querySelectorAll('.eq-chart .ch-dot.sel, .eq-chart .ch-pin.sel').length));
+    if (!numsWere) await flipNums();
+
+    ST().load(M.examples.get('pharmacy'));
+    await wait(100);
+    act('tab', 'equations');
+    await wait(200);
+    const crowded = [...document.querySelectorAll('.eq-card.k-crit .eq-chart')].filter(f => f.querySelector('.ch-pin'));
+    ok('crowded charts number their dots and list every option in a key', crowded.length > 0 && crowded.every(f => f.querySelectorAll('.ch-key li').length >= f.querySelectorAll('.ch-pin').length && f.querySelectorAll('.ch-key li').length >= 3), String(crowded.length));
+    ok('a value far off the scale is flagged in the key', crowded.some(f => /off the scale/.test(f.textContent)));
+    const bars = [...document.querySelectorAll('.eq-card.k-crit .eq-chart')].find(f => f.querySelector('.ch-bar'));
+    ok('text answers are drawn as labelled bars', !!bars && bars.querySelectorAll('.ch-bar').length >= 2 && bars.querySelectorAll('.ch-val').length === bars.querySelectorAll('.ch-bar').length);
   } catch (e) { ok('script error', false, e.message + ' ' + e.stack); }
   const fail = res.filter(r => !r[1]);
   console.log(`UI ${res.length - fail.length}/${res.length}`);

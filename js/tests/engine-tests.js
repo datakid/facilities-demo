@@ -571,5 +571,38 @@
     ok('hourly: no options gives a clear message', (() => { const m = E9.withModel(M.examples.get('cafe'), x => { x.rows = []; x.pairs = []; }); try { return P9.hourly(m).error === 'Add some options first.'; } catch (e) { return false; } })());
   }
 
+  {
+    const E10 = M.engine, EQ10 = M.equations, MD10 = M.model;
+    const every = fn => M.examples.every(ex => { const m = M.examples.get(ex.id), r = E10.compute(m); return m.criteria.filter(c => c.on).every(c => fn(m, r, c, EQ10.chartData(m, r, c.id), ex.id)); });
+    ok('chart: every criterion of every example has chart data', every((m, r, c, d) => !!d && (d.kind === 'cats' || d.kind === 'curve')));
+    ok('chart: every dot is exactly the points the ranking gave', every((m, r, c, d) => d.kind === 'cats' || d.dots.every(p => Math.abs(p.y - r.byId[p.id].c[c.id].s * 10) < 1e-9)));
+    ok('chart: dots sit on the axis and the curve stays between 0 and 10 points', every((m, r, c, d) => d.kind === 'cats' || (d.dots.every(p => Number.isFinite(p.x) && p.x >= d.d0 - 1e-9 && p.x <= d.d1 + 1e-9) && d.curve.every(p => p.y >= -1e-9 && p.y <= 10 + 1e-9 && Number.isFinite(p.x)) && d.ticks.length > 0 && d.ticks.every(t => t.x >= d.d0 - 1e-9 && t.x <= d.d1 + 1e-9))));
+    ok('chart: scoreAt is the score compute gives', M.examples.every(ex => { const m = M.examples.get(ex.id), r = E10.compute(m); return m.criteria.filter(c => c.on && r.ranges[c.id] && !r.ranges[c.id].text).every(c => r.rows.every(row => { const x = row.c[c.id]; return x.missing || Math.abs(E10.scoreAt(c, r.ranges[c.id], x.raw).s - x.s) < 1e-12; })); }));
+    ok('chart: text answers give one bar each with their points and the options that picked them', (() => {
+      const m = M.examples.get('flat'), r = E10.compute(m), c = m.criteria.find(x => m.columns.find(k => k.id === x.col).type === 'text'), d = EQ10.chartData(m, r, c.id);
+      return d.kind === 'cats' && d.cats.every(b => b.y === (c.points[b.k] ?? 5)) && d.cats.reduce((a, b) => a + b.names.length, 0) === r.rows.filter(x => !x.c[c.id].missing).length;
+    })());
+    ok('chart: a yes/no criterion is two bars, No and Yes', (() => {
+      const m = MD10.normalize((() => { const x = JSON.parse(JSON.stringify(M.examples.get('laptop'))); x.columns.push({ id: 'touch', label: 'Touch', type: 'yesno', unit: '', formula: '' }); x.rows.forEach((row, i) => { row.v.touch = i % 2 === 0; }); x.criteria.push({ id: 'touch', col: 'touch', weight: 3, want: 'more', curve: 'even' }); return x; })());
+      const r = E10.compute(m), d = EQ10.chartData(m, r, 'touch');
+      return d.kind === 'cats' && d.cats.length === 2 && d.cats[0].k === 'No' && d.cats[0].y === 0 && d.cats[1].k === 'Yes' && d.cats[1].y === 10 && d.cats[0].names.length + d.cats[1].names.length === m.rows.length;
+    })());
+    ok('chart: values off the scoring range are pinned to the edge and flagged', (() => {
+      const m = M.examples.get('pharmacy'), r = E10.compute(m), c = m.criteria.find(x => x.id === 'wait'), d = EQ10.chartData(m, r, c.id);
+      const far = d.dots.filter(p => p.raw > r.ranges[c.id].hi + 1);
+      return far.length > 0 && far.every(p => p.off === 'hi' && p.x === d.d1 && p.y === 0) && d.dots.every(p => Number.isFinite(p.x));
+    })());
+    ok('chart: the sweet spot and thresholds are marked', (() => {
+      const m = M.examples.get('laptop'), r = E10.compute(m), d = EQ10.chartData(m, r, 'screen'), m2 = M.examples.get('flat'), r2 = E10.compute(m2), d2 = EQ10.chartData(m2, r2, 'commute');
+      return d.mark && d.mark.label === 'sweet spot' && d.mark.x === 14 && d.mark.x > d.d0 && d.mark.x < d.d1 && d2.mark && d2.mark.label === 'enough at' && EQ10.chartData(m, r, 'price').mark === null;
+    })());
+    ok('chart: tick marks land on round numbers', JSON.stringify(EQ10.niceTicks(0, 10, 6)) === '[0,2,4,6,8,10]' && JSON.stringify(EQ10.niceTicks(0.4, 1.1, 6)) === '[0.4,0.5,0.6,0.7,0.8,0.9,1,1.1]' && JSON.stringify(EQ10.niceTicks(749, 1749, 6)) === '[800,1000,1200,1400,1600]' && JSON.stringify(EQ10.niceTicks(5, 5, 6)) === '[5]');
+    ok('chart: a flat range still gets a usable axis', (() => {
+      const m = MD10.normalize({ columns: [{ id: 'x', label: 'X' }], rows: [{ id: 'a', label: 'A', v: { x: 5 } }, { id: 'b', label: 'B', v: { x: 5 } }], criteria: [{ id: 'x', col: 'x', weight: 5 }] });
+      const r = E10.compute(m), d = EQ10.chartData(m, r, 'x');
+      return d.kind === 'curve' && d.d1 > d.d0 && d.ticks.length > 0 && d.dots.length === 2 && d.curve.every(p => Number.isFinite(p.y));
+    })());
+  }
+
   M.testResults = out;
 })(window.M);

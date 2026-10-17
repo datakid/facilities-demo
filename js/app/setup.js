@@ -12,7 +12,7 @@ window.M = window.M || {};
     const count = { matters: m.criteria.length, rules: m.rules.length, formulas: m.knobs.length + m.columns.filter(c => c.formula).length, options: m.rows.length, equations: R.eqData ? R.eqData().items.length : 0 };
     const tabs = `<div class="tabs-wrap"><button type="button" class="tabs-arrow l" data-act="tabs-scroll" data-v="-1" tabindex="-1" aria-hidden="true">${R.I.chev}</button><div class="tabs" role="tablist" aria-label="Build steps" data-keep-scroll="tabs">${TABS.map(([id, l], i) => `<button role="tab" id="tab-${id}" class="${id === 'equations' ? 'tab-view' : ''}" data-act="tab" data-v="${id}" aria-selected="${t === id}" title="${esc(l)}" data-g="tab:${id}"><span class="tab-n">${id === 'equations' ? '∑' : i + 1}</span>${id === 'matters' ? '<span class="hide-xs">What </span>matters' : l}<span class="tab-c num">${count[id]}</span></button>`).join('')}</div><button type="button" class="tabs-arrow r" data-act="tabs-scroll" data-v="1" tabindex="-1" aria-hidden="true">${R.I.chev}</button></div>`;
     const body = ({ matters: matters, rules: rules, formulas: formulas, options: options, equations: R.equationsHTML })[t]();
-    R.keepFocus(el, () => { el.innerHTML = tabs + `<div class="tab-body${t === 'equations' ? ' eq-body' : ''}" role="tabpanel" aria-labelledby="tab-${t}" data-keep-scroll="tab-body">${body}</div>`; });
+    R.keepFocus(el, () => { el.innerHTML = tabs + `<div class="tab-body${t === 'equations' ? ' eq-body' : t === 'options' ? ' opt-body' : ''}" role="tabpanel" aria-labelledby="tab-${t}" data-keep-scroll="tab-body">${body}</div>`; });
     if (t === 'equations' && R.eqMount) R.eqMount(el);
     R.tabsFit(true);
     R.strips();

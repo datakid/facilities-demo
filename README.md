@@ -103,6 +103,15 @@ Until now formulas only showed up one at a time, as editable code in the Formula
 - **Must-haves**: a new one starts with a 15-point penalty ready, switching one to take off points never leaves the penalty empty, flipping the direction keeps a sweet spot, and points per answer stay editable for a text criterion that is switched off.
 - **LaTeX export** loads the font and unicode packages it needs, so ² and curly quotes compile, and every − in the side notes becomes a hyphen.
 
+## Done in v4.5.3: layout polish and equation charts
+Checked in a real browser at 1440, 1024 and 390 px on all eleven examples, tab by tab, with an automatic check for overflow, clipped text and overlaps.
+- **Equation charts**: every card in "Points of 10 for each thing that matters" now has a chart next to its equation. The x axis is the criterion's own value with its unit, the y axis is points from 0 to 10, and both are labelled. The curve is drawn by the same code that scores the ranking, every option is a dot with its name beside it, ruled-out options are hollow, and the sweet spot, enough-point or step is marked with a dashed line. Text and yes/no answers are drawn as labelled bars with the options that picked each answer.
+- **Crowded charts**: when the option names don't fit beside their dots, the dots are numbered and a key under the chart lists every option by number. Dots that sit close together share one pill. A value far outside the scoring range is pinned to the edge of the chart and flagged in the key with its real number.
+- **Numbers for one option**: turning on "Numbers for" also rings that option's dot on every chart.
+- **Fix**: the selected row in the ranking list was drawn like a dropdown (32 px tall, with a border, a chevron and extra padding) and overlapped the control above it. The dropdown styling now applies to real select boxes only.
+- **Fix**: the "formula" badge overlapped the column name in the Options table header.
+- **Layout**: the Options table uses the full width of the pane instead of stopping at the text column. On a phone the top bar keeps the full title, with "Show me how" shown as an icon.
+
 ## Examples (11, all with guides)
 | Everyday | Teaches |
 |---|---|
@@ -127,8 +136,8 @@ Until now formulas only showed up one at a time, as editable code in the Formula
 | `index.html` | The app. A first visit shows the example picker |
 | `index.html#m=<base64url JSON>` | Opens a shared ranking |
 | `index.html#ex=<id>` | Opens an example (`laptop, flat, job, rice, supplier, shift, pharmacy, feed, venue, cafe, care`); add `&view=ranking` to open on the ranking, or `&tour` to start its guided tour |
-| `tests.html` | 555 engine tests (v4.5.2: exported code checked against the engine on blanks, flat ranges and divide-by-zero, the written total, printing, compare, fit and the Excel remainder) (v4.5: what-ifs from ± on values, the Excel workbook checked against the engine, S-curve / pass-or-fail / own-formula curves and the weakest-link method matching the written equations and exported code) (v4.4: Plan by hour past 4,096 matches exhaustive at the peak) (v4.3: plan by hour with new options, change-by-hour = brute force) (v4.2 adds finder progress, change-by-hour, curve fitting, version compare): parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
-| `ui-check.html` | 87 checks (v4.5.2: Find after edits, criteria that are switched off, Stop, deleting options and settings, choices kept when options are replaced) (v4.2: progress bar, the finder really running in the worker, change-by-hour, pin + compare) driving the real app (results go to the console), including drag speed on the pharmacy |
+| `tests.html` | 565 engine tests (v4.5.3: chart data equals the engine's points, ticks, pinned values, yes/no and text bars) (v4.5.2: exported code checked against the engine on blanks, flat ranges and divide-by-zero, the written total, printing, compare, fit and the Excel remainder) (v4.5: what-ifs from ± on values, the Excel workbook checked against the engine, S-curve / pass-or-fail / own-formula curves and the weakest-link method matching the written equations and exported code) (v4.4: Plan by hour past 4,096 matches exhaustive at the peak) (v4.3: plan by hour with new options, change-by-hour = brute force) (v4.2 adds finder progress, change-by-hour, curve fitting, version compare): parser, friendly errors, units, every example, exported JS = engine, queue functions, situations |
+| `ui-check.html` | 98 checks (v4.5.3: charts on every points card, numbered dots and key, option highlight, selected ranking row, options table width) (v4.5.2: Find after edits, criteria that are switched off, Stop, deleting options and settings, choices kept when options are replaced) (v4.2: progress bar, the finder really running in the worker, change-by-hour, pin + compare) driving the real app (results go to the console), including drag speed on the pharmacy |
 | `preview-equations.html` | Opens the job example on the Equations tab with numbers on (set `data-ex`, `data-fmt` = math/sym/text/tex, `data-nums` on `<html>`) |
 | `preview-ranking.html` | Opens an example without the start screen, for layout checks (set `data-ex` / `data-view` on `<html>`) |
 
@@ -146,8 +155,8 @@ js/core/xlsx.js      Excel workbook with live formulas (Settings, Data, Scores),
 js/core/uncertainty.js  what-ifs: runs the ranking many times with the values marked ± varied, reports win chances
 js/core/plan.js      finder (full + step-by-step, progress), situation matrix, day plan with carry-over, change-by-hour search, importance + curve fitting, version compare
 js/core/plan-worker.js  Web Worker wrapper for find / hourly / fitAll
-js/core/equations.js equation model (settings, columns, rules, points, total) + symbols / text / LaTeX printers + document export
-js/app/equations.js  Equations tab: formats, KaTeX rendering, numbers for one option, copy / download
+js/core/equations.js equation model (settings, columns, rules, points, total) + symbols / text / LaTeX printers + document export + chart data (axis, ticks, curve, dots, bars)
+js/app/equations.js  Equations tab: formats, KaTeX rendering, numbers for one option, copy / download, SVG charts
 js/app/dropdown.js   app-styled dropdown that replaces every native select and keeps its change events
 js/app/runner.js     runs jobs in the worker or falls back to the main thread
 js/app/main.js       starts the app after all modules load

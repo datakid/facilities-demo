@@ -57,7 +57,7 @@ window.M = window.M || {};
       </div>
       <nav class="top-actions" aria-label="Main">
         <button class="btn ghost" data-act="open-start">${R.I.book}<span class="hide-sm">Examples</span></button>
-        ${m.guide && m.guide.steps && S.ui.guide == null ? `<button class="btn ghost" data-act="guide-start"><span>Show me how</span></button>` : ''}
+        ${m.guide && m.guide.steps && S.ui.guide == null ? `<button class="btn ghost" data-act="guide-start" title="Show me how" aria-label="Show me how">${R.I.info}<span class="hide-sm">Show me how</span></button>` : ''}
         <span class="sep" aria-hidden="true"></span>
         <button class="icon-btn" data-act="undo" title="Undo (Ctrl+Z)" aria-label="Undo" ${H.canUndo() ? '' : 'disabled'}>${R.I.undo}</button>
         <button class="icon-btn" data-act="redo" title="Redo (Shift+Ctrl+Z)" aria-label="Redo" ${H.canRedo() ? '' : 'disabled'}>${R.I.redo}</button>
